@@ -1,0 +1,11 @@
+{
+  "id": "quantis",
+  "alias": "quantis",
+  "name": "Quantis",
+  "description": "Nền tảng phân tích định lượng và thống kê: data layer, analysis engine, reproducibility, presentation. AI-augmented statistical research platform.",
+  "version": "1.0.0",
+  "type": "embedded",
+  "hasBackend": false,
+  "hasFrontendOnly": true,
+  "icon": "Sigma"
+}
