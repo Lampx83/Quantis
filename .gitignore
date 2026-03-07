@@ -4,6 +4,7 @@ node_modules/
 # Build output (Vite outDir: public)
 dist/
 public/
+*.tgz
 
 # Environment & secrets
 .env

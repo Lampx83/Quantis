@@ -10,7 +10,7 @@ services:
     container_name: quantis-backend
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3003:3001"
     environment:
       PORT: "3001"
       # Archive NEU (proxy tìm kiếm / tải dataset)
@@ -19,7 +19,7 @@ services:
       # Ollama trên server 232: từ container gọi ra host (port 8002 hoặc 11434 tùy cấu hình Ollama)
       OLLAMA_UPSTREAM_URL: "http://host.docker.internal:8002"
       # Backend phân tích Python (cùng stack)
-      ANALYZE_PYTHON_URL: "http://quantis-python:8000"
+      ANALYZE_PYTHON_URL: "http://quantis-python:4000"
     volumes:
       - quantis-data:/app/data
     extra_hosts:
@@ -33,7 +33,7 @@ services:
     container_name: quantis-python
     restart: unless-stopped
     expose:
-      - "8000"
+      - "4000"
     # Không publish port ra ngoài — chỉ backend Node gọi nội bộ
     environment:
       - PYTHONUNBUFFERED=1

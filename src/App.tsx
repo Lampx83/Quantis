@@ -59,7 +59,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { getPortalTheme, applyPortalTheme } from "./portal-theme";
-import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, saveAiFeedback, saveAppFeedback } from "./store";
+import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, saveAiFeedback, saveAppFeedback } from "./store";
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
 import { AI_MAX_PROMPT_CHARS } from "./api";
@@ -78,6 +78,8 @@ type ReproducibilityTab = "workflows" | "versioning";
 type PresentationTab = "visualization";
 
 type MainSection = "data" | "analysis" | "reproducibility" | "presentation" | "ai" | "workflow";
+
+const BACKEND_PYTHON_REQUIRED_MSG = "Phân tích này cần backend Python. Vui lòng khởi động backend-python và cấu hình ANALYZE_PYTHON_URL.";
 
 const WORKFLOW_STEPS = [
   { id: "import", label: "Thu thập / Import dữ liệu", icon: Upload },
@@ -1258,6 +1260,7 @@ export default function App() {
             analysisBackendAvailable={analysisBackendAvailable}
             descriptiveBackendResult={descriptiveBackendResult}
             correlationBackendResult={correlationBackendResult}
+            showToast={showToast}
           />
         )}
         {mainSection === "presentation" && (!selectedWorkflowId || selectedStep) && (
@@ -1474,7 +1477,13 @@ export default function App() {
         <GuideModal onClose={() => setGuideOpen(false)} />
       )}
       {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
+        <SettingsModal
+          onClose={() => {
+            setShowSettings(false);
+            quantisApi.checkBackendAvailable().then(setUseBackend);
+            quantisApi.checkAnalysisBackendAvailable().then(setAnalysisBackendAvailable);
+          }}
+        />
       )}
       {showAppFeedbackModal && (
         <AppFeedbackModal onClose={() => setShowAppFeedbackModal(false)} />
@@ -2557,6 +2566,7 @@ function AnalysisView({
   analysisBackendAvailable = false,
   descriptiveBackendResult = null,
   correlationBackendResult = null,
+  showToast,
 }: {
   tab: AnalysisTab;
   selectedDataset: Dataset | undefined;
@@ -2566,6 +2576,7 @@ function AnalysisView({
   analysisBackendAvailable?: boolean;
   descriptiveBackendResult?: DescriptiveRow[] | null;
   correlationBackendResult?: { matrix: number[][]; columnNames: string[] } | null;
+  showToast: (msg: string) => void;
 }) {
   const effectiveTab = tab === "descriptive" ? "hypothesis" : tab;
   const tabs: Record<AnalysisTab, { title: string; desc: string }> = {
@@ -2675,7 +2686,7 @@ function AnalysisView({
                 <option value="population">Population (N)</option>
               </select>
             </div>
-            <button type="button" onClick={async () => { if (!analysisBackendAvailable) return; const res = await quantisApi.analyzeCovariance(rows, covarianceMethod); setCovarianceResult(res ?? null); }} disabled={!analysisBackendAvailable} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">Tính Covariance</button>
+            <button type="button" onClick={async () => { if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeCovariance(rows, covarianceMethod); setCovarianceResult(res ?? null); }} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">Tính Covariance</button>
           </div>
           {covarianceResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto mt-2">
@@ -2755,7 +2766,7 @@ function AnalysisView({
   }
 
   if (effectiveTab === "hypothesis" && selectedDataset) {
-    return <HypothesisTab selectedDataset={selectedDataset} onHypothesisResult={onHypothesisResult} analysisBackendAvailable={analysisBackendAvailable} />;
+    return <HypothesisTab selectedDataset={selectedDataset} onHypothesisResult={onHypothesisResult} analysisBackendAvailable={analysisBackendAvailable} showToast={showToast} />;
   }
 
   if (effectiveTab === "reliability" && selectedDataset) {
@@ -2766,23 +2777,23 @@ function AnalysisView({
   }
 
   if (effectiveTab === "regression") {
-    return <RegressionExplainerView selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} />;
+    return <RegressionExplainerView selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} showToast={showToast} />;
   }
 
   if (effectiveTab === "sem") {
-    return <SEMExplainerView selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} />;
+    return <SEMExplainerView selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} showToast={showToast} />;
   }
 
   if (effectiveTab === "factor" && selectedDataset) {
-    return <FactorTab selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} />;
+    return <FactorTab selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} showToast={showToast} />;
   }
 
   if (effectiveTab === "ml" && selectedDataset) {
-    return <MLTab selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} />;
+    return <MLTab selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} showToast={showToast} />;
   }
 
   if (effectiveTab === "bayesian" && selectedDataset) {
-    return <BayesianTab selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} />;
+    return <BayesianTab selectedDataset={selectedDataset} analysisBackendAvailable={analysisBackendAvailable} showToast={showToast} />;
   }
 
   return (
@@ -2796,7 +2807,7 @@ function AnalysisView({
   );
 }
 
-function FactorTab({ selectedDataset, analysisBackendAvailable = false }: { selectedDataset: Dataset; analysisBackendAvailable?: boolean }) {
+function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToast: _showToast }: { selectedDataset: Dataset; analysisBackendAvailable?: boolean; showToast?: (msg: string) => void }) {
   const rows = getDataRows(selectedDataset);
   const cols = selectedDataset.columnNames ?? [];
   const numericCols = rows.length >= 2 ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
@@ -2903,7 +2914,7 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false }: { sele
   );
 }
 
-function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = false }: { selectedDataset: Dataset | undefined; analysisBackendAvailable?: boolean }) {
+function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = false, showToast }: { selectedDataset: Dataset | undefined; analysisBackendAvailable?: boolean; showToast: (msg: string) => void }) {
   const rows = selectedDataset ? getDataRows(selectedDataset) : [];
   const cols = selectedDataset?.columnNames ?? [];
   const numericCols = rows.length >= 2 ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
@@ -3168,7 +3179,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 ))}
               </div>
             </div>
-            <button type="button" onClick={async () => { if (!poissonYCol || poissonXSelected.length === 0) return; const res = await quantisApi.analyzePoisson(rows, poissonYCol, poissonXSelected); setPoissonResult(res ?? null); }} disabled={!poissonYCol || poissonXSelected.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Poisson</button>
+            <button type="button" onClick={async () => { if (!poissonYCol || poissonXSelected.length === 0) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzePoisson(rows, poissonYCol, poissonXSelected); setPoissonResult(res ?? null); }} disabled={!poissonYCol || poissonXSelected.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Poisson</button>
           </div>
           {poissonResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3239,7 +3250,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               <label className="block text-sm font-medium mb-1">Alpha (λ)</label>
               <input type="number" min={0.01} step={0.1} value={ridgeAlpha} onChange={(e) => { setRidgeAlpha(Math.max(0.01, parseFloat(e.target.value) || 1)); setRidgeResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
-            <button type="button" onClick={async () => { if (!ridgeYCol || ridgeXSelected.length === 0) return; const res = await quantisApi.analyzeRidge(rows, ridgeYCol, ridgeXSelected, ridgeAlpha); setRidgeResult(res ?? null); }} disabled={!ridgeYCol || ridgeXSelected.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Ridge</button>
+            <button type="button" onClick={async () => { if (!ridgeYCol || ridgeXSelected.length === 0) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeRidge(rows, ridgeYCol, ridgeXSelected, ridgeAlpha); setRidgeResult(res ?? null); }} disabled={!ridgeYCol || ridgeXSelected.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Ridge</button>
           </div>
           {ridgeResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3275,7 +3286,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
   );
 }
 
-function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false }: { selectedDataset: Dataset | undefined; analysisBackendAvailable?: boolean }) {
+function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, showToast }: { selectedDataset: Dataset | undefined; analysisBackendAvailable?: boolean; showToast: (msg: string) => void }) {
   const rows = selectedDataset ? getDataRows(selectedDataset) : [];
   const numericCols = rows.length >= 2 ? (selectedDataset?.columnNames ?? []).filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
   const [mediationX, setMediationX] = useState("");
@@ -3286,6 +3297,19 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false }:
   const [moderationM, setModerationM] = useState("");
   const [moderationY, setModerationY] = useState("");
   const [moderationResult, setModerationResult] = useState<OLSResult | null>(null);
+  // Path analysis (AMOS-style)
+  const [pathEquations, setPathEquations] = useState<Array<{ yCol: string; xCols: string[] }>>([{ yCol: "", xCols: [] }]);
+  const [pathResult, setPathResult] = useState<{ pathCoefficients: Array<{ from: string; to: string; coefficient: number; se: number; tStat: number; pValue: number }>; equationsR2: Array<{ yCol: string; r2: number; adjR2: number; n: number }>; n: number } | null>(null);
+  const [pathRunning, setPathRunning] = useState(false);
+  // CFA
+  const [cfaFactors, setCfaFactors] = useState<Array<{ name: string; indicators: string[] }>>([{ name: "F1", indicators: [] }]);
+  const [cfaResult, setCfaResult] = useState<{ loadings?: Array<{ factor: string; indicator: string; estimate: number; se: number; z: number; pValue: number }>; factorCovariances?: Array<{ factor1: string; factor2: string; covariance: number; se: number }>; fitIndices?: Record<string, number | string>; n?: number; model?: string; error?: string } | null>(null);
+  const [cfaRunning, setCfaRunning] = useState(false);
+  // PLS-SEM
+  const [plsOuter, setPlsOuter] = useState<Array<{ lv: string; indicators: string[] }>>([{ lv: "LV1", indicators: [] }]);
+  const [plsInner, setPlsInner] = useState<Array<{ from: string; to: string }>>([]);
+  const [plsResult, setPlsResult] = useState<{ pathCoefficients: Array<{ from: string; to: string; coefficient: number; se?: number; tStat?: number; pValue?: number; ciLower?: number; ciUpper?: number }>; loadings: Array<{ latent: string; indicator: string; loading: number }>; r2: Record<string, number>; n: number; fornellLarcker: Record<string, number> } | null>(null);
+  const [plsRunning, setPlsRunning] = useState(false);
 
   const runMediation = async () => {
     if (!mediationX || !mediationM || !mediationY || !rows.length) return;
@@ -3308,15 +3332,64 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false }:
     setModerationResult(res ?? null);
   };
 
+  const runPathAnalysis = async () => {
+    const equations = pathEquations.filter((e) => e.yCol && e.xCols.length > 0);
+    if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+    if (!rows.length || equations.length === 0) return;
+    setPathRunning(true);
+    setPathResult(null);
+    try {
+      const res = await quantisApi.analyzePathAnalysis(rows, equations);
+      setPathResult(res ?? null);
+    } finally {
+      setPathRunning(false);
+    }
+  };
+
+  const runCFA = async () => {
+    const factorSpec: Record<string, string[]> = {};
+    for (const f of cfaFactors) {
+      if (f.name && f.indicators.length > 0) factorSpec[f.name] = f.indicators;
+    }
+    if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+    if (!rows.length || Object.keys(factorSpec).length === 0) return;
+    setCfaRunning(true);
+    setCfaResult(null);
+    try {
+      const res = await quantisApi.analyzeCFA(rows, factorSpec);
+      setCfaResult(res ?? null);
+    } finally {
+      setCfaRunning(false);
+    }
+  };
+
+  const runPLSSEM = async () => {
+    const outerModel: Record<string, string[]> = {};
+    for (const o of plsOuter) {
+      if (o.lv && o.indicators.length > 0) outerModel[o.lv] = o.indicators;
+    }
+    const innerPaths = plsInner.filter((p) => p.from && p.to);
+    if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+    if (!rows.length || Object.keys(outerModel).length < 2 || innerPaths.length === 0) return;
+    setPlsRunning(true);
+    setPlsResult(null);
+    try {
+      const res = await quantisApi.analyzePLSSEM(rows, outerModel, innerPaths);
+      setPlsResult(res ?? null);
+    } finally {
+      setPlsRunning(false);
+    }
+  };
+
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">SEM — Mô hình cấu trúc</h2>
+      <h2 className="text-xl font-semibold mb-2">SEM — Mô hình cấu trúc (AMOS / SmartPLS)</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
-        Mediation (X → M → Y), Moderation (tương tác X×M ảnh hưởng lên Y). Phân tích trung gian và điều tiết.
+        Mediation, Moderation, Path analysis (biến quan sát), CFA (Confirmatory Factor Analysis), PLS-SEM (mô hình phương trình cấu trúc theo phương pháp bình phương tối thiểu từng phần).
       </p>
       {analysisBackendAvailable && (
         <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> Mediation &amp; Moderation chạy trên backend Python (statsmodels)
+          <Cpu className="w-3.5 h-3.5" /> Backend Python: Mediation, Moderation, Path analysis, CFA (semopy), PLS-SEM
         </p>
       )}
       <div className="mb-4">
@@ -3413,8 +3486,165 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false }:
           )}
         </section>
       )}
+
+      {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
+        <section className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-900/10 p-4 mb-6">
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Path analysis (AMOS-style — biến quan sát)</h3>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Định nghĩa từng phương trình: Y ~ X1 + X2 + ... (biến phụ thuộc và các biến dự đoán).</p>
+          {pathEquations.map((eq, idx) => (
+            <div key={idx} className="flex flex-wrap gap-2 items-center mb-2">
+              <select value={eq.yCol} onChange={(e) => { const next = [...pathEquations]; next[idx] = { ...next[idx], yCol: e.target.value }; setPathEquations(next); setPathResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
+                <option value="">Y (phụ thuộc)</option>
+                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <span className="text-neutral-500">~</span>
+              <div className="flex flex-wrap gap-1">
+                {numericCols.filter((c) => c !== eq.yCol).map((col) => (
+                  <label key={col} className="flex items-center gap-1 text-sm">
+                    <input type="checkbox" checked={eq.xCols.includes(col)} onChange={() => { const next = [...pathEquations]; const x = next[idx].xCols.includes(col) ? next[idx].xCols.filter((x) => x !== col) : [...next[idx].xCols, col]; next[idx] = { ...next[idx], xCols: x }; setPathEquations(next); setPathResult(null); }} />
+                    {col}
+                  </label>
+                ))}
+              </div>
+              {pathEquations.length > 1 && <button type="button" onClick={() => { setPathEquations(pathEquations.filter((_, i) => i !== idx)); setPathResult(null); }} className="text-red-600 text-sm">Xóa</button>}
+            </div>
+          ))}
+          <div className="flex gap-2 mt-2">
+            <button type="button" onClick={() => setPathEquations([...pathEquations, { yCol: "", xCols: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">+ Thêm phương trình</button>
+            <button type="button" onClick={runPathAnalysis} disabled={pathRunning || pathEquations.every((e) => !e.yCol || e.xCols.length === 0)} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{pathRunning ? "Đang chạy..." : "Chạy Path analysis"}</button>
+          </div>
+          {pathResult && (
+            <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
+              <p className="p-2 font-medium">Hệ số đường path (n = {pathResult.n})</p>
+              <table className="w-full">
+                <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">From</th><th className="text-left p-2">To</th><th className="text-right p-2">Hệ số</th><th className="text-right p-2">SE</th><th className="text-right p-2">t</th><th className="text-right p-2">p</th></tr></thead>
+                <tbody>
+                  {pathResult.pathCoefficients.map((p, i) => (
+                    <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
+                      <td className="p-2">{p.from}</td><td className="p-2">{p.to}</td>
+                      <td className="p-2 text-right">{p.coefficient.toFixed(4)}</td><td className="p-2 text-right">{p.se.toFixed(4)}</td><td className="p-2 text-right">{p.tStat.toFixed(3)}</td><td className="p-2 text-right">{p.pValue < 0.001 ? "<.001" : p.pValue.toFixed(3)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t">R² theo phương trình: {pathResult.equationsR2.map((e) => `${e.yCol}=${e.r2.toFixed(3)}`).join(", ")}</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
+        <section className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/10 p-4 mb-6">
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">CFA — Confirmatory Factor Analysis (AMOS/SmartPLS)</h3>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Định nghĩa từng nhân tố (latent) và các chỉ báo (indicators).</p>
+          {cfaFactors.map((f, idx) => (
+            <div key={idx} className="mb-3">
+              <div className="flex flex-wrap gap-2 items-center mb-1">
+                <input type="text" value={f.name} onChange={(e) => { const next = [...cfaFactors]; next[idx] = { ...next[idx], name: e.target.value }; setCfaFactors(next); setCfaResult(null); }} placeholder="Tên nhân tố (vd F1)" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-24" />
+                <span className="text-neutral-500">=~</span>
+                {numericCols.map((col) => (
+                  <label key={col} className="flex items-center gap-1 text-sm">
+                    <input type="checkbox" checked={f.indicators.includes(col)} onChange={() => { const next = [...cfaFactors]; const ind = next[idx].indicators.includes(col) ? next[idx].indicators.filter((x) => x !== col) : [...next[idx].indicators, col]; next[idx] = { ...next[idx], indicators: ind }; setCfaFactors(next); setCfaResult(null); }} />
+                    {col}
+                  </label>
+                ))}
+                {cfaFactors.length > 1 && <button type="button" onClick={() => { setCfaFactors(cfaFactors.filter((_, i) => i !== idx)); setCfaResult(null); }} className="text-red-600 text-sm">Xóa</button>}
+              </div>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-2">
+            <button type="button" onClick={() => setCfaFactors([...cfaFactors, { name: `F${cfaFactors.length + 1}`, indicators: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">+ Thêm nhân tố</button>
+            <button type="button" onClick={runCFA} disabled={cfaRunning || cfaFactors.every((f) => !f.name || f.indicators.length === 0)} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{cfaRunning ? "Đang chạy..." : "Chạy CFA"}</button>
+          </div>
+          {cfaResult && (
+            <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
+              {cfaResult.error ? <p className="p-2 text-red-600">{cfaResult.error}</p> : (
+                <>
+                  <p className="p-2 font-medium">Loadings (n = {cfaResult.n ?? "—"})</p>
+                  {cfaResult.loadings && cfaResult.loadings.length > 0 && (
+                    <table className="w-full">
+                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Nhân tố</th><th className="text-left p-2">Chỉ báo</th><th className="text-right p-2">Estimate</th><th className="text-right p-2">SE</th><th className="text-right p-2">z</th><th className="text-right p-2">p</th></tr></thead>
+                      <tbody>
+                        {cfaResult.loadings.map((l, i) => (
+                          <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
+                            <td className="p-2">{l.factor}</td><td className="p-2">{l.indicator}</td>
+                            <td className="p-2 text-right">{l.estimate.toFixed(4)}</td><td className="p-2 text-right">{l.se.toFixed(4)}</td><td className="p-2 text-right">{l.z.toFixed(3)}</td><td className="p-2 text-right">{l.pValue < 0.001 ? "<.001" : l.pValue.toFixed(3)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {cfaResult.fitIndices && Object.keys(cfaResult.fitIndices).length > 0 && (
+                    <p className="p-2 border-t text-neutral-600 dark:text-neutral-400">Fit: {Object.entries(cfaResult.fitIndices).map(([k, v]) => `${k}=${typeof v === "number" ? v.toFixed(3) : v}`).join(", ")}</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
+        <section className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/30 dark:bg-orange-900/10 p-4 mb-6">
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">PLS-SEM (SmartPLS-style)</h3>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Mô hình ngoại (construct → chỉ báo), mô hình trong (đường path giữa các construct).</p>
+          <p className="text-xs text-neutral-500 mb-2">Ngoại: mỗi construct gắn với các biến chỉ báo. Trong: thêm đường from → to.</p>
+          {plsOuter.map((o, idx) => (
+            <div key={idx} className="flex flex-wrap gap-2 items-center mb-2">
+              <input type="text" value={o.lv} onChange={(e) => { const next = [...plsOuter]; next[idx] = { ...next[idx], lv: e.target.value }; setPlsOuter(next); setPlsResult(null); }} placeholder="Construct" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-24" />
+              <span className="text-neutral-500">←</span>
+              {numericCols.map((col) => (
+                <label key={col} className="flex items-center gap-1 text-sm">
+                  <input type="checkbox" checked={o.indicators.includes(col)} onChange={() => { const next = [...plsOuter]; const ind = next[idx].indicators.includes(col) ? next[idx].indicators.filter((x) => x !== col) : [...next[idx].indicators, col]; next[idx] = { ...next[idx], indicators: ind }; setPlsOuter(next); setPlsResult(null); }} />
+                  {col}
+                </label>
+              ))}
+              {plsOuter.length > 1 && <button type="button" onClick={() => { setPlsOuter(plsOuter.filter((_, i) => i !== idx)); setPlsResult(null); }} className="text-red-600 text-sm">Xóa</button>}
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2 items-center mt-2 mb-2">
+            <button type="button" onClick={() => setPlsOuter([...plsOuter, { lv: `LV${plsOuter.length + 1}`, indicators: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">+ Thêm construct</button>
+            <span className="text-neutral-500 text-sm">Đường trong:</span>
+            {plsInner.map((p, idx) => (
+              <span key={idx} className="flex items-center gap-1">
+                <select value={p.from} onChange={(e) => { const next = [...plsInner]; next[idx] = { ...next[idx], from: e.target.value }; setPlsInner(next); setPlsResult(null); }} className="rounded border px-1.5 py-0.5 text-sm">
+                  {plsOuter.map((o) => <option key={o.lv} value={o.lv}>{o.lv}</option>)}
+                </select>
+                → <select value={p.to} onChange={(e) => { const next = [...plsInner]; next[idx] = { ...next[idx], to: e.target.value }; setPlsInner(next); setPlsResult(null); }} className="rounded border px-1.5 py-0.5 text-sm">
+                  {plsOuter.map((o) => <option key={o.lv} value={o.lv}>{o.lv}</option>)}
+                </select>
+                <button type="button" onClick={() => setPlsInner(plsInner.filter((_, i) => i !== idx))} className="text-red-600 text-xs">x</button>
+              </span>
+            ))}
+            <button type="button" onClick={() => setPlsInner([...plsInner, { from: plsOuter[0]?.lv ?? "", to: plsOuter[1]?.lv ?? "" }])} className="rounded border border-neutral-300 px-2 py-0.5 text-sm">+ Đường</button>
+          </div>
+          <button type="button" onClick={runPLSSEM} disabled={plsRunning || plsOuter.every((o) => !o.lv || o.indicators.length === 0) || plsInner.length === 0} className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{plsRunning ? "Đang chạy..." : "Chạy PLS-SEM"}</button>
+          {plsResult && (
+            <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
+              <p className="p-2 font-medium">Path coefficients (n = {plsResult.n}, bootstrap)</p>
+              <table className="w-full">
+                <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">From</th><th className="text-left p-2">To</th><th className="text-right p-2">Hệ số</th><th className="text-right p-2">SE</th><th className="text-right p-2">t</th><th className="text-right p-2">p</th><th className="text-right p-2">CI 95%</th></tr></thead>
+                <tbody>
+                  {plsResult.pathCoefficients.map((p, i) => (
+                    <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
+                      <td className="p-2">{p.from}</td><td className="p-2">{p.to}</td>
+                      <td className="p-2 text-right">{p.coefficient.toFixed(4)}</td>
+                      <td className="p-2 text-right">{p.se != null ? p.se.toFixed(4) : "—"}</td><td className="p-2 text-right">{p.tStat != null ? p.tStat.toFixed(3) : "—"}</td><td className="p-2 text-right">{p.pValue != null ? (p.pValue < 0.001 ? "<.001" : p.pValue.toFixed(3)) : "—"}</td>
+                      <td className="p-2 text-right">{p.ciLower != null && p.ciUpper != null ? `[${p.ciLower.toFixed(3)}, ${p.ciUpper.toFixed(3)}]` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="p-2 border-t text-neutral-600 dark:text-neutral-400">R²: {Object.entries(plsResult.r2).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>
+              {plsResult.fornellLarcker && Object.keys(plsResult.fornellLarcker).length > 0 && <p className="p-2 text-neutral-600 dark:text-neutral-400">Fornell-Larcker √AVE: {Object.entries(plsResult.fornellLarcker).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>}
+              {plsResult.loadings && plsResult.loadings.length > 0 && <p className="p-2 text-neutral-500 text-xs">Loadings: {plsResult.loadings.slice(0, 8).map((l) => `${l.indicator}→${l.latent}=${l.loading.toFixed(2)}`).join("; ")}{plsResult.loadings.length > 8 ? " ..." : ""}</p>}
+            </div>
+          )}
+        </section>
+      )}
+
       {(!selectedDataset || numericCols.length < 3) && (
-        <p className="text-neutral-500">Chọn bộ dữ liệu có ít nhất 3 cột số để chạy Mediation và Moderation.</p>
+        <p className="text-neutral-500">Chọn bộ dữ liệu có ít nhất 3 cột số để chạy Mediation và Moderation. Path analysis, CFA, PLS-SEM cần backend Python và ít nhất 2 cột số.</p>
       )}
     </div>
   );
@@ -3422,7 +3652,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false }:
 
 type MLSubTab = "clustering" | "classification" | "explainability";
 
-function MLTab({ selectedDataset, analysisBackendAvailable = false }: { selectedDataset: Dataset; analysisBackendAvailable?: boolean }) {
+function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _showToast }: { selectedDataset: Dataset; analysisBackendAvailable?: boolean; showToast?: (msg: string) => void }) {
   const rows = getDataRows(selectedDataset);
   const cols = selectedDataset.columnNames ?? [];
   const numericCols = rows.length >= 2 ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
@@ -3692,7 +3922,7 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false }: { selected
   );
 }
 
-function BayesianTab({ selectedDataset, analysisBackendAvailable = false }: { selectedDataset: Dataset; analysisBackendAvailable?: boolean }) {
+function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showToast: _showToast }: { selectedDataset: Dataset; analysisBackendAvailable?: boolean; showToast?: (msg: string) => void }) {
   const [successes, setSuccesses] = useState(10);
   const [n, setN] = useState(50);
   const [priorAlpha, setPriorAlpha] = useState(1);
@@ -3763,7 +3993,7 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false }: { se
   );
 }
 
-function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAvailable = false }: { selectedDataset: Dataset; onHypothesisResult?: (r: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null) => void; analysisBackendAvailable?: boolean }) {
+function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAvailable = false, showToast }: { selectedDataset: Dataset; onHypothesisResult?: (r: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null) => void; analysisBackendAvailable?: boolean; showToast: (msg: string) => void }) {
   const rows = getDataRows(selectedDataset);
   const [testKind, setTestKind] = useState<"ttest" | "chisquare" | "anova" | "kruskal" | "nonparametric" | "normality" | "power" | "paired" | "wilcoxon_paired" | "friedman" | "levene" | "mcnemar" | "fisher" | "onesample_ttest" | "binomial" | "twoprop" | "sign_test" | "ftest" | "ztest_means">("ttest");
   const [groupCol, setGroupCol] = useState("");
@@ -4656,7 +4886,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return; const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol); setFtestResult(res ?? null); }} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy F-test</button>
+            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol); setFtestResult(res ?? null); }} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy F-test</button>
           </div>
           {ftestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -4707,7 +4937,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               <label className="block text-sm font-medium mb-1">Phương sai tổng thể nhóm 2 (σ²₂)</label>
               <input type="number" step="any" min="0" value={ztestKnownVar2} onChange={(e) => { setZtestKnownVar2(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 9" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
-            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2) return; const v1 = parseFloat(ztestKnownVar1); const v2 = parseFloat(ztestKnownVar2); if (Number.isNaN(v1) || Number.isNaN(v2) || v1 <= 0 || v2 <= 0) return; const res = await quantisApi.analyzeZTestTwoMeans(rows, groupCol, groupVal1, groupVal2, numCol, v1, v2); setZtestMeansResult(res ?? null); }} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy z-Test</button>
+            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2) return; const v1 = parseFloat(ztestKnownVar1); const v2 = parseFloat(ztestKnownVar2); if (Number.isNaN(v1) || Number.isNaN(v2) || v1 <= 0 || v2 <= 0) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeZTestTwoMeans(rows, groupCol, groupVal1, groupVal2, numCol, v1, v2); setZtestMeansResult(res ?? null); }} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy z-Test</button>
           </div>
           {ztestMeansResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -6457,6 +6687,15 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [selectedModel, setSelectedModel] = useState<string>(() => loadAiModel() || envModel || "llama3.2:8b");
 
+  const defaultBackendUrl = loadBackendApiUrl() || quantisApi.getApiBase() || "";
+  const [backendUrlInput, setBackendUrlInput] = useState(defaultBackendUrl);
+  const [backendTestLoading, setBackendTestLoading] = useState(false);
+  const [backendTestResult, setBackendTestResult] = useState<{ node: boolean; python: boolean } | null>(null);
+
+  useEffect(() => {
+    setBackendUrlInput(loadBackendApiUrl() || quantisApi.getApiBase() || "");
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -6478,13 +6717,64 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     saveAiModel(value || null);
   };
 
+  const handleSaveBackendUrl = () => {
+    const url = backendUrlInput.trim().replace(/\/+$/, "");
+    if (url) saveBackendApiUrl(url);
+    else saveBackendApiUrl(null);
+    setBackendTestResult(null);
+  };
+
+  const handleTestBackend = async () => {
+    const url = backendUrlInput.trim().replace(/\/+$/, "") || undefined;
+    if (!url) return;
+    setBackendTestLoading(true);
+    setBackendTestResult(null);
+    try {
+      const [nodeOk, pythonOk] = await Promise.all([
+        quantisApi.checkBackendAvailable(url),
+        quantisApi.checkAnalysisBackendAvailable(url),
+      ]);
+      setBackendTestResult({ node: nodeOk, python: pythonOk });
+    } finally {
+      setBackendTestLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Settings className="w-5 h-5" /> Cài đặt
         </h3>
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">Địa chỉ backend Quantis (phân tích định lượng)</label>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Backend Node (proxy). Để dùng phân tích Python, cấu hình ANALYZE_PYTHON_URL trên server.</p>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="url"
+                value={backendUrlInput}
+                onChange={(e) => { setBackendUrlInput(e.target.value); setBackendTestResult(null); }}
+                onBlur={handleSaveBackendUrl}
+                placeholder="http://localhost:3003"
+                className="flex-1 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+              />
+              <button type="button" onClick={handleSaveBackendUrl} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm whitespace-nowrap">Lưu</button>
+            </div>
+            <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !backendUrlInput.trim()} className="rounded-lg bg-brand text-white px-3 py-2 text-sm hover:opacity-90 disabled:opacity-50">
+              {backendTestLoading ? "Đang kiểm tra…" : "Kiểm tra backend"}
+            </button>
+            {backendTestResult && (
+              <div className="mt-2 text-sm space-y-1">
+                <p className={backendTestResult.node ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
+                  {backendTestResult.node ? "✓ Backend Node: Hoạt động" : "✗ Backend Node: Không kết nối được"}
+                </p>
+                <p className={backendTestResult.python ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}>
+                  {backendTestResult.python ? "✓ Backend Python: Hoạt động" : "✗ Backend Python: Chưa khởi động hoặc không cấu hình"}
+                </p>
+              </div>
+            )}
+          </div>
           <div>
             <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">Mô hình AI</label>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Dùng cho các nút Giải thích / Diễn giải kết quả và tab AI hướng dẫn. Chỉ hiển thị mô hình &gt;= 8B.</p>

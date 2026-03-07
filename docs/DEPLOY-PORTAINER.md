@@ -19,12 +19,30 @@ Khi code được đẩy lên branch **main** (hoặc chạy thủ công workflo
 
 Sau đó trên server/Portainer có thể dùng file `docker-compose.deploy.yml` (kéo image từ Docker Hub, không cần source code). Trong file đó thay `YOUR_DOCKERHUB_USER` bằng username Docker Hub của bạn.
 
-## Cách 1: Deploy bằng Portainer (Stack)
+## Deploy nhanh trong Portainer (chỉ cần đường dẫn Git)
+
+Chỉ cần tạo stack từ Git repository, không cần clone hay paste file:
+
+1. Đăng nhập Portainer → **Stacks** → **Add stack**.
+2. Đặt tên stack (vd. `quantis`).
+3. Chọn **Git repository**.
+4. Điền:
+   - **Repository URL:** `https://github.com/Lampx83/Quantis`
+   - **Compose path:** `portainer-stack.yml`
+   - **Branch:** `main`
+5. (Tùy chọn) **Environment variables** — nếu dùng Docker Hub user khác hoặc Ollama khác:
+   - `DOCKERHUB_USER` = username Docker Hub (mặc định: Lampx83)
+   - `OLLAMA_UPSTREAM_URL` = URL Ollama (mặc định: `http://host.docker.internal:8002`)
+6. **Deploy the stack**.
+
+Portainer sẽ kéo file `portainer-stack.yml` từ repo và dùng image đã build sẵn trên Docker Hub. Backend lộ ra **cổng 4000**. Kiểm tra: `http://<host>:4000/api/quantis/health` → `{"status":"ok","service":"quantis"}`.
+
+## Cách 1: Deploy bằng Portainer (Stack — Web editor)
 
 1. Đăng nhập Portainer trên máy chủ của bạn.
 2. Vào **Stacks** → **Add stack**.
 3. Đặt tên stack (ví dụ `quantis`).
-4. Trong **Web editor**, dán nội dung file `docker-compose.yml` (ở thư mục gốc Quantis).
+4. Chọn **Web editor**, dán nội dung file `docker-compose.yml` (ở thư mục gốc Quantis) — dùng khi bạn cần build tại chỗ từ source.
 5. Chỉnh **Environment variables** (nếu cần):
    - `OLLAMA_UPSTREAM_URL`: URL Ollama trên host (nếu chạy port khác mặc định, đổi đúng port, vd. `http://host.docker.internal:8002`).
    - `ARCHIVE_NEU_TOKEN`: Chỉ thêm nếu Archive NEU yêu cầu token.
@@ -69,9 +87,9 @@ curl http://localhost:3001/api/quantis/health
 
 ## Cấu hình Frontend sau khi backend chạy
 
-- Backend API (Node) lắng nghe tại port **3001** (vd. `http://<host>:3001`).
+- Backend API (Node) lắng nghe tại port **3001** trong container. Khi deploy bằng **portainer-stack.yml** thì port trên host là **4000** (vd. `http://<host>:4000`).
 - Frontend Quantis (AI Portal hoặc static host) cần trỏ tới URL backend:
-  - Build với: `VITE_QUANTIS_API_URL=http://<host>:3001` (thay `<host>` bằng IP hoặc domain của máy chủ backend).
+  - Build với: `VITE_QUANTIS_API_URL=http://<host>:4000` khi dùng Portainer stack (cổng 4000), hoặc `http://<host>:3001` nếu deploy bằng docker-compose khác.
   - Hoặc dùng domain/proxy: `VITE_QUANTIS_API_URL=https://quantis-api.example.com` (proxy trỏ về backend:3001).
 
 Sau khi build lại frontend với biến môi trường trên và đưa lên AI Portal, ứng dụng Quantis sẽ dùng backend đó (lưu data, proxy Archive, proxy Ollama, phân tích Python).

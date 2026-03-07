@@ -14,11 +14,11 @@ pip install -r requirements.txt
 ## Chạy
 
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 4000
 ```
 
-API: http://localhost:8000  
-Docs: http://localhost:8000/docs
+API: http://localhost:4000  
+Docs: http://localhost:4000/docs
 
 ## Endpoints (prefix `/api/quantis/analyze`)
 
@@ -62,7 +62,7 @@ Docs: http://localhost:8000/docs
 Trong thư mục `backend/` (Node), set biến môi trường:
 
 ```bash
-export ANALYZE_PYTHON_URL=http://localhost:8000
+export ANALYZE_PYTHON_URL=http://localhost:4000
 node server.js
 ```
 

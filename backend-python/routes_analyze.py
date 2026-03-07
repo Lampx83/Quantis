@@ -21,6 +21,9 @@ from analysis_impl import (
     run_vif,
     run_mediation,
     run_moderation,
+    run_path_analysis,
+    run_cfa,
+    run_pls_sem,
     run_kmeans,
     run_efa,
     run_pairwise_posthoc,
@@ -144,6 +147,28 @@ class ModerationBody(BaseModel):
     yCol: str
     xCol: str
     mCol: str
+
+
+class PathAnalysisEquation(BaseModel):
+    yCol: str
+    xCols: list[str]
+
+
+class PathAnalysisBody(BaseModel):
+    rows: list[list[str]]
+    equations: list[PathAnalysisEquation]
+
+
+class CFABody(BaseModel):
+    rows: list[list[str]]
+    factorSpec: dict[str, list[str]]  # {"F1": ["x1","x2"], "F2": ["y1","y2"]}
+
+
+class PLSSEMBody(BaseModel):
+    rows: list[list[str]]
+    outerModel: dict[str, list[str]]  # {"LV1": ["i1","i2"], "LV2": ["i3","i4"]}
+    innerPaths: list[dict[str, str]]  # [{"from": "LV1", "to": "LV2"}, ...]
+    nBootstrap: int = 500
 
 
 class KMeansBody(BaseModel):
@@ -561,6 +586,59 @@ async def analyze_moderation(body: ModerationBody):
         result = run_moderation(body.rows, body.yCol, body.xCol, body.mCol)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
+        return {"result": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/path-analysis")
+async def analyze_path_analysis(body: PathAnalysisBody):
+    try:
+        equations = [{"yCol": e.yCol, "xCols": e.xCols} for e in body.equations]
+        result = run_path_analysis(body.rows, equations)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Phương trình hoặc dữ liệu không hợp lệ")
+        return {"result": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cfa")
+async def analyze_cfa(body: CFABody):
+    try:
+        result = run_cfa(body.rows, body.factorSpec)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Cấu hình nhân tố không hợp lệ")
+        if result.get("error"):
+            raise HTTPException(status_code=400, detail=result["error"])
+        return {"result": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/pls-sem")
+async def analyze_pls_sem(body: PLSSEMBody):
+    try:
+        result = run_pls_sem(
+            body.rows,
+            body.outerModel,
+            body.innerPaths,
+            body.nBootstrap,
+        )
+        if result is None:
+            raise HTTPException(status_code=400, detail="Mô hình ngoại/trong không hợp lệ hoặc thiếu dữ liệu")
         return {"result": result}
     except HTTPException:
         raise

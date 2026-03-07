@@ -4,22 +4,42 @@
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
 import type { Dataset, Workflow } from "./types";
+import { loadBackendApiUrl } from "./store";
 
-const base = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_API_URL?: string } }).env?.VITE_QUANTIS_API_URL) || "";
-const API_BASE = `${String(base).replace(/\/+$/, "")}/api/quantis`;
-const ANALYZE_BASE = `${API_BASE}/analyze`;
+function getBase(): string {
+  const stored = loadBackendApiUrl();
+  const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_API_URL?: string } }).env?.VITE_QUANTIS_API_URL) || "";
+  const b = (stored != null && String(stored).trim() !== "") ? stored : env;
+  return String(b).replace(/\/+$/, "");
+}
+
+/** Base URL backend Quantis (để hiển thị trong Cài đặt). */
+export function getApiBase(): string {
+  return getBase();
+}
+
+function getAPI_BASE(): string {
+  const b = getBase();
+  return b ? `${b}/api/quantis` : "";
+}
+
+function getANALYZE_BASE(): string {
+  const api = getAPI_BASE();
+  return api ? `${api}/analyze` : "";
+}
 
 function getHeaders(): HeadersInit {
   return { "Content-Type": "application/json" };
 }
 
-export async function checkBackendAvailable(): Promise<boolean> {
-  // Không coi Vite dev server (origin) là backend: cần URL riêng (VITE_QUANTIS_API_URL)
-  if (!base || String(base).trim() === "") return false;
+export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> {
+  const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
+  if (!base) return false;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(`${API_BASE}/health`, {
+    const apiBase = `${base}/api/quantis`;
+    const res = await fetch(`${apiBase}/health`, {
       method: "GET",
       credentials: "include",
       cache: "no-store",
@@ -33,12 +53,14 @@ export async function checkBackendAvailable(): Promise<boolean> {
 }
 
 /** Kiểm tra backend phân tích Python (qua proxy Node) có sẵn không. */
-export async function checkAnalysisBackendAvailable(): Promise<boolean> {
-  if (!base || String(base).trim() === "") return false;
+export async function checkAnalysisBackendAvailable(baseUrl?: string): Promise<boolean> {
+  const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
+  if (!base) return false;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`${ANALYZE_BASE}/health`, {
+    const analyzeBase = `${base}/api/quantis/analyze`;
+    const res = await fetch(`${analyzeBase}/health`, {
       method: "GET",
       credentials: "include",
       cache: "no-store",
@@ -54,7 +76,7 @@ export async function checkAnalysisBackendAvailable(): Promise<boolean> {
 /** Phân tích: thống kê mô tả (backend Python). Trả về null nếu lỗi hoặc không dùng backend. */
 export async function analyzeDescriptive(rows: string[][]): Promise<Array<{ column: string; type: string; n: number; missing: number; mean?: number; median?: number; std?: number; min?: number; max?: number; q25?: number; q75?: number; freq?: { value: string; count: number }[] }> | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/descriptive`, {
+    const res = await fetch(`${getANALYZE_BASE()}/descriptive`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -78,7 +100,7 @@ export async function analyzeTTest(
   equalVar?: boolean
 ): Promise<{ t: number; df: number; pValue: number; cohenD: number; mean1: number; mean2: number; n1: number; n2: number; std1: number; std2: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ttest`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ttest`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -99,7 +121,7 @@ export async function analyzeChiSquare(
   col2: string
 ): Promise<{ chi2: number; df: number; pValue: number; table: { row: string; col: string; count: number }[]; rowLabels: string[]; colLabels: string[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/chi2`, {
+    const res = await fetch(`${getANALYZE_BASE()}/chi2`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -119,7 +141,7 @@ export async function analyzeCorrelation(
   method: "pearson" | "spearman" = "pearson"
 ): Promise<{ matrix: number[][]; columnNames: string[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/correlation`, {
+    const res = await fetch(`${getANALYZE_BASE()}/correlation`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -140,7 +162,7 @@ export async function analyzeAnova(
   valueCol: string
 ): Promise<{ f: number; dfBetween: number; dfWithin: number; dfTotal: number; ssBetween: number; ssWithin: number; ssTotal: number; msBetween: number; msWithin: number; pValue: number; etaSq: number; groupMeans: { group: string; n: number; mean: number; std: number }[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/anova`, {
+    const res = await fetch(`${getANALYZE_BASE()}/anova`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -161,7 +183,7 @@ export async function analyzeKruskalWallis(
   valueCol: string
 ): Promise<{ h: number; pValue: number; df: number; nGroups: number; groupMedians: { group: string; n: number; median: number; mean: number; std: number }[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/kruskal`, {
+    const res = await fetch(`${getANALYZE_BASE()}/kruskal`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -182,7 +204,7 @@ export async function analyzeOLS(
   xCols: string[]
 ): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; adjR2: number; se: Record<string, number>; tStat: Record<string, number>; pValue: Record<string, number>; ciLower?: Record<string, number>; ciUpper?: Record<string, number>; n: number; df: number; s2: number; yName: string; xNames: string[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ols`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ols`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -203,7 +225,7 @@ export async function analyzeLogistic(
   xCols: string[]
 ): Promise<{ coefficients: Record<string, number>; intercept: number; oddsRatios: Record<string, number>; se: Record<string, number>; zStat: Record<string, number>; pValue: Record<string, number>; logLikelihood: number; aic: number; n: number; yName: string; xNames: string[]; classCounts: { "0": number; "1": number } } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/logistic`, {
+    const res = await fetch(`${getANALYZE_BASE()}/logistic`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -224,7 +246,7 @@ export async function analyzePoisson(
   xCols: string[]
 ): Promise<{ coefficients: Record<string, number>; intercept: number; irr: Record<string, number>; se: Record<string, number>; zStat: Record<string, number>; pValue: Record<string, number>; logLikelihood: number; aic: number; n: number; yName: string; xNames: string[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/poisson`, {
+    const res = await fetch(`${getANALYZE_BASE()}/poisson`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -246,7 +268,7 @@ export async function analyzeRidge(
   alpha?: number
 ): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; alpha: number; n: number; yName: string; xNames: string[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ridge`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ridge`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -269,7 +291,7 @@ export async function analyzeMannWhitney(
   numCol: string
 ): Promise<{ u: number; z: number; pValue: number; n1: number; n2: number; median1: number; median2: number; rankSum1: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/mannwhitney`, {
+    const res = await fetch(`${getANALYZE_BASE()}/mannwhitney`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -286,7 +308,7 @@ export async function analyzeMannWhitney(
 /** Phân tích: Shapiro-Wilk (kiểm định chuẩn). */
 export async function analyzeShapiro(values: number[]): Promise<{ w: number; pValue: number; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/shapiro`, {
+    const res = await fetch(`${getANALYZE_BASE()}/shapiro`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -303,7 +325,7 @@ export async function analyzeShapiro(values: number[]): Promise<{ w: number; pVa
 /** Phân tích: Cronbach's alpha. */
 export async function analyzeCronbach(rows: string[][], columnNames: string[]): Promise<number | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/cronbach`, {
+    const res = await fetch(`${getANALYZE_BASE()}/cronbach`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -320,7 +342,7 @@ export async function analyzeCronbach(rows: string[][], columnNames: string[]): 
 /** Phân tích: VIF (đa cộng tuyến). */
 export async function analyzeVIF(rows: string[][], xCols: string[]): Promise<Record<string, number> | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/vif`, {
+    const res = await fetch(`${getANALYZE_BASE()}/vif`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -342,7 +364,7 @@ export async function analyzeMediation(
   yCol: string
 ): Promise<{ a: number; b: number; c: number; cPrime: number; aSE: number; bSE: number; cSE: number; cPrimeSE: number; aP: number; bP: number; cP: number; cPrimeP: number; indirectEffect: number; pctMediated: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/mediation`, {
+    const res = await fetch(`${getANALYZE_BASE()}/mediation`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -364,11 +386,91 @@ export async function analyzeModeration(
   mCol: string
 ): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; adjR2: number; se: Record<string, number>; tStat: Record<string, number>; pValue: Record<string, number>; n: number; df: number; s2: number; yName: string; xNames: string[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/moderation`, {
+    const res = await fetch(`${getANALYZE_BASE()}/moderation`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
       body: JSON.stringify({ rows, yCol, xCol, mCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Path analysis (nhiều phương trình hồi quy — AMOS-style). */
+export async function analyzePathAnalysis(
+  rows: string[][],
+  equations: Array<{ yCol: string; xCols: string[] }>
+): Promise<{
+  pathCoefficients: Array<{ from: string; to: string; coefficient: number; se: number; tStat: number; pValue: number }>;
+  equationsR2: Array<{ yCol: string; r2: number; adjR2: number; n: number }>;
+  n: number;
+} | null> {
+  try {
+    const res = await fetch(`${getANALYZE_BASE()}/path-analysis`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, equations }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: CFA — Confirmatory Factor Analysis (AMOS/SmartPLS-style). */
+export async function analyzeCFA(
+  rows: string[][],
+  factorSpec: Record<string, string[]>
+): Promise<{
+  loadings?: Array<{ factor: string; indicator: string; estimate: number; se: number; z: number; pValue: number }>;
+  factorCovariances?: Array<{ factor1: string; factor2: string; covariance: number; se: number }>;
+  fitIndices?: Record<string, number | string>;
+  n?: number;
+  model?: string;
+  error?: string;
+} | null> {
+  try {
+    const res = await fetch(`${getANALYZE_BASE()}/cfa`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorSpec }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: PLS-SEM (SmartPLS-style, variance-based). */
+export async function analyzePLSSEM(
+  rows: string[][],
+  outerModel: Record<string, string[]>,
+  innerPaths: Array<{ from: string; to: string }>,
+  nBootstrap?: number
+): Promise<{
+  pathCoefficients: Array<{ from: string; to: string; coefficient: number; se?: number; tStat?: number; pValue?: number; ciLower?: number; ciUpper?: number }>;
+  loadings: Array<{ latent: string; indicator: string; loading: number }>;
+  r2: Record<string, number>;
+  n: number;
+  bootstrapSamples: number;
+  fornellLarcker: Record<string, number>;
+} | null> {
+  try {
+    const res = await fetch(`${getANALYZE_BASE()}/pls-sem`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, outerModel, innerPaths, nBootstrap: nBootstrap ?? 500 }),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -386,7 +488,7 @@ export async function analyzeKMeans(
   maxIter?: number
 ): Promise<{ assignments: number[]; centroids: number[][]; iterations: number; withinSS: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/kmeans`, {
+    const res = await fetch(`${getANALYZE_BASE()}/kmeans`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -407,7 +509,7 @@ export async function analyzeEFA(
   nFactors?: number
 ): Promise<{ eigenvalues: number[]; varianceExplained: number[]; loadings: number[][]; columnNames: string[]; nFactors: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/efa`, {
+    const res = await fetch(`${getANALYZE_BASE()}/efa`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -426,7 +528,7 @@ export async function analyzePairwisePosthoc(
   groupMeans: { group: string; n: number; mean: number; std: number }[]
 ): Promise<Array<{ group1: string; group2: string; meanDiff: number; t: number; df: number; p: number; pBonferroni: number }> | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/pairwise-posthoc`, {
+    const res = await fetch(`${getANALYZE_BASE()}/pairwise-posthoc`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -447,7 +549,7 @@ export async function analyzeCrosstab(
   col2: string
 ): Promise<{ rowLabels: string[]; colLabels: string[]; counts: number[][] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/crosstab`, {
+    const res = await fetch(`${getANALYZE_BASE()}/crosstab`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -468,7 +570,7 @@ export async function analyzeBoxStats(
   valueCol: string
 ): Promise<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/boxstats`, {
+    const res = await fetch(`${getANALYZE_BASE()}/boxstats`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -488,7 +590,7 @@ export async function analyzeHistogramBins(
   binCount?: number
 ): Promise<Array<{ binStart: number; binEnd: number; count: number }> | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/histogram-bins`, {
+    const res = await fetch(`${getANALYZE_BASE()}/histogram-bins`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -507,7 +609,7 @@ export async function analyzeOutlierIqr(
   values: number[]
 ): Promise<{ outlierCount: number; q1: number | null; q3: number | null; iqr: number | null; lower: number | null; upper: number | null } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/outlier-iqr`, {
+    const res = await fetch(`${getANALYZE_BASE()}/outlier-iqr`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -528,7 +630,7 @@ export async function analyzePowerTTest(
   power?: number
 ): Promise<{ nRequired: number; power: number; effectSize: number; alpha: number; testType: string } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/power-ttest`, {
+    const res = await fetch(`${getANALYZE_BASE()}/power-ttest`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -550,7 +652,7 @@ export async function analyzeBetaPosterior(
   priorBeta?: number
 ): Promise<{ postAlpha: number; postBeta: number; mean: number; variance: number; ci95Lower: number; ci95Upper: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/beta-posterior`, {
+    const res = await fetch(`${getANALYZE_BASE()}/beta-posterior`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -572,7 +674,7 @@ export async function analyzeSampleSizeProportion(
   power?: number
 ): Promise<{ nRequired: number; p0: number; p1: number; alpha: number; power: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/sample-size-proportion`, {
+    const res = await fetch(`${getANALYZE_BASE()}/sample-size-proportion`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -594,7 +696,7 @@ export async function analyzeSampleSizeChisquare(
   power?: number
 ): Promise<{ nRequired: number; effectSizeW: number; df: number; alpha: number; power: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/sample-size-chisquare`, {
+    const res = await fetch(`${getANALYZE_BASE()}/sample-size-chisquare`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -616,7 +718,7 @@ export async function analyzeSampleSizeAnova(
   power?: number
 ): Promise<{ nRequired: number; nPerGroup: number; k: number; effectSizeF: number; alpha: number; power: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/sample-size-anova`, {
+    const res = await fetch(`${getANALYZE_BASE()}/sample-size-anova`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -636,7 +738,7 @@ export async function analyzeSampleSizeRegression(
   rule?: "10" | "20"
 ): Promise<{ nRequired: number; nPredictors: number; rule: string } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/sample-size-regression`, {
+    const res = await fetch(`${getANALYZE_BASE()}/sample-size-regression`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -657,7 +759,7 @@ export async function analyzeTextStats(
   topN?: number
 ): Promise<{ column: string; nRows: number; nEmpty: number; totalWords: number; uniqueWords: number; avgWordsPerRow: number; minWordsPerRow: number; maxWordsPerRow: number; wordFreq: { word: string; count: number }[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/text-stats`, {
+    const res = await fetch(`${getANALYZE_BASE()}/text-stats`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -678,7 +780,7 @@ export async function analyzeKeywordCounts(
   keywords: string[]
 ): Promise<{ column: string; keywords: string[]; counts: { keyword: string; rowCount: number; totalOccurrences: number }[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/keyword-counts`, {
+    const res = await fetch(`${getANALYZE_BASE()}/keyword-counts`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -700,7 +802,7 @@ export async function analyzeNgramFreq(
   topN?: number
 ): Promise<{ column: string; n: number; totalNgrams: number; uniqueNgrams: number; ngramFreq: { ngram: string; count: number }[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ngram-freq`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ngram-freq`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -721,7 +823,7 @@ export async function analyzeCohensKappa(
   col2: string
 ): Promise<{ col1: string; col2: string; n: number; kappa: number; observedAgreement: number; expectedAgreement: number; table: Record<string, Record<string, number>> } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/cohens-kappa`, {
+    const res = await fetch(`${getANALYZE_BASE()}/cohens-kappa`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -741,7 +843,7 @@ export async function analyzeCovariance(
   method?: "population" | "sample"
 ): Promise<{ matrix: number[][]; columnNames: string[]; ddof: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/covariance`, {
+    const res = await fetch(`${getANALYZE_BASE()}/covariance`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -764,7 +866,7 @@ export async function analyzeFTestTwoSample(
   numCol: string
 ): Promise<{ f: number; pValue: number; df1: number; df2: number; var1: number; var2: number; n1: number; n2: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ftest-two-sample`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ftest-two-sample`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -784,7 +886,7 @@ export async function analyzeExponentialSmoothing(
   alpha?: number
 ): Promise<{ smoothed: number[]; alpha: number; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/exponential-smoothing`, {
+    const res = await fetch(`${getANALYZE_BASE()}/exponential-smoothing`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -804,7 +906,7 @@ export async function analyzeMovingAverage(
   period: number
 ): Promise<{ movingAverage: number[]; period: number; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/moving-average`, {
+    const res = await fetch(`${getANALYZE_BASE()}/moving-average`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -826,7 +928,7 @@ export async function analyzeAnovaTwoFactorReplication(
   valueCol: string
 ): Promise<{ table: Array<{ source: string; ss: number; df: number; ms: number; f: number | null; pValue: number | null }>; factorA: string; factorB: string; valueCol: string; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/anova-two-factor-replication`, {
+    const res = await fetch(`${getANALYZE_BASE()}/anova-two-factor-replication`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -848,7 +950,7 @@ export async function analyzeAnovaTwoFactorNoReplication(
   valueCol: string
 ): Promise<{ table: Array<{ source: string; ss: number; df: number; ms: number; f: number | null; pValue: number | null }>; factorA: string; factorB: string; valueCol: string; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/anova-two-factor-no-replication`, {
+    const res = await fetch(`${getANALYZE_BASE()}/anova-two-factor-no-replication`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -867,7 +969,7 @@ export async function analyzeFourier(
   values: number[]
 ): Promise<{ magnitudes: number[]; frequencies: number[]; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/fourier`, {
+    const res = await fetch(`${getANALYZE_BASE()}/fourier`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -887,7 +989,7 @@ export async function analyzeRankPercentile(
   valueCol: string
 ): Promise<{ column: string; n: number; data: Array<{ value: number; rank: number; percentile: number }> } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/rank-percentile`, {
+    const res = await fetch(`${getANALYZE_BASE()}/rank-percentile`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -908,7 +1010,7 @@ export async function analyzeRandomNumber(
   options?: { seed?: number; low?: number; high?: number; mean?: number; std?: number; nTrials?: number; p?: number }
 ): Promise<{ values: number[]; n: number; distribution: string; error?: string } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/random-number`, {
+    const res = await fetch(`${getANALYZE_BASE()}/random-number`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -930,7 +1032,7 @@ export async function analyzeSampling(
   seed?: number
 ): Promise<{ rows: string[][]; nSampled: number; method: string; indices?: number[] } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/sampling`, {
+    const res = await fetch(`${getANALYZE_BASE()}/sampling`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -951,7 +1053,7 @@ export async function analyzeTTestPaired(
   col2: string
 ): Promise<{ t: number; df: number; pValue: number; cohenD: number; meanDiff: number; stdDiff: number; mean1: number; mean2: number; n: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ttest-paired`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ttest-paired`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -976,7 +1078,7 @@ export async function analyzeZTestTwoMeans(
   knownVar2: number
 ): Promise<{ z: number; pValue: number; mean1: number; mean2: number; n1: number; n2: number; knownVar1: number; knownVar2: number } | null> {
   try {
-    const res = await fetch(`${ANALYZE_BASE}/ztest-two-means`, {
+    const res = await fetch(`${getANALYZE_BASE()}/ztest-two-means`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -993,7 +1095,7 @@ export async function analyzeZTestTwoMeans(
 /** Lấy toàn bộ datasets + workflows (cần đăng nhập). Trả về null nếu 401/lỗi. */
 export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workflow[] } | null> {
   try {
-    const res = await fetch(`${API_BASE}/data`, { method: "GET", credentials: "include" });
+    const res = await fetch(`${getAPI_BASE()}/data`, { method: "GET", credentials: "include" });
     if (!res.ok) return null;
     const json = await res.json();
     return {
@@ -1009,7 +1111,7 @@ export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workf
 export async function saveData(payload: { datasets: Dataset[]; workflows: Workflow[] }): Promise<boolean> {
   if (!base || String(base).trim() === "") return false;
   try {
-    const res = await fetch(`${API_BASE}/data`, {
+    const res = await fetch(`${getAPI_BASE()}/data`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),

@@ -92,7 +92,26 @@ export function saveAiModel(model: string | null): void {
   }
 }
 
-/** Góp ý AI (like/dislike + comment khi dislike). Lưu local để sau có thể gửi lên server. */
+/** Địa chỉ backend Quantis (Node). Trống = dùng VITE_QUANTIS_API_URL từ env. */
+export function loadBackendApiUrl(): string | null {
+  try {
+    return localStorage.getItem(getKey("backendApiUrl"));
+  } catch {
+    return null;
+  }
+}
+
+export function saveBackendApiUrl(url: string | null): void {
+  try {
+    if (url != null && String(url).trim() !== "") {
+      localStorage.setItem(getKey("backendApiUrl"), String(url).trim().replace(/\/+$/, ""));
+    } else {
+      localStorage.removeItem(getKey("backendApiUrl"));
+    }
+  } catch {
+    /* ignore */
+  }
+}
 export type AiFeedbackEntry = {
   type: "ai_response";
   timestamp: string;

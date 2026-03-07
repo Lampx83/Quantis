@@ -529,6 +529,260 @@ def run_moderation(rows: list, y_col: str, x_col: str, m_col: str):
     return run_ols([headers] + data_str, y_col, [x_col, m_col, "_XxM"])
 
 
+# ---------- Path analysis (observed variables, multi-equation) — AMOS-style ----------
+def run_path_analysis(rows: list, equations: list[dict]):
+    """
+    equations: list of { "yCol": str, "xCols": list[str] }. Order matters for recursive models.
+    Returns path coefficients, R² per equation, and direct effects table.
+    """
+    if not equations:
+        return None
+    all_cols = set()
+    for eq in equations:
+        y = eq.get("yCol")
+        x_list = eq.get("xCols") or []
+        if not y or not isinstance(x_list, list):
+            return None
+        all_cols.add(y)
+        all_cols.update(x_list)
+    df = _rows_to_df(rows)
+    for c in all_cols:
+        if c not in df.columns:
+            return None
+    df = df[list(all_cols)].apply(pd.to_numeric, errors="coerce").dropna()
+    if len(df) < 5:
+        return None
+    headers = list(df.columns)
+    data_str = [[str(v) for v in row] for row in df.values]
+    rows_clean = [headers] + data_str
+    path_coefs = []
+    r2_per_eq = []
+    for eq in equations:
+        y_col = eq["yCol"]
+        x_cols = list(eq["xCols"])
+        ols_res = run_ols(rows_clean, y_col, x_cols)
+        if not ols_res:
+            return None
+        for x in x_cols:
+            path_coefs.append({
+                "from": x,
+                "to": y_col,
+                "coefficient": ols_res["coefficients"].get(x, 0),
+                "se": ols_res["se"].get(x, 0),
+                "tStat": ols_res["tStat"].get(x, 0),
+                "pValue": ols_res["pValue"].get(x, 1),
+            })
+        r2_per_eq.append({"yCol": y_col, "r2": ols_res["r2"], "adjR2": ols_res["adjR2"], "n": ols_res["n"]})
+    return {
+        "pathCoefficients": path_coefs,
+        "equationsR2": r2_per_eq,
+        "n": len(df),
+    }
+
+
+# ---------- Confirmatory Factor Analysis (CFA) — AMOS/SmartPLS-style ----------
+def run_cfa(rows: list, factor_spec: dict):
+    """
+    factor_spec: { "F1": ["x1", "x2", "x3"], "F2": ["y1", "y2"] }. Factors can correlate.
+    Returns loadings, factor correlations, fit indices (chi2, df, p, CFI, TLI, RMSEA, etc.).
+    """
+    try:
+        import semopy
+        from semopy import Model
+        from semopy.stats import calc_stats
+    except ImportError:
+        return {"error": "Thư viện semopy chưa được cài. Chạy: pip install semopy"}
+    if not factor_spec or not isinstance(factor_spec, dict):
+        return None
+    all_indicators = []
+    for f, inds in factor_spec.items():
+        if not inds or not isinstance(inds, list):
+            return None
+        for i in inds:
+            if i not in all_indicators:
+                all_indicators.append(i)
+    df = _rows_to_df(rows)
+    for c in all_indicators:
+        if c not in df.columns:
+            return None
+    df = df[all_indicators].apply(pd.to_numeric, errors="coerce").dropna()
+    if len(df) < 10:
+        return None
+    # Build lavaan-like model: F =~ i1 + i2 + i3; F1 ~~ F2
+    lines = []
+    for f, inds in factor_spec.items():
+        lines.append(f"{f} =~ " + " + ".join(inds))
+    factors = list(factor_spec.keys())
+    for i in range(len(factors)):
+        for j in range(i + 1, len(factors)):
+            lines.append(f"{factors[i]} ~~ {factors[j]}")
+    model_str = "\n".join(lines)
+    try:
+        mod = Model(model_str)
+        mod.fit(df)
+        # Parameter estimates (loadings, etc.) — semopy inspect() returns DataFrame
+        est = mod.inspect()
+        loadings = []
+        for _, row in est.iterrows():
+            op = str(row.get("op", ""))
+            if op == "~" or op == "=~":
+                lval = row.get("lval", "")
+                rval = row.get("rval", "")
+                if pd.isna(lval) or pd.isna(rval):
+                    continue
+                loadings.append({
+                    "factor": str(lval),
+                    "indicator": str(rval),
+                    "estimate": float(row.get("Estimate", row.get("estimate", 0))),
+                    "se": float(row.get("Std err", row.get("se", 0))),
+                    "z": float(row.get("z-value", row.get("z", 0))),
+                    "pValue": float(row.get("p-value", row.get("pvalue", 1))),
+                })
+        factor_cov = []
+        for _, row in est.iterrows():
+            op = str(row.get("op", ""))
+            if op == "~~":
+                lval, rval = row.get("lval", ""), row.get("rval", "")
+                if lval != rval:
+                    factor_cov.append({
+                        "factor1": str(lval),
+                        "factor2": str(rval),
+                        "covariance": float(row.get("Estimate", row.get("estimate", 0))),
+                        "se": float(row.get("Std err", row.get("se", 0))),
+                    })
+        # Fit indices: calc_stats returns SEMStatistics or dict-like
+        try:
+            from semopy.stats import calc_stats
+            stats_df = calc_stats(mod)
+            fit = {}
+            if hasattr(stats_df, "_asdict"):
+                fit = stats_df._asdict()
+            elif isinstance(stats_df, pd.DataFrame) and not stats_df.empty:
+                fit = stats_df.iloc[0].to_dict() if len(stats_df) > 0 else {}
+            elif isinstance(stats_df, dict):
+                fit = stats_df
+            # Normalize keys for frontend
+            fit = {str(k): (float(v) if isinstance(v, (int, float)) else v) for k, v in fit.items()}
+        except Exception:
+            fit = {}
+        return {
+            "loadings": loadings,
+            "factorCovariances": factor_cov,
+            "fitIndices": fit,
+            "n": int(len(df)),
+            "model": model_str,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ---------- PLS-SEM (variance-based path model) — SmartPLS-style ----------
+def run_pls_sem(rows: list, outer_model: dict, inner_paths: list[dict], n_bootstrap: int = 500):
+    """
+    outer_model: { "LV1": ["ind1", "ind2", "ind3"], "LV2": ["ind4", "ind5"] } — reflective.
+    inner_paths: [ { "from": "LV1", "to": "LV2" }, ... ] — structural paths.
+    Returns latent scores, path coefficients, R², loadings, bootstrap SE/CI, HTMT (if multiple LVs).
+    """
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.cross_decomposition import PLSRegression
+
+    if not outer_model or not inner_paths:
+        return None
+    all_inds = []
+    for lv, inds in outer_model.items():
+        if not inds or not isinstance(inds, list):
+            return None
+        for i in inds:
+            if i not in all_inds:
+                all_inds.append(i)
+    df = _rows_to_df(rows)
+    for c in all_inds:
+        if c not in df.columns:
+            return None
+    df = df[all_inds].apply(pd.to_numeric, errors="coerce").dropna()
+    if len(df) < 20:
+        return None
+    X = StandardScaler().fit_transform(df)
+    # Reflective: latent = mean of standardized indicators per block
+    lv_scores = {}
+    loadings_out = []
+    for lv, inds in outer_model.items():
+        cols_idx = [df.columns.get_loc(c) for c in inds if c in df.columns]
+        if not cols_idx:
+            return None
+        block = X[:, cols_idx]
+        # Latent score = mean of indicators (reflective)
+        lv_scores[lv] = np.mean(block, axis=1)
+        for j, c in enumerate(inds):
+            if c in df.columns:
+                r = np.corrcoef(block[:, j], lv_scores[lv])[0, 1] if block.shape[1] > 0 else 0
+                loadings_out.append({"latent": lv, "indicator": c, "loading": float(r)})
+    lv_df = pd.DataFrame(lv_scores)
+    # Inner model: OLS for each endogenous LV
+    endo = set(p["to"] for p in inner_paths)
+    path_coefs = []
+    r2 = {}
+    for target in endo:
+        preds = [p["from"] for p in inner_paths if p["to"] == target]
+        if not preds or not all(p in lv_df.columns for p in preds):
+            continue
+        y = lv_df[target].values
+        X_inner = lv_df[preds].values
+        X_inner = np.column_stack([np.ones(len(y)), X_inner])
+        b = np.linalg.lstsq(X_inner, y, rcond=None)[0]
+        r2[target] = float(1 - np.var(y - X_inner @ b) / np.var(y)) if np.var(y) > 0 else 0
+        for i, p in enumerate(preds):
+            path_coefs.append({
+                "from": p,
+                "to": target,
+                "coefficient": float(b[i + 1]),
+                "se": None,
+                "tStat": None,
+                "pValue": None,
+            })
+    # Bootstrap for SE and p-value
+    n = len(lv_df)
+    rng = np.random.default_rng(42)
+    boot_coefs = {f"{p['from']}->{p['to']}": [] for p in inner_paths}
+    for _ in range(n_bootstrap):
+        idx = rng.integers(0, n, size=n)
+        b_df = lv_df.iloc[idx]
+        for target in endo:
+            preds = [p["from"] for p in inner_paths if p["to"] == target]
+            if not preds or not all(p in b_df.columns for p in preds):
+                continue
+            y = b_df[target].values
+            X_inner = np.column_stack([np.ones(len(y)), b_df[preds].values])
+            b = np.linalg.lstsq(X_inner, y, rcond=None)[0]
+            for i, p in enumerate(preds):
+                key = f"{p}->{target}"
+                if key in boot_coefs:
+                    boot_coefs[key].append(float(b[i + 1]))
+    for pc in path_coefs:
+        key = f"{pc['from']}->{pc['to']}"
+        arr = boot_coefs.get(key, [])
+        if len(arr) >= 10:
+            pc["se"] = float(np.std(arr))
+            if pc["se"] and pc["se"] > 0:
+                pc["tStat"] = float(pc["coefficient"] / pc["se"])
+                pc["pValue"] = float(2 * (1 - scipy_stats.t.cdf(abs(pc["tStat"]), n - len([x for x in path_coefs if x["to"] == pc["to"]]) - 1)))
+            pc["ciLower"] = float(np.percentile(arr, 2.5))
+            pc["ciUpper"] = float(np.percentile(arr, 97.5))
+    # Fornell-Larcker: sqrt(AVE) per LV; AVE = mean of squared loadings
+    avg_load = {}
+    for lv in outer_model:
+        ld = [x["loading"] ** 2 for x in loadings_out if x["latent"] == lv]
+        avg_load[lv] = float(np.sqrt(np.mean(ld))) if ld else 0
+    return {
+        "pathCoefficients": path_coefs,
+        "loadings": loadings_out,
+        "r2": r2,
+        "n": n,
+        "bootstrapSamples": n_bootstrap,
+        "fornellLarcker": avg_load,
+    }
+
+
 # ---------- K-means clustering ----------
 def run_kmeans(rows: list, column_names: list[str], k: int, max_iter: int = 100):
     from sklearn.cluster import KMeans

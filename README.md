@@ -35,14 +35,14 @@ Open http://localhost:3000. Data is stored in localStorage.
 cd Quantis/backend
 npm install
 # Bật thêm backend Python phân tích (tùy chọn):
-export ANALYZE_PYTHON_URL=http://localhost:8000
+export ANALYZE_PYTHON_URL=http://localhost:4000
 npm start
 
 # Terminal 2 (tùy chọn): backend phân tích Python (scipy, statsmodels) — chỉ cần khi dùng ANALYZE_PYTHON_URL
 cd Quantis/backend-python
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 4000
 
 # Terminal 3: frontend
 cd Quantis
@@ -51,7 +51,7 @@ npm install
 npm run dev
 ```
 
-Backend Node tại http://localhost:3001. Nếu chạy thêm backend Python và set `ANALYZE_PYTHON_URL=http://localhost:8000`, các phân tích (thống kê mô tả, t-test, ANOVA, Chi-square, tương quan, OLS, logistic) sẽ chạy trên Python (scipy/statsmodels) thay vì JavaScript trong trình duyệt — phù hợp dataset lớn và kết quả chuẩn nghiên cứu.
+Backend Node tại http://localhost:3001. Nếu chạy thêm backend Python và set `ANALYZE_PYTHON_URL=http://localhost:4000`, các phân tích (thống kê mô tả, t-test, ANOVA, Chi-square, tương quan, OLS, logistic) sẽ chạy trên Python (scipy/statsmodels) thay vì JavaScript trong trình duyệt — phù hợp dataset lớn và kết quả chuẩn nghiên cứu.
 
 **Build:** `npm run build` — output in `public/`.
 
