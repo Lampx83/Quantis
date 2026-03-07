@@ -1,29 +1,992 @@
 /**
  * Quantis API client: gọi backend Quantis khi nhúng Portal (có đăng nhập).
  * Khi backend không có hoặc chưa đăng nhập: dữ liệu chỉ lưu localStorage.
+ * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
 import type { Dataset, Workflow } from "./types";
 
 const base = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_API_URL?: string } }).env?.VITE_QUANTIS_API_URL) || "";
 const API_BASE = `${String(base).replace(/\/+$/, "")}/api/quantis`;
+const ANALYZE_BASE = `${API_BASE}/analyze`;
 
 function getHeaders(): HeadersInit {
   return { "Content-Type": "application/json" };
 }
 
 export async function checkBackendAvailable(): Promise<boolean> {
+  // Không coi Vite dev server (origin) là backend: cần URL riêng (VITE_QUANTIS_API_URL)
+  if (!base || String(base).trim() === "") return false;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${API_BASE}/health`, {
       method: "GET",
       credentials: "include",
+      cache: "no-store",
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/** Kiểm tra backend phân tích Python (qua proxy Node) có sẵn không. */
+export async function checkAnalysisBackendAvailable(): Promise<boolean> {
+  if (!base || String(base).trim() === "") return false;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(`${ANALYZE_BASE}/health`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Phân tích: thống kê mô tả (backend Python). Trả về null nếu lỗi hoặc không dùng backend. */
+export async function analyzeDescriptive(rows: string[][]): Promise<Array<{ column: string; type: string; n: number; missing: number; mean?: number; median?: number; std?: number; min?: number; max?: number; q25?: number; q75?: number; freq?: { value: string; count: number }[] }> | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/descriptive`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.result) ? json.result : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: t-test hai mẫu độc lập (Welch hoặc equal variance). */
+export async function analyzeTTest(
+  rows: string[][],
+  groupCol: string,
+  groupVal1: string,
+  groupVal2: string,
+  numCol: string,
+  equalVar?: boolean
+): Promise<{ t: number; df: number; pValue: number; cohenD: number; mean1: number; mean2: number; n1: number; n2: number; std1: number; std2: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ttest`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, groupCol, groupVal1, groupVal2, numCol, equalVar: equalVar ?? false }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Chi-square độc lập. */
+export async function analyzeChiSquare(
+  rows: string[][],
+  col1: string,
+  col2: string
+): Promise<{ chi2: number; df: number; pValue: number; table: { row: string; col: string; count: number }[]; rowLabels: string[]; colLabels: string[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/chi2`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col1, col2 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: ma trận tương quan (Pearson hoặc Spearman). */
+export async function analyzeCorrelation(
+  rows: string[][],
+  method: "pearson" | "spearman" = "pearson"
+): Promise<{ matrix: number[][]; columnNames: string[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/correlation`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, method }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: ANOVA một nhân tố. */
+export async function analyzeAnova(
+  rows: string[][],
+  factorCol: string,
+  valueCol: string
+): Promise<{ f: number; dfBetween: number; dfWithin: number; dfTotal: number; ssBetween: number; ssWithin: number; ssTotal: number; msBetween: number; msWithin: number; pValue: number; etaSq: number; groupMeans: { group: string; n: number; mean: number; std: number }[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/anova`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorCol, valueCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Kruskal-Wallis H (non-parametric ANOVA cho 3+ nhóm). */
+export async function analyzeKruskalWallis(
+  rows: string[][],
+  factorCol: string,
+  valueCol: string
+): Promise<{ h: number; pValue: number; df: number; nGroups: number; groupMedians: { group: string; n: number; median: number; mean: number; std: number }[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/kruskal`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorCol, valueCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: hồi quy OLS. */
+export async function analyzeOLS(
+  rows: string[][],
+  yCol: string,
+  xCols: string[]
+): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; adjR2: number; se: Record<string, number>; tStat: Record<string, number>; pValue: Record<string, number>; ciLower?: Record<string, number>; ciUpper?: Record<string, number>; n: number; df: number; s2: number; yName: string; xNames: string[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ols`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, yCol, xCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: hồi quy logistic nhị phân. */
+export async function analyzeLogistic(
+  rows: string[][],
+  yCol: string,
+  xCols: string[]
+): Promise<{ coefficients: Record<string, number>; intercept: number; oddsRatios: Record<string, number>; se: Record<string, number>; zStat: Record<string, number>; pValue: Record<string, number>; logLikelihood: number; aic: number; n: number; yName: string; xNames: string[]; classCounts: { "0": number; "1": number } } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/logistic`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, yCol, xCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Hồi quy Poisson (Y đếm: số nguyên ≥ 0). */
+export async function analyzePoisson(
+  rows: string[][],
+  yCol: string,
+  xCols: string[]
+): Promise<{ coefficients: Record<string, number>; intercept: number; irr: Record<string, number>; se: Record<string, number>; zStat: Record<string, number>; pValue: Record<string, number>; logLikelihood: number; aic: number; n: number; yName: string; xNames: string[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/poisson`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, yCol, xCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Hồi quy Ridge (L2 regularized). */
+export async function analyzeRidge(
+  rows: string[][],
+  yCol: string,
+  xCols: string[],
+  alpha?: number
+): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; alpha: number; n: number; yName: string; xNames: string[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ridge`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, yCol, xCols, alpha: alpha ?? 1 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Mann-Whitney U (non-parametric). */
+export async function analyzeMannWhitney(
+  rows: string[][],
+  groupCol: string,
+  groupVal1: string,
+  groupVal2: string,
+  numCol: string
+): Promise<{ u: number; z: number; pValue: number; n1: number; n2: number; median1: number; median2: number; rankSum1: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/mannwhitney`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, groupCol, groupVal1, groupVal2, numCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Shapiro-Wilk (kiểm định chuẩn). */
+export async function analyzeShapiro(values: number[]): Promise<{ w: number; pValue: number; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/shapiro`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ values }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Cronbach's alpha. */
+export async function analyzeCronbach(rows: string[][], columnNames: string[]): Promise<number | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/cronbach`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, columnNames }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return typeof json?.result === "number" ? json.result : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: VIF (đa cộng tuyến). */
+export async function analyzeVIF(rows: string[][], xCols: string[]): Promise<Record<string, number> | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/vif`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, xCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Mediation (X→M→Y). */
+export async function analyzeMediation(
+  rows: string[][],
+  xCol: string,
+  mCol: string,
+  yCol: string
+): Promise<{ a: number; b: number; c: number; cPrime: number; aSE: number; bSE: number; cSE: number; cPrimeSE: number; aP: number; bP: number; cP: number; cPrimeP: number; indirectEffect: number; pctMediated: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/mediation`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, xCol, mCol, yCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Moderation (Y ~ X + M + X×M). */
+export async function analyzeModeration(
+  rows: string[][],
+  yCol: string,
+  xCol: string,
+  mCol: string
+): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; adjR2: number; se: Record<string, number>; tStat: Record<string, number>; pValue: Record<string, number>; n: number; df: number; s2: number; yName: string; xNames: string[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/moderation`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, yCol, xCol, mCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: K-means clustering. */
+export async function analyzeKMeans(
+  rows: string[][],
+  columnNames: string[],
+  k: number,
+  maxIter?: number
+): Promise<{ assignments: number[]; centroids: number[][]; iterations: number; withinSS: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/kmeans`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, columnNames, k, maxIter: maxIter ?? 100 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: EFA (trích nhân tố PCA + varimax). */
+export async function analyzeEFA(
+  rows: string[][],
+  columnNames: string[],
+  nFactors?: number
+): Promise<{ eigenvalues: number[]; varianceExplained: number[]; loadings: number[][]; columnNames: string[]; nFactors: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/efa`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, columnNames, nFactors: nFactors ?? undefined }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Pairwise post-hoc sau ANOVA. */
+export async function analyzePairwisePosthoc(
+  groupMeans: { group: string; n: number; mean: number; std: number }[]
+): Promise<Array<{ group1: string; group2: string; meanDiff: number; t: number; df: number; p: number; pBonferroni: number }> | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/pairwise-posthoc`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ groupMeans }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.result) ? json.result : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Crosstab (bảng tần số 2 chiều). */
+export async function analyzeCrosstab(
+  rows: string[][],
+  col1: string,
+  col2: string
+): Promise<{ rowLabels: string[]; colLabels: string[]; counts: number[][] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/crosstab`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col1, col2 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Box stats theo nhóm. */
+export async function analyzeBoxStats(
+  rows: string[][],
+  groupCol: string,
+  valueCol: string
+): Promise<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/boxstats`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, groupCol, valueCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.result) ? json.result : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Chia bins cho histogram (numpy). */
+export async function analyzeHistogramBins(
+  values: number[],
+  binCount?: number
+): Promise<Array<{ binStart: number; binEnd: number; count: number }> | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/histogram-bins`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ values, binCount: binCount ?? undefined }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.result) ? json.result : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Số điểm ngoại lai (quy tắc 1.5×IQR). */
+export async function analyzeOutlierIqr(
+  values: number[]
+): Promise<{ outlierCount: number; q1: number | null; q3: number | null; iqr: number | null; lower: number | null; upper: number | null } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/outlier-iqr`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ values }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Power t-test (cỡ mẫu). */
+export async function analyzePowerTTest(
+  effectSizeD: number,
+  alpha?: number,
+  power?: number
+): Promise<{ nRequired: number; power: number; effectSize: number; alpha: number; testType: string } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/power-ttest`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ effectSizeD, alpha: alpha ?? 0.05, power: power ?? 0.8 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Beta posterior (Bayesian). */
+export async function analyzeBetaPosterior(
+  successes: number,
+  n: number,
+  priorAlpha?: number,
+  priorBeta?: number
+): Promise<{ postAlpha: number; postBeta: number; mean: number; variance: number; ci95Lower: number; ci95Upper: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/beta-posterior`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ successes, n, priorAlpha: priorAlpha ?? 1, priorBeta: priorBeta ?? 1 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Cỡ mẫu cho kiểm định tỉ lệ (z-test 2 tỉ lệ). */
+export async function analyzeSampleSizeProportion(
+  p0: number,
+  p1: number,
+  alpha?: number,
+  power?: number
+): Promise<{ nRequired: number; p0: number; p1: number; alpha: number; power: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/sample-size-proportion`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ p0, p1, alpha: alpha ?? 0.05, power: power ?? 0.8 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Cỡ mẫu cho Chi-square (Cohen w). */
+export async function analyzeSampleSizeChisquare(
+  effectSizeW: number,
+  df: number,
+  alpha?: number,
+  power?: number
+): Promise<{ nRequired: number; effectSizeW: number; df: number; alpha: number; power: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/sample-size-chisquare`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ effectSizeW, df, alpha: alpha ?? 0.05, power: power ?? 0.8 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Cỡ mẫu cho ANOVA 1 nhân tố. */
+export async function analyzeSampleSizeAnova(
+  k: number,
+  effectSizeF: number,
+  alpha?: number,
+  power?: number
+): Promise<{ nRequired: number; nPerGroup: number; k: number; effectSizeF: number; alpha: number; power: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/sample-size-anova`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ k, effectSizeF, alpha: alpha ?? 0.05, power: power ?? 0.8 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Cỡ mẫu hồi quy (quy tắc 10/20). */
+export async function analyzeSampleSizeRegression(
+  nPredictors: number,
+  rule?: "10" | "20"
+): Promise<{ nRequired: number; nPredictors: number; rule: string } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/sample-size-regression`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ nPredictors, rule: rule ?? "10" }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích định tính: thống kê văn bản (số từ, tần số từ). */
+export async function analyzeTextStats(
+  rows: string[][],
+  col: string,
+  topN?: number
+): Promise<{ column: string; nRows: number; nEmpty: number; totalWords: number; uniqueWords: number; avgWordsPerRow: number; minWordsPerRow: number; maxWordsPerRow: number; wordFreq: { word: string; count: number }[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/text-stats`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col, topN: topN ?? 100 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích định tính: đếm từ khóa / mã (số dòng chứa từ khóa, tổng số lần xuất hiện). */
+export async function analyzeKeywordCounts(
+  rows: string[][],
+  col: string,
+  keywords: string[]
+): Promise<{ column: string; keywords: string[]; counts: { keyword: string; rowCount: number; totalOccurrences: number }[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/keyword-counts`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col, keywords }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích định tính: tần số cụm từ (n-gram: bigram, trigram, ...). */
+export async function analyzeNgramFreq(
+  rows: string[][],
+  col: string,
+  n?: number,
+  topN?: number
+): Promise<{ column: string; n: number; totalNgrams: number; uniqueNgrams: number; ngramFreq: { ngram: string; count: number }[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ngram-freq`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col, n: n ?? 2, topN: topN ?? 50 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích định tính: Cohen's Kappa — độ đồng nhất mã hóa giữa 2 coder. */
+export async function analyzeCohensKappa(
+  rows: string[][],
+  col1: string,
+  col2: string
+): Promise<{ col1: string; col2: string; n: number; kappa: number; observedAgreement: number; expectedAgreement: number; table: Record<string, Record<string, number>> } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/cohens-kappa`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col1, col2 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Ma trận hiệp phương sai (Covariance). */
+export async function analyzeCovariance(
+  rows: string[][],
+  method?: "population" | "sample"
+): Promise<{ matrix: number[][]; columnNames: string[]; ddof: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/covariance`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, method: method ?? "population" }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: F-test hai mẫu cho phương sai. */
+export async function analyzeFTestTwoSample(
+  rows: string[][],
+  groupCol: string,
+  groupVal1: string,
+  groupVal2: string,
+  numCol: string
+): Promise<{ f: number; pValue: number; df1: number; df2: number; var1: number; var2: number; n1: number; n2: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ftest-two-sample`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, groupCol, groupVal1, groupVal2, numCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Làm mượt hàm mũ (Exponential Smoothing). */
+export async function analyzeExponentialSmoothing(
+  values: number[],
+  alpha?: number
+): Promise<{ smoothed: number[]; alpha: number; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/exponential-smoothing`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ values, alpha: alpha ?? 0.3 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Trung bình trượt (Moving Average). */
+export async function analyzeMovingAverage(
+  values: number[],
+  period: number
+): Promise<{ movingAverage: number[]; period: number; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/moving-average`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ values, period }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: ANOVA hai nhân tố có lặp. */
+export async function analyzeAnovaTwoFactorReplication(
+  rows: string[][],
+  factorA: string,
+  factorB: string,
+  valueCol: string
+): Promise<{ table: Array<{ source: string; ss: number; df: number; ms: number; f: number | null; pValue: number | null }>; factorA: string; factorB: string; valueCol: string; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/anova-two-factor-replication`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorA, factorB, valueCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: ANOVA hai nhân tố không lặp. */
+export async function analyzeAnovaTwoFactorNoReplication(
+  rows: string[][],
+  factorA: string,
+  factorB: string,
+  valueCol: string
+): Promise<{ table: Array<{ source: string; ss: number; df: number; ms: number; f: number | null; pValue: number | null }>; factorA: string; factorB: string; valueCol: string; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/anova-two-factor-no-replication`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorA, factorB, valueCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Fourier (FFT). */
+export async function analyzeFourier(
+  values: number[]
+): Promise<{ magnitudes: number[]; frequencies: number[]; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/fourier`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ values }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Rank and Percentile. */
+export async function analyzeRankPercentile(
+  rows: string[][],
+  valueCol: string
+): Promise<{ column: string; n: number; data: Array<{ value: number; rank: number; percentile: number }> } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/rank-percentile`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, valueCol }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Sinh số ngẫu nhiên. */
+export async function analyzeRandomNumber(
+  n: number,
+  distribution: "uniform" | "normal" | "integer" | "binomial",
+  options?: { seed?: number; low?: number; high?: number; mean?: number; std?: number; nTrials?: number; p?: number }
+): Promise<{ values: number[]; n: number; distribution: string; error?: string } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/random-number`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ n, distribution, ...options }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: Lấy mẫu (Sampling). */
+export async function analyzeSampling(
+  rows: string[][],
+  n: number,
+  method?: "random" | "periodic",
+  seed?: number
+): Promise<{ rows: string[][]; nSampled: number; method: string; indices?: number[] } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/sampling`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, n, method: method ?? "random", seed }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: t-test hai mẫu phụ thuộc (Paired). */
+export async function analyzeTTestPaired(
+  rows: string[][],
+  col1: string,
+  col2: string
+): Promise<{ t: number; df: number; pValue: number; cohenD: number; meanDiff: number; stdDiff: number; mean1: number; mean2: number; n: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ttest-paired`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, col1, col2 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: z-Test hai mẫu cho trung bình (biết phương sai tổng thể). */
+export async function analyzeZTestTwoMeans(
+  rows: string[][],
+  groupCol: string,
+  groupVal1: string,
+  groupVal2: string,
+  numCol: string,
+  knownVar1: number,
+  knownVar2: number
+): Promise<{ z: number; pValue: number; mean1: number; mean2: number; n1: number; n2: number; knownVar1: number; knownVar2: number } | null> {
+  try {
+    const res = await fetch(`${ANALYZE_BASE}/ztest-two-means`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, groupCol, groupVal1, groupVal2, numCol, knownVar1, knownVar2 }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -44,6 +1007,7 @@ export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workf
 
 /** Ghi đè toàn bộ datasets + workflows lên server (cần đăng nhập). Trả về true nếu thành công. */
 export async function saveData(payload: { datasets: Dataset[]; workflows: Workflow[] }): Promise<boolean> {
+  if (!base || String(base).trim() === "") return false;
   try {
     const res = await fetch(`${API_BASE}/data`, {
       method: "POST",
@@ -58,4 +1022,168 @@ export async function saveData(payload: { datasets: Dataset[]; workflows: Workfl
   } catch {
     return false;
   }
+}
+
+/** Gọi LLM (OpenAI/Ollama). Mặc định Ollama local (localhost:11434).
+ * Frontend: VITE_QUANTIS_AI_API = https://research.neu.edu.vn/ollama/v1 (domain) hoặc http://101.96.66.232:8002/v1 (IP). VITE_QUANTIS_AI_MODEL tùy chọn. */
+const DEFAULT_OLLAMA = "http://localhost:11434/v1"
+const defModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL
+
+/** Trích size (tỉ tham số, đơn vị B) từ tên model, ví dụ "llama3.2:7b" -> 7, "phi3:14b" -> 14. Không khớp thì trả về null. */
+export function parseModelSizeB(name: string): number | null {
+  if (!name || typeof name !== "string") return null
+  const m = name.match(/(\d+(?:\.\d+)?)\s*b\b/i)
+  return m ? parseFloat(m[1]) : null
+}
+
+/** Lọc danh sách model chỉ giữ những model có size >= minB (hoặc không xác định được size). */
+export function filterModelsMinSize(models: string[], minB: number): string[] {
+  return models.filter((m) => {
+    const size = parseModelSizeB(m)
+    return size === null || size >= minB
+  })
+}
+
+/** Lấy danh sách model từ Ollama API /api/tags. apiBase thường là .../v1, sẽ gọi .../api/tags. */
+export async function getOllamaModels(apiBase: string): Promise<string[]> {
+  const base = (apiBase || DEFAULT_OLLAMA).replace(/\/v1\/?$/, "")
+  const url = `${base.replace(/\/+$/, "")}/api/tags`
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = (await res.json()) as { models?: Array<{ name: string }> }
+    const list = data?.models?.map((m) => m.name) ?? []
+    return list
+  } catch {
+    return []
+  }
+}
+
+/** Timeout gọi AI (ms). */
+export const AI_REQUEST_TIMEOUT_MS = 90_000
+/** Giới hạn độ dài prompt gửi lên (ký tự) để tránh vượt context window. */
+export const AI_MAX_PROMPT_CHARS = 14_000
+/** Số token tối đa cho câu trả lời. */
+export const AI_MAX_TOKENS = 1024
+
+/** Rút gọn chuỗi để gửi AI: giữ đầu + đánh dấu cắt + đuôi (ưu tiên thông tin cuối). */
+export function truncateForAI(text: string, maxChars: number): { text: string; truncated: boolean } {
+  if (!text || text.length <= maxChars) return { text: text.trim(), truncated: false }
+  const half = Math.floor(maxChars / 2)
+  const head = text.slice(0, half).trim()
+  const tail = text.slice(-(maxChars - half - 80)).trim()
+  const marker = "\n\n[... đã rút gọn bớt nội dung giữa ...]\n\n"
+  return { text: head + marker + tail, truncated: true }
+}
+
+function extractContent(obj: unknown): string {
+  if (obj == null || typeof obj !== "object") return ""
+  const o = obj as Record<string, unknown>
+  const choice0 = o.choices?.[0] && typeof o.choices[0] === "object" && o.choices[0] !== null ? (o.choices[0] as Record<string, unknown>) : null
+  const msg = choice0?.message && typeof choice0.message === "object" && choice0.message !== null ? (choice0.message as Record<string, unknown>) : null
+  if (msg) {
+    const content = msg.content
+    if (typeof content === "string" && content.trim()) return content.trim()
+    if (Array.isArray(content)) {
+      const t = content.map((c) => (c && typeof c === "object" && typeof (c as Record<string, unknown>).text === "string" ? (c as Record<string, unknown>).text : "")).join("").trim()
+      if (t) return t
+    }
+    if (typeof msg.reasoning === "string" && msg.reasoning.trim()) return msg.reasoning.trim()
+    if (typeof choice0?.text === "string" && choice0.text.trim()) return (choice0 as Record<string, unknown>).text as string
+  }
+  if (typeof o.response === "string") return o.response
+  if (o.message && typeof o.message === "object" && o.message !== null) {
+    const m = o.message as Record<string, unknown>
+    if (typeof m.content === "string" && m.content.trim()) return m.content.trim()
+    if (typeof m.reasoning === "string" && m.reasoning.trim()) return m.reasoning.trim()
+    if (Array.isArray(m.content)) {
+      const t = m.content.map((c) => (c && typeof c === "object" && typeof (c as Record<string, unknown>).text === "string" ? (c as Record<string, unknown>).text : "")).join("").trim()
+      if (t) return t
+    }
+  }
+  if (typeof o.text === "string") return o.text
+  if (typeof o.content === "string") return o.content
+  if (typeof o.output === "string") return o.output
+  return ""
+}
+
+function parseAiResponse(rawText: string): string {
+  const data = (() => { try { return JSON.parse(rawText) as unknown } catch { return null } })()
+  if (data !== null) {
+    const single = extractContent(data)
+    if (single.trim()) return single.trim()
+  }
+  const lines = rawText.split(/\r?\n/).filter((s) => s.trim())
+  const parts: string[] = []
+  for (const line of lines) {
+    try {
+      const data = JSON.parse(line) as unknown
+      const o = data as Record<string, unknown>
+      if (typeof o.response === "string") parts.push(o.response)
+      else if (o.choices?.[0] && typeof o.choices[0] === "object") {
+        const c = (o.choices[0] as Record<string, unknown>).delta ?? (o.choices[0] as Record<string, unknown>).message
+        if (c && typeof c === "object" && c !== null && typeof (c as Record<string, unknown>).content === "string")
+          parts.push((c as Record<string, unknown>).content as string)
+      } else {
+        const msg = extractContent(data)
+        if (msg) parts.push(msg)
+      }
+    } catch { /* bỏ qua */ }
+  }
+  return parts.join("").trim() || ""
+}
+
+export async function aiComplete(apiBase: string, prompt: string, systemHint?: string, modelOverride?: string, options?: { timeoutMs?: number; maxPromptChars?: number; maxTokens?: number }): Promise<string> {
+  const timeoutMs = options?.timeoutMs ?? AI_REQUEST_TIMEOUT_MS
+  const maxPromptChars = options?.maxPromptChars ?? AI_MAX_PROMPT_CHARS
+  const maxTokens = options?.maxTokens ?? AI_MAX_TOKENS
+  const { text: promptToSend, truncated: promptTruncated } = truncateForAI(prompt, maxPromptChars)
+  const systemWithHint = systemHint && promptTruncated
+    ? systemHint + "\n\n[Lưu ý: Ngữ cảnh có thể đã được rút gọn; chỉ diễn giải dựa trên phần nội dung có sẵn.]"
+    : systemHint
+
+  const base = apiBase || DEFAULT_OLLAMA
+  const url = String(base).includes("completions") ? base : `${String(base).replace(/\/+$/, "")}/chat/completions`
+  const isLocalOllama = /ollama/i.test(String(base)) || /localhost:11434/.test(String(base))
+  const fallbackModel = isLocalOllama ? "llama3.2:8b" : "gpt-4o-mini"
+  let model = modelOverride || defModel || fallbackModel
+  const sizeB = parseModelSizeB(model)
+  if (sizeB !== null && sizeB < 8) model = (defModel && (parseModelSizeB(defModel) ?? 8) >= 8) ? defModel : fallbackModel
+  const messages = systemWithHint
+    ? [{ role: "system" as const, content: systemWithHint }, { role: "user" as const, content: promptToSend }]
+    : [{ role: "user" as const, content: promptToSend }]
+  const body = { model, messages, max_tokens: maxTokens, stream: false }
+
+  const doRequest = async (): Promise<Response> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal })
+      clearTimeout(timeoutId)
+      return res
+    } catch (e) {
+      clearTimeout(timeoutId)
+      throw e
+    }
+  }
+
+  let lastError: Error | null = null
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    try {
+      const res = await doRequest()
+      if (res.ok) {
+        const rawText = await res.text()
+        return parseAiResponse(rawText)
+      }
+      const errText = await res.text()
+      const isRetryable = res.status >= 500 || res.status === 408 || /timeout|network|failed|refused/i.test(errText)
+      lastError = new Error(errText || `AI API error ${res.status}`)
+      if (!isRetryable || attempt === 1) throw lastError
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e))
+      const isRetryable = /abort|timeout|network|failed|refused/i.test(lastError.message)
+      if (attempt === 1 || !isRetryable) throw lastError
+    }
+  }
+  throw lastError || new Error("Lỗi kết nối AI")
 }

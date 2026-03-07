@@ -1,0 +1,42 @@
+# Quantis Backend — triển khai trên server (Portainer / Docker)
+# Chạy từ thư mục gốc Quantis: docker compose -f docker-compose.yml up -d
+
+services:
+  quantis-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: quantis-backend:latest
+    container_name: quantis-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      # Archive NEU (proxy tìm kiếm / tải dataset)
+      ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
+      # ARCHIVE_NEU_TOKEN: ""   # Nếu cần Bearer token
+      # Ollama trên server 232: từ container gọi ra host (port 8002 hoặc 11434 tùy cấu hình Ollama)
+      OLLAMA_UPSTREAM_URL: "http://host.docker.internal:8002"
+      # Backend phân tích Python (cùng stack)
+      ANALYZE_PYTHON_URL: "http://quantis-python:8000"
+    volumes:
+      - quantis-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  quantis-python:
+    build:
+      context: ./backend-python
+      dockerfile: Dockerfile
+    image: quantis-python:latest
+    container_name: quantis-python
+    restart: unless-stopped
+    expose:
+      - "8000"
+    # Không publish port ra ngoài — chỉ backend Node gọi nội bộ
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  quantis-data:

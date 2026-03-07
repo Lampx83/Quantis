@@ -1,8 +1,9 @@
 {
   "id": "quantis",
   "alias": "quantis",
-  "name": "Quantis",
-  "description": "Nền tảng phân tích định lượng và thống kê: data layer, analysis engine, reproducibility, presentation. AI-augmented statistical research platform.",
+  "name": "Phân tích định lượng",
+  "description": "Nền tảng phân tích định lượng và thống kê có hỗ trợ AI: lớp dữ liệu (dataset), engine phân tích, tái lập kết quả (reproducibility), báo cáo và trình bày. Phù hợp nghiên cứu định lượng, thống kê mô tả và suy luận, phân tích số liệu khảo sát hoặc thực nghiệm.",
+  "keywords": ["phân tích định lượng", "thống kê số liệu", "phân tích số liệu", "quantitative analysis", "mở Quantis", "dùng Quantis", "thống kê", "phân tích thống kê", "dataset phân tích", "workflow thống kê", "statistics", "data analysis"],
   "version": "1.0.0",
   "type": "embedded",
   "hasBackend": false,

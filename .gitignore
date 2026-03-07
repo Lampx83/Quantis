@@ -1,7 +1,49 @@
-node_modules
-dist
-public
+# Dependencies
+node_modules/
+
+# Build output (Vite outDir: public)
+dist/
+public/
+
+# Environment & secrets
 .env
-.env.local
+.env.*
+!.env.example
+
+# Logs
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Python (backend-python)
+backend-python/venv/
+backend-python/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.so
+.eggs/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Vite / Node
+.vite/
+*.local
+
+# IDE (optional)
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak

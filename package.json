@@ -6,14 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:basepath": "EMBED_BASE_PATH=/embed/quantis vite build",
+    "build:basepath": "EMBED_BASE_PATH=/tuyen-sinh/embed/quantis vite build",
     "pack": "npm run build && node scripts/pack.mjs",
-    "pack:basepath": "npm run build:basepath && node scripts/pack.mjs"
+    "pack:basepath": "npm run build:basepath && PACK_BASEPATH=1 node scripts/pack.mjs",
+    "install:all": "npm install && cd backend && npm install",
+    "start": "concurrently -n fe,be \"npm run dev\" \"npm run dev --prefix backend\""
   },
   "dependencies": {
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "recharts": "^2.13.3"
   },
   "devDependencies": {
@@ -22,6 +25,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "adm-zip": "^0.5.16",
+    "concurrently": "^9.0.1",
     "tailwindcss": "^4.0.0",
     "typescript": "^5",
     "vite": "^5.4.10"

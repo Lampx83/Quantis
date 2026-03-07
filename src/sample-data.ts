@@ -4,8 +4,31 @@
 
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import { generateId } from "./store";
+import { SAMPLE_DATASETS, type SampleDatasetDef } from "./sampleDatasets";
 
 const now = new Date().toISOString();
+
+/** Tạo Dataset từ định nghĩa mẫu (SAMPLE_DATASETS) */
+function datasetFromSampleDef(def: SampleDatasetDef): Dataset {
+  const id = generateId();
+  const raw = def.getData();
+  const headers = raw[0];
+  const dataRows = raw.slice(1);
+  const data = raw;
+  const preview = data.slice(0, 8);
+  return {
+    id,
+    name: def.name,
+    rows: dataRows.length,
+    columns: headers.length,
+    columnNames: headers,
+    preview,
+    data,
+    sourceFormat: "csv",
+    createdAt: now,
+    updatedAt: now,
+  };
+}
 
 /** Dataset 1: Điểm khảo sát (nhóm đối chứng vs can thiệp) — mở rộng 40 dòng */
 const SAMPLE_CSV_ROWS: string[][] = [
@@ -138,6 +161,7 @@ export function getSampleWorkflow(datasetId: string): Workflow {
     description: "Import → Làm sạch → Thống kê mô tả → Kiểm định t → Trực quan → Báo cáo. Áp dụng cho dataset điểm khảo sát.",
     steps,
     datasetId,
+    datasetIds: [datasetId],
     createdAt: now,
     updatedAt: now,
   };
@@ -156,7 +180,219 @@ export function getSampleWorkflow2(datasetId: string): Workflow {
     description: "Import → Mô tả → Trực quan. Dùng với dataset khảo sát hài lòng (Likert).",
     steps,
     datasetId,
+    datasetIds: [datasetId],
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/** Workflow phân tích dữ liệu tiêu chuẩn — hiển thị mặc định bên trái khi chưa có workflow nào.
+ * Thứ tự theo quy trình nghiên cứu định lượng: Thu thập → Làm sạch → Chuẩn bị biến → Mô tả → Kiểm định → Mô hình → Trực quan → Báo cáo. */
+export function getDefaultStandardWorkflow(): Workflow {
+  const id = generateId();
+  const steps: WorkflowStep[] = [
+    { id: generateId(), type: "import", label: "Thu thập / Import dữ liệu", config: {}, order: 0, createdAt: now },
+    { id: generateId(), type: "clean", label: "Làm sạch & kiểm tra chất lượng", config: {}, order: 1, createdAt: now },
+    { id: generateId(), type: "transform", label: "Chuẩn bị biến & biến đổi", config: {}, order: 2, createdAt: now },
+    { id: generateId(), type: "describe", label: "Thống kê mô tả (EDA)", config: {}, order: 3, createdAt: now },
+    { id: generateId(), type: "test", label: "Kiểm định giả thuyết", config: {}, order: 4, createdAt: now },
+    { id: generateId(), type: "model", label: "Hồi quy & mô hình", config: {}, order: 5, createdAt: now },
+    { id: generateId(), type: "visualize", label: "Trực quan hóa", config: {}, order: 6, createdAt: now },
+    { id: generateId(), type: "report", label: "Viết báo cáo", config: {}, order: 7, createdAt: now },
+  ];
+  return {
+    id,
+    name: "Workflow phân tích dữ liệu tiêu chuẩn",
+    description: "Quy trình nghiên cứu định lượng: Thu thập dữ liệu → Làm sạch & chất lượng → Chuẩn bị biến → Thống kê mô tả → Kiểm định giả thuyết → Hồi quy & mô hình → Trực quan → Báo cáo.",
+    steps,
+    datasetId: null,
+    datasetIds: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Workflow mẫu độc lập (không gắn dataset) — dùng khi tạo workflow mới "Mới". */
+export function getSampleWorkflowStandalone(): Workflow {
+  const id = generateId();
+  const steps: WorkflowStep[] = [
+    { id: generateId(), type: "import", label: "Thu thập / Import dữ liệu", config: {}, order: 0, createdAt: now },
+    { id: generateId(), type: "clean", label: "Làm sạch & kiểm tra chất lượng", config: {}, order: 1, createdAt: now },
+    { id: generateId(), type: "transform", label: "Chuẩn bị biến & biến đổi", config: {}, order: 2, createdAt: now },
+    { id: generateId(), type: "describe", label: "Thống kê mô tả (EDA)", config: {}, order: 3, createdAt: now },
+    { id: generateId(), type: "test", label: "Kiểm định giả thuyết", config: {}, order: 4, createdAt: now },
+    { id: generateId(), type: "model", label: "Hồi quy & mô hình", config: {}, order: 5, createdAt: now },
+    { id: generateId(), type: "visualize", label: "Trực quan hóa", config: {}, order: 6, createdAt: now },
+    { id: generateId(), type: "report", label: "Viết báo cáo", config: {}, order: 7, createdAt: now },
+  ];
+  return {
+    id,
+    name: "Workflow mẫu — Quy trình nghiên cứu đầy đủ",
+    description: "Quy trình nghiên cứu định lượng: Thu thập → Làm sạch → Chuẩn bị biến → Thống kê mô tả → Kiểm định → Hồi quy & mô hình → Trực quan → Báo cáo.",
+    steps,
+    datasetId: null,
+    datasetIds: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/**
+ * Workflow demo — đầy đủ mọi loại bước, dùng để tải vào và demo hệ thống.
+ * Giúp người dùng hiểu cách làm việc: từ import dữ liệu → làm sạch → biến đổi → thống kê mô tả
+ * → kiểm định giả thuyết → mô hình hóa → trực quan → báo cáo.
+ */
+export function getDemoWorkflow(): Workflow {
+  const id = generateId();
+  const steps: WorkflowStep[] = [
+    { id: generateId(), type: "import", label: "1. Import dữ liệu (CSV, Excel) — đưa dữ liệu vào hệ thống", config: {}, order: 0, createdAt: now },
+    { id: generateId(), type: "clean", label: "2. Làm sạch dữ liệu — xử lý missing, outlier, chuẩn hóa", config: {}, order: 1, createdAt: now },
+    { id: generateId(), type: "transform", label: "3. Biến đổi & pipeline — tạo biến mới, lọc, ghép bảng", config: {}, order: 2, createdAt: now },
+    { id: generateId(), type: "describe", label: "4. Thống kê mô tả — mean, median, phân bố, tần suất", config: {}, order: 3, createdAt: now },
+    { id: generateId(), type: "test", label: "5. Kiểm định giả thuyết — t-test, ANOVA, Chi-square, Mann-Whitney", config: {}, order: 4, createdAt: now },
+    { id: generateId(), type: "model", label: "6. Mô hình hóa — hồi quy tuyến tính, logistic, SEM", config: {}, order: 5, createdAt: now },
+    { id: generateId(), type: "visualize", label: "7. Trực quan hóa — biểu đồ cột, scatter, boxplot, bản đồ", config: {}, order: 6, createdAt: now },
+    { id: generateId(), type: "report", label: "8. Sinh báo cáo — tóm tắt kết quả, trích dẫn APA", config: {}, order: 7, createdAt: now },
+  ];
+  return {
+    id,
+    name: "Workflow mẫu — Demo hệ thống",
+    description: "Quy trình nghiên cứu đầy đủ: Import → Làm sạch → Biến đổi → Thống kê mô tả → Kiểm định → Mô hình → Trực quan → Báo cáo. Bấm từng bước để xem tính năng tương ứng.",
+    steps,
+    datasetId: null,
+    datasetIds: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Một mẫu workflow theo lĩnh vực: chọn trong gallery, tải workflow + dữ liệu vào luôn */
+export interface DemoWorkflowTemplate {
+  id: string;
+  domain: string;
+  name: string;
+  description: string;
+  getWorkflowAndData: () => { workflow: Workflow; datasets: Dataset[] };
+}
+
+/** Danh sách mẫu workflow đa lĩnh vực — hiển thị trong cửa sổ chọn mẫu */
+export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
+  const def = (key: string) => SAMPLE_DATASETS.find((d) => d.id === key)!;
+
+  function makeSteps(
+    summaries: Record<number, string>,
+    datasetRows: number,
+    datasetCols: number
+  ): WorkflowStep[] {
+    const defaults: WorkflowStep[] = [
+      { id: generateId(), type: "import", label: "Import dữ liệu", config: {}, order: 0, createdAt: now, resultSummary: summaries[0] ?? `Đã import ${datasetRows} dòng, ${datasetCols} cột` },
+      { id: generateId(), type: "clean", label: "Làm sạch dữ liệu", config: {}, order: 1, createdAt: now, resultSummary: summaries[1] ?? "Đã kiểm tra missing, outlier; chuẩn hóa biến số" },
+      { id: generateId(), type: "transform", label: "Biến đổi & pipeline", config: {}, order: 2, createdAt: now, resultSummary: summaries[2] ?? "Đã tạo biến mới, lọc theo điều kiện" },
+      { id: generateId(), type: "describe", label: "Thống kê mô tả", config: {}, order: 3, createdAt: now, resultSummary: summaries[3] ?? "Đã chạy mean, median, độ lệch chuẩn theo nhóm" },
+      { id: generateId(), type: "test", label: "Kiểm định giả thuyết", config: {}, order: 4, createdAt: now, resultSummary: summaries[4] ?? "Đã chạy t-test / ANOVA / Chi-square tùy biến" },
+      { id: generateId(), type: "model", label: "Mô hình hóa", config: {}, order: 5, createdAt: now, resultSummary: summaries[5] ?? "Đã ước lượng hồi quy / phân loại" },
+      { id: generateId(), type: "visualize", label: "Trực quan hóa", config: {}, order: 6, createdAt: now, resultSummary: summaries[6] ?? "Đã vẽ biểu đồ cột, boxplot, scatter" },
+      { id: generateId(), type: "report", label: "Sinh báo cáo", config: {}, order: 7, createdAt: now, resultSummary: summaries[7] ?? "Đã xuất báo cáo tóm tắt và trích dẫn APA" },
+    ];
+    return defaults;
+  }
+
+  return [
+    {
+      id: "demo-edu",
+      domain: "Giáo dục",
+      name: "So sánh điểm hai nhóm (A/B)",
+      description: "Điểm kiểm tra theo nhóm phương pháp dạy. Thống kê mô tả, t-test, so sánh trung bình.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("edu-scores"));
+        const steps = makeSteps(
+          { 0: "Đã import 80 dòng, 5 cột (id, nhóm, điểm, giới_tính, lớp)", 3: "Đã mô tả điểm theo nhóm A/B và lớp", 4: "Đã kiểm định t-test so sánh điểm nhóm A vs B" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — Giáo dục (điểm A/B)", description: "Import → Làm sạch → Thống kê mô tả → Kiểm định t → Trực quan → Báo cáo.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
+    {
+      id: "demo-econ",
+      domain: "Kinh tế",
+      name: "Doanh thu theo chi nhánh",
+      description: "Doanh thu và chi phí quảng cáo theo tháng/chi nhánh. Crosstab, tương quan, hồi quy.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("sales-branch"));
+        const steps = makeSteps(
+          { 0: "Đã import 60 dòng, 5 cột (tháng, chi_nhánh, doanh_thu, chi_quang_cao, lợi_nhuận)", 3: "Đã mô tả doanh thu theo chi nhánh và tháng", 4: "Đã so sánh lợi nhuận trung bình theo chi nhánh" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — Kinh tế (doanh thu)", description: "Phân tích doanh thu theo chi nhánh và tháng.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
+    {
+      id: "demo-social",
+      domain: "Xã hội",
+      name: "Khảo sát mức độ hài lòng",
+      description: "Thang Likert 5 mức. Cronbach alpha, thống kê mô tả, phân tích nhân tố.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("survey-likert"));
+        const steps = makeSteps(
+          { 0: "Đã import 50 dòng, 6 cột (câu_1–câu_5, nhóm_tuổi)", 3: "Đã mô tả điểm trung bình từng câu theo nhóm tuổi", 4: "Đã kiểm định so sánh điểm giữa các nhóm tuổi" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — Xã hội (khảo sát Likert)", description: "Phân tích độ tin cậy và mô tả khảo sát.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
+    {
+      id: "demo-tech",
+      domain: "Kỹ thuật",
+      name: "Nhiệt độ – Độ ẩm",
+      description: "Số đo nhiệt độ và độ ẩm theo ngày/mùa. Tương quan, biểu đồ đường, mô tả theo mùa.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("env-temp"));
+        const steps = makeSteps(
+          { 0: "Đã import 60 dòng, 4 cột (ngày, nhiệt_độ_C, độ_ẩm_%, mùa)", 3: "Đã mô tả nhiệt độ và độ ẩm theo mùa", 6: "Đã vẽ biểu đồ đường nhiệt độ theo ngày" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — Kỹ thuật (nhiệt độ – độ ẩm)", description: "Phân tích số đo môi trường theo mùa.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
+    {
+      id: "demo-it",
+      domain: "CNTT",
+      name: "Tỷ lệ chuyển đổi A/B",
+      description: "Phiên bản giao diện A/B và trạng thái chuyển đổi. Bảng chéo, Chi-square, so sánh tỷ lệ.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("marketing-ab"));
+        const steps = makeSteps(
+          { 0: "Đã import 100 dòng, 4 cột (phiên_bản, chuyển_đổi, thời_gian_xem_s, nguồn)", 3: "Đã mô tả tỷ lệ chuyển đổi theo phiên bản và nguồn", 4: "Đã kiểm định Chi-square phiên bản × chuyển đổi" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — CNTT (A/B test)", description: "Phân tích thử nghiệm A/B và chuyển đổi.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
+    {
+      id: "demo-health",
+      domain: "Y tế",
+      name: "Chiều cao – Cân nặng",
+      description: "Số đo theo nhóm tuổi. Tương quan Pearson, hồi quy tuyến tính, ANOVA.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("health-bmi"));
+        const steps = makeSteps(
+          { 0: "Đã import 70 dòng, 4 cột (tuổi_nhóm, chiều_cao_cm, cân_nặng_kg, giới_tính)", 3: "Đã mô tả chiều cao, cân nặng theo tuổi và giới", 4: "Đã tương quan Pearson và hồi quy chiều cao ~ cân nặng" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — Y tế (chiều cao – cân nặng)", description: "Phân tích số đo nhân trắc và tương quan.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
+  ];
 }

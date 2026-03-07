@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Package Quantis app (frontend-only) into zip for installation from AI Portal.
- * Run: npm run pack
- * Output: dist/quantis-app-package.zip
+ * Run: npm run pack  → dist/quantis-app-package.zip
+ * Run: npm run pack:basepath  → dist/quantis-app-package-basepath.zip
  */
 import fs from "fs";
 import path from "path";
@@ -12,7 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const publicDir = path.join(root, "public");
 const outDir = path.join(root, "dist");
-const outZip = path.join(outDir, "quantis-app-package.zip");
+const baseName = process.env.PACK_BASEPATH ? "quantis-app-package-basepath" : "quantis-app-package";
+const outZip = path.join(outDir, baseName + ".zip");
 
 function addDirToZip(zip, localDir, zipPrefix = "") {
   if (!fs.existsSync(localDir)) return;
