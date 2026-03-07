@@ -21,7 +21,7 @@ services:
     container_name: quantis-python
     restart: unless-stopped
     ports:
-      - "4000:8000"
+      - "4000:4000"
     environment:
       - PYTHONUNBUFFERED=1
 
