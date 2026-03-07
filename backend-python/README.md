@@ -20,6 +20,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 4000
 API: http://localhost:4000  
 Docs: http://localhost:4000/docs
 
+**Docker:** Trong container chạy cổng **8000**, map ra host cổng **4000** (`4000:8000`). Backend Node gọi nội bộ `http://quantis-python:8000`.
+
 ## Endpoints (prefix `/api/quantis/analyze`)
 
 | Method | Path | Mô tả |

@@ -10,7 +10,7 @@ services:
       PORT: "3001"
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
       OLLAMA_UPSTREAM_URL: "http://host.docker.internal:8002"
-      ANALYZE_PYTHON_URL: "http://quantis-python:4000"
+      ANALYZE_PYTHON_URL: "http://quantis-python:8000"
     volumes:
       - quantis-data:/app/data
     extra_hosts:
@@ -20,8 +20,8 @@ services:
     image: ${YOUR_DOCKERHUB_USER}/quantis-python:latest
     container_name: quantis-python
     restart: unless-stopped
-    expose:
-      - "4000"
+    ports:
+      - "4000:8000"
     environment:
       - PYTHONUNBUFFERED=1
 

@@ -1,5 +1,5 @@
 # Portainer Stack — Quantis (kéo từ Git, dùng image Docker Hub)
-# Backend lộ ra cổng 4000 trên host.
+# Backend Node (API) lộ ra cổng 3001, Backend Python (phân tích) lộ ra cổng 4000 trên host.
 #
 # Cách triển khai trong Portainer:
 #   1. Stacks → Add stack → chọn "Git repository"
@@ -17,12 +17,12 @@ services:
     container_name: quantis-backend
     restart: unless-stopped
     ports:
-      - "4000:3001"
+      - "3001:3001"
     environment:
       PORT: "3001"
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
       OLLAMA_UPSTREAM_URL: ${OLLAMA_UPSTREAM_URL:-http://host.docker.internal:8002}
-      ANALYZE_PYTHON_URL: "http://quantis-python:4000"
+      ANALYZE_PYTHON_URL: "http://quantis-python:8000"
     volumes:
       - quantis-data:/app/data
     extra_hosts:
@@ -32,8 +32,8 @@ services:
     image: ${DOCKERHUB_USER:-Lampx83}/quantis-python:latest
     container_name: quantis-python
     restart: unless-stopped
-    expose:
-      - "4000"
+    ports:
+      - "4000:8000"
     environment:
       - PYTHONUNBUFFERED=1
 
