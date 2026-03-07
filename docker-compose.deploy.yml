@@ -1,10 +1,7 @@
-# Quantis — deploy bằng image từ Docker Hub (sau khi CI/CD đã push)
-# Thay YOUR_DOCKERHUB_USER bằng username Docker Hub của bạn
-# Chạy: docker compose -f docker-compose.deploy.yml up -d
 
 services:
   quantis-backend:
-    image: YOUR_DOCKERHUB_USER/quantis-backend:latest
+    image: ${YOUR_DOCKERHUB_USER}/quantis-backend:latest
     container_name: quantis-backend
     restart: unless-stopped
     ports:
@@ -20,7 +17,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   quantis-python:
-    image: YOUR_DOCKERHUB_USER/quantis-python:latest
+    image: ${YOUR_DOCKERHUB_USER}/quantis-python:latest
     container_name: quantis-python
     restart: unless-stopped
     expose:
