@@ -1,0 +1,32 @@
+# Quantis — deploy bằng image từ Docker Hub (sau khi CI/CD đã push)
+# Thay YOUR_DOCKERHUB_USER bằng username Docker Hub của bạn
+# Chạy: docker compose -f docker-compose.deploy.yml up -d
+
+services:
+  quantis-backend:
+    image: YOUR_DOCKERHUB_USER/quantis-backend:latest
+    container_name: quantis-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
+      OLLAMA_UPSTREAM_URL: "http://host.docker.internal:8002"
+      ANALYZE_PYTHON_URL: "http://quantis-python:8000"
+    volumes:
+      - quantis-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  quantis-python:
+    image: YOUR_DOCKERHUB_USER/quantis-python:latest
+    container_name: quantis-python
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+
+volumes:
+  quantis-data:

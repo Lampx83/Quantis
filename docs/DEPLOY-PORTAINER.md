@@ -2,6 +2,23 @@
 
 Hướng dẫn đưa backend Quantis (Node + Python) lên máy chủ chạy Docker/Portainer, làm backend cho ứng dụng Quantis (frontend có thể host trên AI Portal hoặc nơi khác).
 
+## CI/CD: Tự động build và push lên Docker Hub (GitHub Actions)
+
+Khi code được đẩy lên branch **main** (hoặc chạy thủ công workflow), GitHub Actions sẽ build hai image và push lên Docker Hub:
+
+- `DOCKERHUB_USER/quantis-backend:latest`
+- `DOCKERHUB_USER/quantis-python:latest`
+
+**Cấu hình một lần trên GitHub repo Quantis:**
+
+1. Vào **Settings** → **Secrets and variables** → **Actions**.
+2. Thêm hai secrets:
+   - **DOCKERHUB_USER**: tên đăng nhập Docker Hub.
+   - **DOCKERHUB_TOKEN**: Access Token (hoặc mật khẩu) Docker Hub (tạo tại [Docker Hub → Account Settings → Security](https://hub.docker.com/settings/security)).
+3. Push code lên branch `main` → workflow chạy và đẩy image lên Docker Hub.
+
+Sau đó trên server/Portainer có thể dùng file `docker-compose.deploy.yml` (kéo image từ Docker Hub, không cần source code). Trong file đó thay `YOUR_DOCKERHUB_USER` bằng username Docker Hub của bạn.
+
 ## Cách 1: Deploy bằng Portainer (Stack)
 
 1. Đăng nhập Portainer trên máy chủ của bạn.

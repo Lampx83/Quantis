@@ -1,0 +1,48 @@
+# Push Quantis images to Docker Hub khi push lên branch main
+# Cấu hình GitHub Secrets: DOCKERHUB_USER, DOCKERHUB_TOKEN
+
+name: Push to Docker Hub
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: quantis-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USER }}/quantis-backend:latest
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+
+  backend-python:
+    name: quantis-python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend-python
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USER }}/quantis-python:latest
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
