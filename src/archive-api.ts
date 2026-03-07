@@ -1,49 +1,68 @@
 /**
  * API client cho Archive NEU (DataD3 / archive.neu.edu.vn).
  * Định dạng API theo code DataD3: search/ask, requests list, files by request_id, preview, download.
- * - Proxy: VITE_ARCHIVE_NEU_URL=/api/quantis/archive (path tương đối).
- * - Tải file: URL trả về được chuyển sang VITE_ARCHIVE_FILE_BASE_URL (mặc định http://101.96.66.222:8013)
- *   để tránh CORS từ files-archive.neu.edu.vn. Auth: VITE_ARCHIVE_NEU_TOKEN hoặc credentials.
+ * - Có thể cấu hình địa chỉ Archive trong Cài đặt (lưu localStorage). Nếu trống: dùng proxy qua backend hoặc mặc định.
+ * - Tải file: dùng địa chỉ trong Cài đặt (hoặc env VITE_ARCHIVE_FILE_BASE_URL). Không fix cứng.
  */
 
-const _env = typeof import.meta !== "undefined" ? (import.meta as { env?: { VITE_ARCHIVE_NEU_URL?: string } }).env : undefined;
+import { loadArchiveUrl, loadArchiveFileUrl, loadBackendApiUrl } from "./store";
+
+const _env = typeof import.meta !== "undefined" ? (import.meta as { env?: { VITE_ARCHIVE_NEU_URL?: string; VITE_QUANTIS_API_URL?: string } }).env : undefined;
 const explicitBase = _env?.VITE_ARCHIVE_NEU_URL;
-// Mặc định dev (localhost) dùng proxy qua backend để tránh 422 từ API gốc; production set VITE_ARCHIVE_NEU_URL nếu cần.
+const envBackendBase = _env?.VITE_QUANTIS_API_URL;
 const isLocalhost =
   typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-/** API Archive mặc định: 101.96.66.222:8010 (DataNEU). Có thể ghi đè bằng VITE_ARCHIVE_NEU_URL. */
+/** API Archive mặc định khi không cấu hình (DataNEU). */
 const DEFAULT_ARCHIVE_BASE = "http://101.96.66.222:8010";
-const BASE =
-  explicitBase != null && String(explicitBase).trim() !== ""
-    ? String(explicitBase).trim()
-    : isLocalhost
-      ? "/api/quantis/archive"
-      : DEFAULT_ARCHIVE_BASE;
-const isProxy = typeof BASE === "string" && BASE.startsWith("/");
-const API = isProxy
-  ? (typeof window !== "undefined" ? window.location.origin : "") + String(BASE).replace(/\/+$/, "")
-  : `${String(BASE).replace(/\/+$/, "")}/api/v1`;
 
-/** Host tải file trực tiếp (có thể bị CORS). Dùng proxy khi chạy trên localhost. */
-const FILE_DOWNLOAD_BASE =
-  (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_ARCHIVE_FILE_BASE_URL?: string } }).env?.VITE_ARCHIVE_FILE_BASE_URL) ||
-  "http://101.96.66.222:8013";
+/** Trả về base URL hiện tại cho Archive API (cấu hình từ Cài đặt > env > proxy > mặc định). */
+function getEffectiveArchiveBase(): string {
+  const stored = loadArchiveUrl();
+  if (stored != null && String(stored).trim() !== "") return String(stored).trim().replace(/\/+$/, "");
+  const backendBase = loadBackendApiUrl() || (envBackendBase != null && String(envBackendBase).trim() !== "" ? String(envBackendBase).trim().replace(/\/+$/, "") : "");
+  if (backendBase) return backendBase + "/api/quantis/archive";
+  if (explicitBase != null && String(explicitBase).trim() !== "") return String(explicitBase).trim();
+  return isLocalhost ? "/api/quantis/archive" : DEFAULT_ARCHIVE_BASE;
+}
 
-/** Prefix proxy tải file (Vite chuyển tiếp → 8013, tránh CORS). */
-const ARCHIVE_FILE_PROXY_PATH = "/api/quantis/archive-file";
+/** Base URL đầy đủ cho API (có /api/v1 khi gọi trực tiếp, hoặc origin + path khi proxy). */
+function getEffectiveArchiveApi(): string {
+  const base = getEffectiveArchiveBase();
+  const isProxy = base.startsWith("/");
+  if (isProxy) return (typeof window !== "undefined" ? window.location.origin : "") + base;
+  return `${base}/api/v1`;
+}
 
-/** Chuyển URL tải file: trên localhost dùng proxy (tránh CORS), còn lại dùng FILE_DOWNLOAD_BASE. */
+/** Host tải file: chỉ từ Cài đặt hoặc env VITE_ARCHIVE_FILE_BASE_URL; không có mặc định fix cứng. */
+function getEffectiveArchiveFileBase(): string {
+  const stored = loadArchiveFileUrl();
+  if (stored != null && String(stored).trim() !== "") return String(stored).trim().replace(/\/+$/, "");
+  const envBase =
+    typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_ARCHIVE_FILE_BASE_URL?: string } }).env?.VITE_ARCHIVE_FILE_BASE_URL;
+  if (envBase != null && String(envBase).trim() !== "") return String(envBase).trim().replace(/\/+$/, "");
+  return "";
+}
+
+/** Prefix proxy tải file: localhost (Vite) → /api/quantis/archive-file; research.neu.edu.vn → /api/archive-file. */
+function getArchiveFileProxyPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const h = window.location.hostname.toLowerCase();
+  if (h === "localhost" || h === "127.0.0.1") return "/api/quantis/archive-file";
+  if (h === "research.neu.edu.vn") return "/api/archive-file";
+  return null;
+}
+
+/** Chuyển URL tải file: dùng proxy same-origin khi có (localhost, research.neu.edu.vn), còn lại dùng base từ Cài đặt/env; nếu không có thì giữ URL gốc. */
 function rewriteFileDownloadUrl(url: string): string {
   try {
     const u = new URL(url);
     const pathAndSearch = (u.pathname.startsWith("/") ? u.pathname : "/" + u.pathname) + u.search;
-    const isLocalhost =
-      typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-    if (isLocalhost) {
-      return window.location.origin + ARCHIVE_FILE_PROXY_PATH + pathAndSearch;
+    const proxyPath = getArchiveFileProxyPath();
+    if (proxyPath) {
+      return (typeof window !== "undefined" ? window.location.origin : "") + proxyPath + pathAndSearch;
     }
-    const base = FILE_DOWNLOAD_BASE.replace(/\/+$/, "");
+    const base = getEffectiveArchiveFileBase();
+    if (!base) return url;
     return base + pathAndSearch;
   } catch {
     return url;
@@ -104,7 +123,7 @@ export async function searchDatasets(
   const hasQuery = typeof query === "string" && query.trim() !== "";
 
   if (hasQuery) {
-    const url = `${API}/search/ask?query=${encodeURIComponent(query.trim())}&limit=${pageSize}&offset=${skip}`;
+    const url = `${getEffectiveArchiveApi()}/search/ask?query=${encodeURIComponent(query.trim())}&limit=${pageSize}&offset=${skip}`;
     const res = await fetch(url, { method: "GET", headers: getHeaders(), credentials: "omit" });
     if (!res.ok) {
       const body = await res.text();
@@ -123,7 +142,7 @@ export async function searchDatasets(
     };
   }
 
-  const url = `${API}/requests/?skip=${skip}&limit=${pageSize}`;
+  const url = `${getEffectiveArchiveApi()}/requests/?skip=${skip}&limit=${pageSize}`;
   const res = await fetch(url, { method: "GET", headers: getHeaders(), credentials: "omit" });
   if (!res.ok) {
     const body = await res.text();
@@ -154,7 +173,7 @@ export interface ArchiveRequestDetail {
 
 /** 2. Chi tiết dataset: GET /api/v1/requests/{requestId} */
 export async function getRequestDetail(requestId: string): Promise<ArchiveRequestDetail> {
-  const url = `${API}/requests/${encodeURIComponent(requestId)}`;
+  const url = `${getEffectiveArchiveApi()}/requests/${encodeURIComponent(requestId)}`;
   const res = await fetch(url, { method: "GET", headers: getHeaders(), credentials: "omit" });
   if (!res.ok) {
     const target = res.headers.get("X-Archive-Target-URL");
@@ -175,7 +194,7 @@ export interface ArchiveFileItem {
 
 /** 3. Danh sách file theo request (DataD3: GET /api/v1/files/?request_id=) */
 export async function getFilesByRequest(requestId: string): Promise<ArchiveFileItem[]> {
-  const url = `${API}/files/?request_id=${encodeURIComponent(requestId)}&limit=100`;
+  const url = `${getEffectiveArchiveApi()}/files/?request_id=${encodeURIComponent(requestId)}&limit=100`;
   const res = await fetch(url, { method: "GET", headers: getHeaders(), credentials: "omit" });
   if (!res.ok) {
     const target = res.headers.get("X-Archive-Target-URL");
@@ -205,7 +224,7 @@ export async function requestDownload(
 ): Promise<{ url?: string; blob?: Blob; text?: string }> {
   const id = String(fileId ?? "").trim();
   if (!id) throw new Error("File ID trống. Kiểm tra API danh sách file trả về trường id/FileID.");
-  const url = `${API}/files/download`;
+  const url = `${getEffectiveArchiveApi()}/files/download`;
   const res = await fetch(url, {
     method: "POST",
     headers: getHeaders(),
@@ -237,7 +256,7 @@ export async function fetchArchiveFileAsText(
   fileId: string,
   requestId: string
 ): Promise<string> {
-  const previewUrl = `${API}/files/${encodeURIComponent(fileId)}/preview`;
+  const previewUrl = `${getEffectiveArchiveApi()}/files/${encodeURIComponent(fileId)}/preview`;
   const previewRes = await fetch(previewUrl, { method: "GET", headers: getHeaders(), credentials: "omit" });
   if (previewRes.ok) {
     const ct = previewRes.headers.get("content-type") ?? "";
@@ -271,4 +290,39 @@ export async function fetchArchiveFileAsText(
   }
   if (out.blob) return out.blob.text();
   throw new Error("Archive download returned no content");
+}
+
+/** Kiểm tra Archive API có phản hồi (GET /requests/?limit=1). urlOverride: địa chỉ base Archive (tùy chọn). */
+export async function checkArchiveApiAvailable(archiveBaseUrl?: string): Promise<boolean> {
+  let apiRoot: string;
+  if (archiveBaseUrl != null && String(archiveBaseUrl).trim() !== "") {
+    const b = String(archiveBaseUrl).trim().replace(/\/+$/, "");
+    apiRoot = b.includes("/api/archive") || b.includes("/api/quantis/archive") ? b : `${b}/api/v1`;
+  } else {
+    apiRoot = getEffectiveArchiveApi();
+  }
+  try {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 5000);
+    const res = await fetch(`${apiRoot}/requests/?limit=1`, { method: "GET", headers: getHeaders(), credentials: "omit", signal: c.signal });
+    clearTimeout(t);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Kiểm tra Archive file base có phản hồi (GET base URL). urlOverride: địa chỉ base tải file (tùy chọn). */
+export async function checkArchiveFileBaseAvailable(fileBaseUrl?: string): Promise<boolean> {
+  const base = (fileBaseUrl != null && String(fileBaseUrl).trim() !== "") ? String(fileBaseUrl).trim().replace(/\/+$/, "") : getEffectiveArchiveFileBase();
+  if (!base) return false;
+  try {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 5000);
+    const res = await fetch(base, { method: "GET", credentials: "omit", signal: c.signal });
+    clearTimeout(t);
+    return res.status < 500;
+  } catch {
+    return false;
+  }
 }

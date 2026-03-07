@@ -5,7 +5,7 @@ import path from "path"
 
 const embedBase = process.env.EMBED_BASE_PATH || "./"
 
-const backendPort = Number(process.env.PORT) || 3001
+const backendPort = Number(process.env.PORT) || 4001
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -13,10 +13,9 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      // Tải file Archive qua proxy (tránh CORS): /api/quantis/archive-file/* → 101.96.66.222:8013/*
-      // Presigned URL ký với Host: files-archive.neu.edu.vn → proxy gửi đúng Host để tránh 403
+      // Tải file Archive qua proxy (tránh CORS). Mặc định dev: 8013; override bằng VITE_ARCHIVE_FILE_BASE_URL trong .env
       "/api/quantis/archive-file": {
-        target: "http://101.96.66.222:8013",
+        target: process.env.VITE_ARCHIVE_FILE_BASE_URL || "http://101.96.66.222:8013",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/quantis\/archive-file/, ""),
         configure: (proxy) => {

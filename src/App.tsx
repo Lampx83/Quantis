@@ -59,7 +59,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { getPortalTheme, applyPortalTheme } from "./portal-theme";
-import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, saveAiFeedback, saveAppFeedback } from "./store";
+import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadAiApiUrl, saveAiApiUrl, saveAiFeedback, saveAppFeedback, setServerSettings } from "./store";
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
 import { AI_MAX_PROMPT_CHARS } from "./api";
@@ -446,6 +446,15 @@ export default function App() {
     }, 1500);
     return () => clearTimeout(t);
   }, [useBackend, datasets, workflows]);
+
+  // Tải cấu hình dùng chung từ server (áp dụng cho mọi tài khoản)
+  useEffect(() => {
+    const base = quantisApi.getApiBase();
+    if (!base) return;
+    quantisApi.getQuantisSettings(base).then((s) => {
+      if (s && Object.keys(s).length > 0) setServerSettings(s);
+    });
+  }, []);
 
   // Đồng bộ theme khi portal gửi theme (storage / postMessage)
   useEffect(() => {
@@ -1627,11 +1636,6 @@ function DescriptiveStatsView({
         </div>
       </div>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">Descriptive statistics, phân bố, bảng tần suất, crosstab, thống kê văn bản, điểm ngoại lai (IQR).</p>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> Phân tích bằng backend Python (scipy/statsmodels)
-        </p>
-      )}
       {!selectedDataset ? (
         <p className="text-neutral-500">Chọn một bộ dữ liệu ở panel trái.</p>
       ) : stats.length > 0 ? (
@@ -2611,11 +2615,6 @@ function AnalysisView({
       <div className="w-full max-w-full">
         <h2 className="text-xl font-semibold mb-2">Ma trận tương quan</h2>
         <p className="text-neutral-600 dark:text-neutral-400 mb-4">Hệ số tương quan giữa các cột số. Pearson: quan hệ tuyến tính; Spearman: hạng (ordinal); Kendall: tau-b (ordinal, ưu tiên cặp gần).</p>
-        {analysisBackendAvailable && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-            <Cpu className="w-3.5 h-3.5" /> Ma trận tương quan từ backend Python
-          </p>
-        )}
         {corr && corr.columnNames.length > 0 && (
           <AIAssistPanel
             context={`Ma trận tương quan (${correlationMethod}). Cột: ${corr.columnNames.join(", ")}. Mẫu hệ số: ${corr.matrix.slice(0, 4).map((row, i) => `${corr.columnNames[i]}: ${row.slice(0, 4).map((v) => v.toFixed(2)).join(", ")}`).join("; ")}.`}
@@ -2830,11 +2829,6 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Phân tích nhân tố khám phá (EFA)</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">Trích xuất nhân tố bằng PCA, xoay varimax. Kiểm tra cấu trúc thang đo (Likert).</p>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> EFA từ backend Python (PCA + varimax)
-        </p>
-      )}
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}.` : undefined}
@@ -2973,11 +2967,6 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
         Hồi quy tuyến tính (OLS) khi Y liên tục, Hồi quy Logistic khi Y nhị phân (0/1), Hồi quy Poisson khi Y đếm (số nguyên ≥ 0), Hồi quy Ridge (L2) khi nhiều biến/đa cộng tuyến. VIF kiểm tra đa cộng tuyến.
       </p>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> OLS &amp; Logistic chạy trên backend Python (statsmodels)
-        </p>
-      )}
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows}, số cột: ${selectedDataset.columns}. Cột số: ${numericCols.slice(0, 15).join(", ")}${numericCols.length > 15 ? "…" : ""}.` : undefined}
@@ -3695,11 +3684,6 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Học máy</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">Phân cụm (K-means), phân loại đa lớp (One-vs-Rest logistic), đánh giá mô hình (confusion matrix, precision/recall/F1), và giải thích (feature importance, permutation importance).</p>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> K-means chạy trên backend Python (sklearn)
-        </p>
-      )}
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Cột số: ${numericCols.length}, cột phân loại: ${categoricalCols.length}.` : undefined}
@@ -3941,11 +3925,6 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showTo
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Bayesian</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">ước lượng tỉ lệ (proportion) với prior Beta: posterior Beta-Binomial, khoảng tin cậy 95%.</p>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> Beta posterior từ backend Python
-        </p>
-      )}
       <div className="mb-4">
         <AIAssistPanel
           context="Bayesian: ước lượng tỉ lệ (proportion) với prior Beta, posterior Beta-Binomial. Nhập số lần thành công và tổng n, prior α và β (mặc định 1,1)."
@@ -4265,11 +4244,6 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Kiểm định giả thuyết</h2>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> t-test, Chi-square, ANOVA chạy trên backend Python (scipy)
-        </p>
-      )}
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows}, số cột: ${selectedDataset.columns}. Cột: ${(selectedDataset.columnNames || []).slice(0, 20).join(", ")}${(selectedDataset.columnNames?.length || 0) > 20 ? "…" : ""}.` : undefined}
@@ -4886,7 +4860,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol); setFtestResult(res ?? null); }} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy F-test</button>
+            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } try { const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol); setFtestResult(res ?? null); } catch (e) { showToast(e instanceof Error ? e.message : "F-test lỗi"); setFtestResult(null); }}} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy F-test</button>
           </div>
           {ftestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -5091,11 +5065,6 @@ function ReliabilityTab({ selectedDataset, rows, numericCols, analysisBackendAva
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Độ tin cậy Cronbach&apos;s alpha</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">Chọn ít nhất 2 cột số (các item thang đo, ví dụ Likert) để ước lượng Độ tin cậy nội tại.</p>
-      {analysisBackendAvailable && (
-        <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> Alpha từ backend Python
-        </p>
-      )}
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}. Cột: ${numericCols.slice(0, 15).join(", ")}${numericCols.length > 15 ? "…" : ""}.` : undefined}
@@ -5448,11 +5417,6 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
     return (
       <div ref={chartContainerRef} className="w-full max-w-full">
         <h2 className="text-xl font-semibold mb-2">Biểu đồ</h2>
-        {(chartType === "box" || chartType === "histogram") && analysisBackendAvailable && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-2 flex items-center gap-1">
-            <Cpu className="w-3.5 h-3.5" /> Box plot / Histogram từ backend Python (numpy/scipy)
-          </p>
-        )}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">AI hỗ trợ trực quan:</span>
           <AIAssistPanel
@@ -6092,7 +6056,7 @@ function AIAssistPanel({
   const [dialogPosition, setDialogPosition] = useState<{ left: number; top: number; maxHeight?: number } | null>(null);
   const userHasDraggedRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const api = (import.meta as { env?: { VITE_QUANTIS_AI_API?: string } }).env?.VITE_QUANTIS_AI_API || "http://localhost:11434/v1";
+  const api = quantisApi.getAiApiBase();
   const defaultModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
   const modelToUse = loadAiModel() ?? defaultModel ?? undefined;
 
@@ -6459,7 +6423,7 @@ function AIAssistPanel({
 }
 
 function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: Dataset; compact?: boolean }) {
-  const api = (import.meta as { env?: { VITE_QUANTIS_AI_API?: string } }).env?.VITE_QUANTIS_AI_API || "http://localhost:11434/v1";
+  const api = quantisApi.getAiApiBase();
   const defaultModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
   const modelToUse = loadAiModel() ?? defaultModel ?? undefined;
   const systemHint = "Bạn là trợ lý chuyên về ứng dụng Quantis và phân tích định lượng. Nhiệm vụ: (1) Hướng dẫn cách sử dụng ứng dụng Quantis (import dữ liệu, các tab Khám phá, Phân tích thống kê, Trực quan, kiểm định, hồi quy, SEM, v.v.). (2) Gợi ý phương pháp phân tích định lượng phù hợp, cách chọn kiểm định, diễn giải kết quả, báo cáo APA. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt.";
@@ -6681,7 +6645,7 @@ function AppFeedbackModal({ onClose }: { onClose: () => void }) {
 }
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
-  const api = (import.meta as { env?: { VITE_QUANTIS_AI_API?: string } }).env?.VITE_QUANTIS_AI_API || "http://localhost:11434/v1";
+  const api = quantisApi.getAiApiBase();
   const envModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -6692,8 +6656,27 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [backendTestLoading, setBackendTestLoading] = useState(false);
   const [backendTestResult, setBackendTestResult] = useState<{ node: boolean; python: boolean } | null>(null);
 
+  const defaultArchiveUrl = loadArchiveUrl() || "";
+  const [archiveUrlInput, setArchiveUrlInput] = useState(defaultArchiveUrl);
+  const [archiveTestLoading, setArchiveTestLoading] = useState(false);
+  const [archiveTestResult, setArchiveTestResult] = useState<boolean | null>(null);
+
+  const defaultArchiveFileUrl = loadArchiveFileUrl() || "";
+  const [archiveFileUrlInput, setArchiveFileUrlInput] = useState(defaultArchiveFileUrl);
+  const [archiveFileTestLoading, setArchiveFileTestLoading] = useState(false);
+  const [archiveFileTestResult, setArchiveFileTestResult] = useState<boolean | null>(null);
+
+  const defaultAiApiUrl = loadAiApiUrl() || quantisApi.getAiApiBase() || "";
+  const [aiApiUrlInput, setAiApiUrlInput] = useState(defaultAiApiUrl);
+  const [aiTestLoading, setAiTestLoading] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<boolean | null>(null);
+  const [aiApiKey, setAiApiKey] = useState(0);
+
   useEffect(() => {
     setBackendUrlInput(loadBackendApiUrl() || quantisApi.getApiBase() || "");
+    setArchiveUrlInput(loadArchiveUrl() || "");
+    setArchiveFileUrlInput(loadArchiveFileUrl() || "");
+    setAiApiUrlInput(loadAiApiUrl() || quantisApi.getAiApiBase() || "");
   }, []);
 
   useEffect(() => {
@@ -6710,11 +6693,26 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       else if (filtered.length > 0 && !loadAiModel()) setSelectedModel(filtered[0]);
     }).catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [api]);
+  }, [api, aiApiKey]);
 
   const handleChange = (value: string) => {
     setSelectedModel(value);
     saveAiModel(value || null);
+    saveSettingsToServer();
+  };
+
+  const saveSettingsToServer = async () => {
+    const base = backendUrlInput.trim().replace(/\/+$/, "") || quantisApi.getApiBase();
+    if (!base) return;
+    const settings = {
+      backendApiUrl: backendUrlInput.trim().replace(/\/+$/, "") || null,
+      archiveUrl: archiveUrlInput.trim().replace(/\/+$/, "") || null,
+      archiveFileUrl: archiveFileUrlInput.trim().replace(/\/+$/, "") || null,
+      aiApiUrl: aiApiUrlInput.trim().replace(/\/+$/, "") || null,
+      defaultAiModel: selectedModel || null,
+    };
+    const ok = await quantisApi.putQuantisSettings(settings, base);
+    if (ok) setServerSettings(settings);
   };
 
   const handleSaveBackendUrl = () => {
@@ -6722,6 +6720,32 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     if (url) saveBackendApiUrl(url);
     else saveBackendApiUrl(null);
     setBackendTestResult(null);
+    saveSettingsToServer();
+  };
+
+  const handleSaveArchiveUrl = () => {
+    const url = archiveUrlInput.trim().replace(/\/+$/, "");
+    if (url) saveArchiveUrl(url);
+    else saveArchiveUrl(null);
+    setArchiveTestResult(null);
+    saveSettingsToServer();
+  };
+
+  const handleSaveArchiveFileUrl = () => {
+    const url = archiveFileUrlInput.trim().replace(/\/+$/, "");
+    if (url) saveArchiveFileUrl(url);
+    else saveArchiveFileUrl(null);
+    setArchiveFileTestResult(null);
+    saveSettingsToServer();
+  };
+
+  const handleSaveAiApiUrl = () => {
+    const url = aiApiUrlInput.trim().replace(/\/+$/, "");
+    if (url) saveAiApiUrl(url);
+    else saveAiApiUrl(null);
+    setAiTestResult(null);
+    setAiApiKey((k) => k + 1);
+    saveSettingsToServer();
   };
 
   const handleTestBackend = async () => {
@@ -6740,64 +6764,121 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const handleTestArchive = async () => {
+    setArchiveTestLoading(true);
+    setArchiveTestResult(null);
+    try {
+      const url = archiveUrlInput.trim() || undefined;
+      const ok = await archiveApi.checkArchiveApiAvailable(url);
+      setArchiveTestResult(ok);
+    } finally {
+      setArchiveTestLoading(false);
+    }
+  };
+
+  const handleTestArchiveFile = async () => {
+    setArchiveFileTestLoading(true);
+    setArchiveFileTestResult(null);
+    try {
+      const url = archiveFileUrlInput.trim() || undefined;
+      const ok = await archiveApi.checkArchiveFileBaseAvailable(url);
+      setArchiveFileTestResult(ok);
+    } finally {
+      setArchiveFileTestLoading(false);
+    }
+  };
+
+  const handleTestAiApi = async () => {
+    setAiTestLoading(true);
+    setAiTestResult(null);
+    try {
+      const url = aiApiUrlInput.trim().replace(/\/+$/, "") || undefined;
+      const ok = await quantisApi.checkAiApiAvailable(url);
+      setAiTestResult(ok);
+    } finally {
+      setAiTestLoading(false);
+    }
+  };
+
+  const rowClass = "space-y-1";
+  const labelClass = "text-xs font-medium text-neutral-700 dark:text-neutral-300";
+  const hintClass = "text-[11px] text-neutral-500 dark:text-neutral-400";
+  const inputRowClass = "flex flex-wrap items-center gap-2";
+  const inputClass = "flex-1 min-w-[140px] rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-xs";
+  const btnClass = "rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1.5 text-xs whitespace-nowrap";
+  const testBtnClass = "rounded bg-brand text-white px-2 py-1.5 text-xs whitespace-nowrap hover:opacity-90 disabled:opacity-50";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Settings className="w-5 h-5" /> Cài đặt
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 p-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+          <Settings className="w-4 h-4" /> Cài đặt
         </h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">Địa chỉ backend Quantis (phân tích định lượng)</label>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Backend Node (proxy). Để dùng phân tích Python, cấu hình ANALYZE_PYTHON_URL trên server.</p>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="url"
-                value={backendUrlInput}
-                onChange={(e) => { setBackendUrlInput(e.target.value); setBackendTestResult(null); }}
-                onBlur={handleSaveBackendUrl}
-                placeholder="http://localhost:3003"
-                className="flex-1 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-              />
-              <button type="button" onClick={handleSaveBackendUrl} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm whitespace-nowrap">Lưu</button>
+        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">Lưu sẽ ghi lên server (áp dụng cho mọi tài khoản). Nếu không kết nối được backend Quantis thì chỉ lưu trên trình duyệt.</p>
+        <div className="space-y-3 text-sm">
+          <div className={rowClass}>
+            <label className={labelClass}>Backend Quantis (Node)</label>
+            <p className={hintClass}>Phân tích định lượng, proxy. Python: cấu hình ANALYZE_PYTHON_URL trên server.</p>
+            <div className={inputRowClass}>
+              <input type="url" value={backendUrlInput} onChange={(e) => { setBackendUrlInput(e.target.value); setBackendTestResult(null); }} onBlur={handleSaveBackendUrl} placeholder="http://localhost:4001" className={inputClass} />
+              <button type="button" onClick={handleSaveBackendUrl} className={btnClass}>Lưu</button>
+              <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !backendUrlInput.trim()} className={testBtnClass}>{backendTestLoading ? "…" : "Kiểm tra"}</button>
             </div>
-            <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !backendUrlInput.trim()} className="rounded-lg bg-brand text-white px-3 py-2 text-sm hover:opacity-90 disabled:opacity-50">
-              {backendTestLoading ? "Đang kiểm tra…" : "Kiểm tra backend"}
-            </button>
-            {backendTestResult && (
-              <div className="mt-2 text-sm space-y-1">
-                <p className={backendTestResult.node ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
-                  {backendTestResult.node ? "✓ Backend Node: Hoạt động" : "✗ Backend Node: Không kết nối được"}
-                </p>
-                <p className={backendTestResult.python ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}>
-                  {backendTestResult.python ? "✓ Backend Python: Hoạt động" : "✗ Backend Python: Chưa khởi động hoặc không cấu hình"}
-                </p>
-              </div>
+            {backendTestResult !== null && (
+              <p className={backendTestResult.node ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
+                {backendTestResult.node ? "✓ Node OK" : "✗ Node lỗi"}
+                {backendTestResult.python ? " · Python OK" : " · Python chưa cấu hình"}
+              </p>
             )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">Mô hình AI</label>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Dùng cho các nút Giải thích / Diễn giải kết quả và tab AI hướng dẫn. Chỉ hiển thị mô hình &gt;= 8B.</p>
+          <div className={rowClass}>
+            <label className={labelClass}>Archive (tìm kiếm dataset)</label>
+            <p className={hintClass}>Để trống = proxy qua backend hoặc mặc định.</p>
+            <div className={inputRowClass}>
+              <input type="url" value={archiveUrlInput} onChange={(e) => setArchiveUrlInput(e.target.value)} onBlur={handleSaveArchiveUrl} placeholder="http://host:8010" className={inputClass} />
+              <button type="button" onClick={handleSaveArchiveUrl} className={btnClass}>Lưu</button>
+              <button type="button" onClick={handleTestArchive} disabled={archiveTestLoading} className={testBtnClass}>{archiveTestLoading ? "…" : "Kiểm tra"}</button>
+            </div>
+            {archiveTestResult !== null && <p className={archiveTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveTestResult ? "✓ OK" : "✗ Lỗi"}</p>}
+          </div>
+          <div className={rowClass}>
+            <label className={labelClass}>Archive file (tải file)</label>
+            <p className={hintClass}>Để trống = env VITE_ARCHIVE_FILE_BASE_URL.</p>
+            <div className={inputRowClass}>
+              <input type="url" value={archiveFileUrlInput} onChange={(e) => setArchiveFileUrlInput(e.target.value)} onBlur={handleSaveArchiveFileUrl} placeholder="http://host:8013" className={inputClass} />
+              <button type="button" onClick={handleSaveArchiveFileUrl} className={btnClass}>Lưu</button>
+              <button type="button" onClick={handleTestArchiveFile} disabled={archiveFileTestLoading} className={testBtnClass}>{archiveFileTestLoading ? "…" : "Kiểm tra"}</button>
+            </div>
+            {archiveFileTestResult !== null && <p className={archiveFileTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveFileTestResult ? "✓ OK" : "✗ Lỗi"}</p>}
+          </div>
+          <div className={rowClass}>
+            <label className={labelClass}>API AI (Ollama)</label>
+            <p className={hintClass}>Địa chỉ API Ollama (vd. https://research.neu.edu.vn/ollama/v1). Để trống = env VITE_QUANTIS_AI_API hoặc localhost:11434/v1.</p>
+            <div className={inputRowClass}>
+              <input type="url" value={aiApiUrlInput} onChange={(e) => setAiApiUrlInput(e.target.value)} onBlur={handleSaveAiApiUrl} placeholder="http://localhost:11434/v1" className={inputClass} />
+              <button type="button" onClick={handleSaveAiApiUrl} className={btnClass}>Lưu</button>
+              <button type="button" onClick={handleTestAiApi} disabled={aiTestLoading || !aiApiUrlInput.trim()} className={testBtnClass}>{aiTestLoading ? "…" : "Kiểm tra"}</button>
+            </div>
+            {aiTestResult !== null && <p className={aiTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{aiTestResult ? "✓ API OK" : "✗ Không kết nối được"}</p>}
+          </div>
+          <div className={rowClass}>
+            <label className={labelClass}>Mô hình AI (≥8B)</label>
+            <p className={hintClass}>Giải thích / Diễn giải kết quả, tab AI hướng dẫn.</p>
             {loading ? (
-              <p className="text-sm text-neutral-500">Đang tải danh sách mô hình...</p>
+              <p className="text-xs text-neutral-500">Đang tải danh sách...</p>
             ) : models.length > 0 ? (
-              <select
-                value={selectedModel}
-                onChange={(e) => handleChange(e.target.value)}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                title="Chọn mô hình Ollama"
-              >
-                {models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+              <div className="flex flex-wrap items-center gap-2">
+                <select value={selectedModel} onChange={(e) => handleChange(e.target.value)} className={`${inputClass} max-w-[200px]`} title="Chọn mô hình Ollama">
+                  {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {selectedModel && <span className="text-xs text-neutral-500">Đang dùng: {selectedModel}</span>}
+              </div>
             ) : (
-              <p className="text-sm text-amber-600 dark:text-amber-400">Không lấy được danh sách từ API. Kiểm tra VITE_QUANTIS_AI_API trong .env.</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">Chưa lấy được danh sách. Cấu hình địa chỉ API AI ở trên (hoặc VITE_QUANTIS_AI_API trong .env) rồi bấm Kiểm tra.</p>
             )}
-            {selectedModel && <p className="text-xs text-neutral-500 mt-1">Đang dùng: <strong>{selectedModel}</strong></p>}
           </div>
         </div>
-        <button type="button" onClick={onClose} className="mt-6 rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Đóng</button>
+        <button type="button" onClick={onClose} className="mt-4 rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90">Đóng</button>
       </div>
     </div>
   );

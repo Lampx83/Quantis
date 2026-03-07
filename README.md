@@ -46,12 +46,12 @@ uvicorn main:app --reload --port 4000
 
 # Terminal 3: frontend
 cd Quantis
-echo 'VITE_QUANTIS_API_URL=http://localhost:3001' > .env
+echo 'VITE_QUANTIS_API_URL=http://localhost:4001' > .env
 npm install
 npm run dev
 ```
 
-Backend Node tại http://localhost:3001. Nếu chạy thêm backend Python và set `ANALYZE_PYTHON_URL=http://localhost:4000`, các phân tích (thống kê mô tả, t-test, ANOVA, Chi-square, tương quan, OLS, logistic) sẽ chạy trên Python (scipy/statsmodels) thay vì JavaScript trong trình duyệt — phù hợp dataset lớn và kết quả chuẩn nghiên cứu.
+Backend Node tại http://localhost:4001. Nếu chạy thêm backend Python và set `ANALYZE_PYTHON_URL=http://localhost:4000`, các phân tích (thống kê mô tả, t-test, ANOVA, Chi-square, tương quan, OLS, logistic) sẽ chạy trên Python (scipy/statsmodels) thay vì JavaScript trong trình duyệt — phù hợp dataset lớn và kết quả chuẩn nghiên cứu.
 
 **Build:** `npm run build` — output in `public/`.
 

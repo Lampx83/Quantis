@@ -10,9 +10,9 @@ services:
     container_name: quantis-backend
     restart: unless-stopped
     ports:
-      - "3003:3001"
+      - "4001:4001"
     environment:
-      PORT: "3001"
+      PORT: "4001"
       # Archive NEU (proxy tìm kiếm / tải dataset)
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
       # ARCHIVE_NEU_TOKEN: ""   # Nếu cần Bearer token

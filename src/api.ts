@@ -4,7 +4,7 @@
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
 import type { Dataset, Workflow } from "./types";
-import { loadBackendApiUrl } from "./store";
+import { loadBackendApiUrl, loadAiApiUrl } from "./store";
 
 function getBase(): string {
   const stored = loadBackendApiUrl();
@@ -16,6 +16,43 @@ function getBase(): string {
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). */
 export function getApiBase(): string {
   return getBase();
+}
+
+/** Lấy cấu hình dùng chung từ server (áp dụng cho mọi tài khoản). */
+export async function getQuantisSettings(baseUrl?: string): Promise<import("./store").ServerSettings> {
+  const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
+  if (!base) return {};
+  try {
+    const res = await fetch(`${base}/api/quantis/settings`, { method: "GET", credentials: "include", cache: "no-store" });
+    if (!res.ok) return {};
+    const data = await res.json();
+    return {
+      backendApiUrl: data.backendApiUrl ?? null,
+      archiveUrl: data.archiveUrl ?? null,
+      archiveFileUrl: data.archiveFileUrl ?? null,
+      aiApiUrl: data.aiApiUrl ?? null,
+      defaultAiModel: data.defaultAiModel ?? null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Lưu cấu hình dùng chung lên server (áp dụng cho mọi tài khoản). */
+export async function putQuantisSettings(settings: import("./store").ServerSettings, baseUrl?: string): Promise<boolean> {
+  const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/api/quantis/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(settings),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 function getAPI_BASE(): string {
@@ -872,10 +909,14 @@ export async function analyzeFTestTwoSample(
       headers: getHeaders(),
       body: JSON.stringify({ rows, groupCol, groupVal1, groupVal2, numCol }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { detail?: string };
+      throw new Error(err.detail || res.statusText || "F-test lỗi");
+    }
     const json = await res.json();
     return json?.result ?? null;
-  } catch {
+  } catch (e) {
+    if (e instanceof Error) throw e;
     return null;
   }
 }
@@ -1126,10 +1167,34 @@ export async function saveData(payload: { datasets: Dataset[]; workflows: Workfl
   }
 }
 
-/** Gọi LLM (OpenAI/Ollama). Mặc định Ollama local (localhost:11434).
- * Frontend: VITE_QUANTIS_AI_API = https://research.neu.edu.vn/ollama/v1 (domain) hoặc http://101.96.66.232:8002/v1 (IP). VITE_QUANTIS_AI_MODEL tùy chọn. */
+/** Gọi LLM (OpenAI/Ollama). Có thể cấu hình địa chỉ API trong Cài đặt (hoặc VITE_QUANTIS_AI_API). */
 const DEFAULT_OLLAMA = "http://localhost:11434/v1"
 const defModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL
+
+/** Base URL API AI (Ollama): Cài đặt → env VITE_QUANTIS_AI_API → mặc định localhost:11434/v1. */
+export function getAiApiBase(): string {
+  const stored = loadAiApiUrl();
+  if (stored != null && String(stored).trim() !== "") return String(stored).trim().replace(/\/+$/, "");
+  const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_AI_API?: string } }).env?.VITE_QUANTIS_AI_API);
+  if (env != null && String(env).trim() !== "") return String(env).trim().replace(/\/+$/, "");
+  return DEFAULT_OLLAMA;
+}
+
+/** Kiểm tra API AI (Ollama) có phản hồi /api/tags không. */
+export async function checkAiApiAvailable(apiBase?: string): Promise<boolean> {
+  const base = (apiBase != null && String(apiBase).trim() !== "") ? String(apiBase).trim().replace(/\/+$/, "") : getAiApiBase();
+  if (!base) return false;
+  try {
+    const urlBase = base.replace(/\/v1\/?$/, "");
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${urlBase.replace(/\/+$/, "")}/api/tags`, { signal: controller.signal });
+    clearTimeout(t);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 /** Trích size (tỉ tham số, đơn vị B) từ tên model, ví dụ "llama3.2:7b" -> 7, "phi3:14b" -> 14. Không khớp thì trả về null. */
 export function parseModelSizeB(name: string): number | null {

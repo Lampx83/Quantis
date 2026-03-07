@@ -10,9 +10,9 @@ COPY server.js ./
 
 RUN mkdir -p /app/data
 
-EXPOSE 3001
+EXPOSE 4001
 
 ENV NODE_ENV=production
-ENV PORT=3001
+ENV PORT=4001
 
 CMD ["node", "server.js"]

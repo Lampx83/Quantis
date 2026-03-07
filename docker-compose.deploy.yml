@@ -5,9 +5,9 @@ services:
     container_name: quantis-backend
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "4001:4001"
     environment:
-      PORT: "3001"
+      PORT: "4001"
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
       OLLAMA_UPSTREAM_URL: "http://host.docker.internal:8002"
       ANALYZE_PYTHON_URL: "http://quantis-python:8000"

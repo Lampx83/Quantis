@@ -8,12 +8,13 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = Number(process.env.PORT) || 3001;
+const PORT = Number(process.env.PORT) || 4001;
 const ARCHIVE_NEU_URL = (process.env.ARCHIVE_NEU_URL || "https://archive.neu.edu.vn").replace(/\/+$/, "");
 const OLLAMA_UPSTREAM_URL = (process.env.OLLAMA_UPSTREAM_URL || "http://101.96.66.232:8002").replace(/\/+$/, "");
 const ARCHIVE_NEU_TOKEN = process.env.ARCHIVE_NEU_TOKEN || "";
 const DATA_DIR = path.join(__dirname, "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
+const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -74,6 +75,7 @@ const INFO_HTML = `<!DOCTYPE html>
     <ul>
       <li><a href="/api/quantis/health">/api/quantis/health</a> — Health check</li>
       <li><a href="/api/quantis/data">/api/quantis/data</a> — Xem dữ liệu hiện tại (JSON)</li>
+      <li><a href="/api/quantis/settings">/api/quantis/settings</a> — Cấu hình dùng chung (Archive, AI, …)</li>
     </ul>
   </section>
 
@@ -95,6 +97,8 @@ app.get("/api/quantis", (req, res) => {
       { method: "GET", path: "/api/quantis/health", description: "Health check" },
       { method: "GET", path: "/api/quantis/data", description: "Lấy datasets và workflows" },
       { method: "POST", path: "/api/quantis/data", description: "Lưu datasets và workflows", body: { datasets: "[]", workflows: "[]" } },
+      { method: "GET", path: "/api/quantis/settings", description: "Cấu hình dùng chung (Archive, AI, …)" },
+      { method: "PUT", path: "/api/quantis/settings", description: "Lưu cấu hình dùng chung", body: { archiveUrl: "...", archiveFileUrl: "...", aiApiUrl: "...", defaultAiModel: "..." } },
       { method: "*", path: "/api/quantis/archive/*", description: "Proxy Archive NEU" },
       { method: "*", path: "/api/quantis/ollama/*", description: "Proxy Ollama AI (OLLAMA_UPSTREAM_URL)" },
       { method: "*", path: "/api/quantis/analyze/*", description: "Proxy backend phân tích (khi cấu hình ANALYZE_PYTHON_URL)" },
@@ -133,6 +137,28 @@ function writeStore(datasets, workflows) {
   }
 }
 
+function readSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const raw = fs.readFileSync(SETTINGS_FILE, "utf8");
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn("readSettings:", e.message);
+  }
+  return {};
+}
+
+function writeSettings(settings) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf8");
+  } catch (e) {
+    console.error("writeSettings:", e.message);
+    throw e;
+  }
+}
+
 // GET /api/quantis/health
 app.get("/api/quantis/health", (req, res) => {
   res.json({ status: "ok", service: "quantis" });
@@ -158,6 +184,37 @@ app.post("/api/quantis/data", (req, res) => {
     res.json({ status: "ok" });
   } catch (e) {
     console.error("POST /api/quantis/data:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/quantis/settings — Cấu hình dùng chung cho tất cả tài khoản (lưu trong data/settings.json; có thể thay bằng DB)
+app.get("/api/quantis/settings", (req, res) => {
+  try {
+    const settings = readSettings();
+    res.json(settings);
+  } catch (e) {
+    console.error("GET /api/quantis/settings:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/quantis/settings — Lưu cấu hình dùng chung
+app.put("/api/quantis/settings", (req, res) => {
+  try {
+    const body = req.body || {};
+    const current = readSettings();
+    const settings = {
+      backendApiUrl: body.backendApiUrl !== undefined ? (body.backendApiUrl || null) : current.backendApiUrl,
+      archiveUrl: body.archiveUrl !== undefined ? (body.archiveUrl || null) : current.archiveUrl,
+      archiveFileUrl: body.archiveFileUrl !== undefined ? (body.archiveFileUrl || null) : current.archiveFileUrl,
+      aiApiUrl: body.aiApiUrl !== undefined ? (body.aiApiUrl || null) : current.aiApiUrl,
+      defaultAiModel: body.defaultAiModel !== undefined ? (body.defaultAiModel || null) : current.defaultAiModel,
+    };
+    writeSettings(settings);
+    res.json({ status: "ok", settings });
+  } catch (e) {
+    console.error("PUT /api/quantis/settings:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -289,6 +346,8 @@ app.listen(PORT, () => {
   console.log(`  GET  /api/quantis/health`);
   console.log(`  GET  /api/quantis/data`);
   console.log(`  POST /api/quantis/data`);
+  console.log(`  GET  /api/quantis/settings`);
+  console.log(`  PUT  /api/quantis/settings`);
   if (ANALYZE_PYTHON_URL) console.log(`  *    /api/quantis/analyze/* -> ${ANALYZE_PYTHON_URL}/api/quantis/analyze/*`);
   console.log(`  *    /api/quantis/ollama/* -> ${OLLAMA_UPSTREAM_URL}/*`);
   console.log(`  *    /api/quantis/archive/* -> ${ARCHIVE_NEU_URL}/api/v1/*`);

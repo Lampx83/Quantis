@@ -2,6 +2,25 @@ import type { Dataset, Workflow } from "./types";
 
 const STORAGE_PREFIX = "quantis_";
 
+/** Cấu hình lấy từ server (dùng chung mọi tài khoản). Ưu tiên hơn localStorage. */
+export type ServerSettings = {
+  backendApiUrl?: string | null;
+  archiveUrl?: string | null;
+  archiveFileUrl?: string | null;
+  aiApiUrl?: string | null;
+  defaultAiModel?: string | null;
+};
+
+let serverSettingsCache: ServerSettings | null = null;
+
+export function getServerSettings(): ServerSettings | null {
+  return serverSettingsCache;
+}
+
+export function setServerSettings(settings: ServerSettings | null): void {
+  serverSettingsCache = settings;
+}
+
 function getKey(key: string): string {
   return STORAGE_PREFIX + key;
 }
@@ -74,8 +93,10 @@ export function clearWorkspaceStorage(): void {
   }
 }
 
-/** Mô hình AI (Ollama/OpenAI) đã chọn trong Cài đặt. null = dùng mặc định từ env. */
+/** Mô hình AI đã chọn. Ưu tiên: server defaultAiModel → localStorage → env. */
 export function loadAiModel(): string | null {
+  const fromServer = getServerSettings()?.defaultAiModel;
+  if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim();
   try {
     return localStorage.getItem(getKey("aiModel"));
   } catch {
@@ -92,8 +113,10 @@ export function saveAiModel(model: string | null): void {
   }
 }
 
-/** Địa chỉ backend Quantis (Node). Trống = dùng VITE_QUANTIS_API_URL từ env. */
+/** Địa chỉ backend Quantis (Node). Ưu tiên: server settings → localStorage → env. */
 export function loadBackendApiUrl(): string | null {
+  const fromServer = getServerSettings()?.backendApiUrl;
+  if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim().replace(/\/+$/, "");
   try {
     return localStorage.getItem(getKey("backendApiUrl"));
   } catch {
@@ -107,6 +130,75 @@ export function saveBackendApiUrl(url: string | null): void {
       localStorage.setItem(getKey("backendApiUrl"), String(url).trim().replace(/\/+$/, ""));
     } else {
       localStorage.removeItem(getKey("backendApiUrl"));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Địa chỉ Archive (API tìm kiếm/tải dataset). Ưu tiên: server → localStorage → proxy/env. */
+export function loadArchiveUrl(): string | null {
+  const fromServer = getServerSettings()?.archiveUrl;
+  if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim().replace(/\/+$/, "");
+  try {
+    return localStorage.getItem(getKey("archiveUrl"));
+  } catch {
+    return null;
+  }
+}
+
+export function saveArchiveUrl(url: string | null): void {
+  try {
+    if (url != null && String(url).trim() !== "") {
+      localStorage.setItem(getKey("archiveUrl"), String(url).trim().replace(/\/+$/, ""));
+    } else {
+      localStorage.removeItem(getKey("archiveUrl"));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Địa chỉ Archive file (tải file). Ưu tiên: server → localStorage → env. */
+export function loadArchiveFileUrl(): string | null {
+  const fromServer = getServerSettings()?.archiveFileUrl;
+  if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim().replace(/\/+$/, "");
+  try {
+    return localStorage.getItem(getKey("archiveFileUrl"));
+  } catch {
+    return null;
+  }
+}
+
+export function saveArchiveFileUrl(url: string | null): void {
+  try {
+    if (url != null && String(url).trim() !== "") {
+      localStorage.setItem(getKey("archiveFileUrl"), String(url).trim().replace(/\/+$/, ""));
+    } else {
+      localStorage.removeItem(getKey("archiveFileUrl"));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Địa chỉ API AI (Ollama). Ưu tiên: server → localStorage → env. */
+export function loadAiApiUrl(): string | null {
+  const fromServer = getServerSettings()?.aiApiUrl;
+  if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim().replace(/\/+$/, "");
+  try {
+    return localStorage.getItem(getKey("aiApiUrl"));
+  } catch {
+    return null;
+  }
+}
+
+export function saveAiApiUrl(url: string | null): void {
+  try {
+    if (url != null && String(url).trim() !== "") {
+      localStorage.setItem(getKey("aiApiUrl"), String(url).trim().replace(/\/+$/, ""));
+    } else {
+      localStorage.removeItem(getKey("aiApiUrl"));
     }
   } catch {
     /* ignore */

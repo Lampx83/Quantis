@@ -880,6 +880,29 @@ async def analyze_ftest_two_sample(body: FTestTwoSampleBody):
             body.rows, body.groupCol, body.groupVal1, body.groupVal2, body.numCol
         )
         if result is None:
+            # Gợi ý nguyên nhân để trả về 400 rõ ràng hơn
+            import pandas as pd
+            from analysis_impl import _rows_to_df
+            df = _rows_to_df(body.rows)
+            if body.groupCol not in df.columns or body.numCol not in df.columns:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cột không tồn tại. Có các cột: {list(df.columns)}"
+                )
+            df[body.numCol] = pd.to_numeric(df[body.numCol], errors="coerce")
+            g1 = df[df[body.groupCol].astype(str).str.strip() == body.groupVal1][body.numCol].dropna()
+            g2 = df[df[body.groupCol].astype(str).str.strip() == body.groupVal2][body.numCol].dropna()
+            if len(g1) < 2 or len(g2) < 2:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cần ít nhất 2 quan sát mỗi nhóm. Hiện tại nhóm '{body.groupVal1}' có {len(g1)}, nhóm '{body.groupVal2}' có {len(g2)}."
+                )
+            var2 = float(g2.var(ddof=1))
+            if var2 == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Phương sai nhóm '{body.groupVal2}' bằng 0, không thể tính F-test."
+                )
             raise HTTPException(status_code=400, detail="Không đủ dữ liệu hoặc cột không hợp lệ")
         return {"result": result}
     except HTTPException:
