@@ -1679,6 +1679,55 @@ export function getHistogramBins(values: number[], binCount?: number): { binStar
   return bins;
 }
 
+/** Simple Gaussian KDE: evaluate density at points `at` given samples. bandwidth: Silverman's rule of thumb if not provided. */
+export function kernelDensityEstimate(samples: number[], at: number[], bandwidth?: number): { x: number; density: number }[] {
+  const valid = samples.filter((v) => !Number.isNaN(v));
+  if (valid.length === 0) return at.map((x) => ({ x, density: 0 }));
+  const n = valid.length;
+  const std = Math.sqrt(valid.reduce((s, v) => s + (v - valid.reduce((a, b) => a + b, 0) / n) ** 2, 0) / n) || 1;
+  const h = bandwidth ?? 1.06 * std * n ** -0.2;
+  const gaussian = (u: number) => Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+  return at.map((x) => {
+    const density = valid.reduce((sum, xi) => sum + gaussian((x - xi) / h), 0) / (n * h);
+    return { x, density };
+  });
+}
+
+/** Bin numeric values into equal-interval or custom buckets for pie chart. */
+export function binNumericForPie(
+  values: number[],
+  binCount: number = 4,
+  customBreaks?: number[]
+): { label: string; count: number; binStart: number; binEnd: number }[] {
+  const valid = values.filter((v) => !Number.isNaN(v));
+  if (valid.length === 0) return [];
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const breaks: number[] = customBreaks?.length
+    ? [...customBreaks].sort((a, b) => a - b)
+    : (() => {
+        const step = (max - min) / binCount || 1;
+        const out: number[] = [min];
+        for (let i = 1; i < binCount; i++) out.push(min + i * step);
+        out.push(max + 0.0001);
+        return out;
+      })();
+  const result: { label: string; count: number; binStart: number; binEnd: number }[] = [];
+  for (let i = 0; i < breaks.length - 1; i++) {
+    const binStart = breaks[i];
+    const binEnd = breaks[i + 1];
+    const count = valid.filter((v) => v >= binStart && (i === breaks.length - 2 ? v <= binEnd : v < binEnd)).length;
+    const label =
+      i === 0
+        ? `< ${binEnd.toFixed(2)}`
+        : i === breaks.length - 2
+          ? `≥ ${binStart.toFixed(2)}`
+          : `${binStart.toFixed(2)} – ${binEnd.toFixed(2)}`;
+    result.push({ label, count, binStart, binEnd });
+  }
+  return result;
+}
+
 export { MAX_ROWS_STORED };
 
 // --- Logistic regression ---

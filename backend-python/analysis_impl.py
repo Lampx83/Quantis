@@ -193,6 +193,106 @@ def run_anova(rows: list, factor_col: str, value_col: str):
     }
 
 
+def run_ancova(rows: list, factor_col: str, value_col: str, covariate_cols: list[str]):
+    """ANCOVA: Analysis of Covariance — DV ~ Factor + Covariate(s). Kiểm soát biến covariate khi so sánh nhóm."""
+    from statsmodels.formula.api import ols
+    from statsmodels.stats.anova import anova_lm
+
+    df = _rows_to_df(rows)
+    if factor_col not in df.columns or value_col not in df.columns:
+        return None
+    for c in covariate_cols:
+        if c not in df.columns:
+            return None
+    df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
+    for c in covariate_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    use_cols = [value_col, factor_col] + covariate_cols
+    df = df[use_cols].dropna()
+    if len(df) < 4 or df.groupby(factor_col)[value_col].ngroups < 2:
+        return None
+    # Formula: value_col ~ C(factor_col) + cov1 + cov2 + ...
+    cov_part = " + ".join([f"Q('{c}')" for c in covariate_cols])
+    formula = f"Q('{value_col}') ~ C(Q('{factor_col}')) + {cov_part}"
+    try:
+        model = ols(formula, data=df).fit()
+        a = anova_lm(model, typ=2)
+        group_means = []
+        for name, g in df.groupby(factor_col)[value_col]:
+            group_means.append({
+                "group": str(name),
+                "n": int(len(g)),
+                "mean": float(g.mean()),
+                "std": float(g.std()) if len(g) > 1 else 0.0,
+            })
+        # Hàng factor (C(factor))
+        factor_key = [i for i in a.index if "C(" in str(i) or (i != "Residual" and i != "Intercept")]
+        factor_key = factor_key[0] if factor_key else None
+        if factor_key is None:
+            return None
+        ss_factor = float(a.loc[factor_key, "sum_sq"])
+        ss_resid = float(a.loc["Residual", "sum_sq"])
+        df_factor = int(a.loc[factor_key, "df"])
+        df_resid = int(a.loc["Residual", "df"])
+        f_val = float(a.loc[factor_key, "F"]) if pd.notna(a.loc[factor_key, "F"]) else 0.0
+        p_val = float(a.loc[factor_key, "PR(>F)"]) if pd.notna(a.loc[factor_key, "PR(>F)"]) else 1.0
+        ss_total = a["sum_sq"].sum()
+        eta_sq = ss_factor / ss_total if ss_total > 0 else 0.0
+        return {
+            "f": f_val,
+            "dfBetween": df_factor,
+            "dfWithin": df_resid,
+            "dfTotal": len(df) - 1,
+            "pValue": p_val,
+            "etaSq": eta_sq,
+            "factorCol": factor_col,
+            "valueCol": value_col,
+            "covariateCols": covariate_cols,
+            "groupMeans": group_means,
+            "n": len(df),
+        }
+    except Exception:
+        return None
+
+
+def run_manova(rows: list, factor_col: str, value_cols: list[str]):
+    """MANOVA: Multivariate Analysis of Variance — nhiều biến phụ thuộc (DV), một nhân tố (IV)."""
+    try:
+        from statsmodels.multivariate.manova import MANOVA
+    except ImportError:
+        return None
+    df = _rows_to_df(rows)
+    if factor_col not in df.columns:
+        return None
+    for c in value_cols:
+        if c not in df.columns:
+            return None
+    df = df[[factor_col] + value_cols].copy()
+    for c in value_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df.dropna()
+    if len(df) < 4 or df[factor_col].nunique() < 2:
+        return None
+    formula = " + ".join(value_cols) + " ~ C(" + factor_col + ")"
+    try:
+        ma = MANOVA.from_formula(formula, data=df)
+        result = ma.mv_test()
+        # Wilks' lambda, Pillai's trace, etc. — lấy thống kê chính
+        out = {"factorCol": factor_col, "valueCols": value_cols, "n": len(df)}
+        if hasattr(result, "results"):
+            r = result.results
+            if "Intercept" in r:
+                out["intercept"] = str(r["Intercept"])
+            if "C(" + factor_col + ")" in r:
+                out["factorTest"] = str(r["C(" + factor_col + ")"])
+            out["summary"] = str(result)
+        else:
+            out["summary"] = str(result)
+        return out
+    except Exception as e:
+        return {"error": str(e), "factorCol": factor_col, "valueCols": value_cols, "n": len(df)}
+
+
 def run_kruskal_wallis(rows: list, factor_col: str, value_col: str):
     """Kruskal-Wallis H (non-parametric one-way ANOVA): so sánh 3+ nhóm độc lập."""
     df = _rows_to_df(rows)

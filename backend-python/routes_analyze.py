@@ -10,6 +10,8 @@ from analysis_impl import (
     run_chi2,
     run_correlation,
     run_anova,
+    run_ancova,
+    run_manova,
     run_kruskal_wallis,
     run_ols,
     run_logistic,
@@ -86,6 +88,19 @@ class AnovaBody(BaseModel):
     rows: list[list[str]]
     factorCol: str
     valueCol: str
+
+
+class AncovaBody(BaseModel):
+    rows: list[list[str]]
+    factorCol: str
+    valueCol: str
+    covariateCols: list[str]
+
+
+class ManovaBody(BaseModel):
+    rows: list[list[str]]
+    factorCol: str
+    valueCols: list[str]
 
 
 class OLSBody(BaseModel):
@@ -421,6 +436,38 @@ async def analyze_anova(body: AnovaBody):
         result = run_anova(body.rows, body.factorCol, body.valueCol)
         if result is None:
             raise HTTPException(status_code=400, detail="Không đủ nhóm hoặc cột không hợp lệ")
+        return {"result": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/ancova")
+async def analyze_ancova(body: AncovaBody):
+    try:
+        result = run_ancova(body.rows, body.factorCol, body.valueCol, body.covariateCols)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Không đủ dữ liệu hoặc cột không hợp lệ (cần nhân tố, biến phụ thuộc và ít nhất 1 covariate)")
+        return {"result": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/manova")
+async def analyze_manova(body: ManovaBody):
+    try:
+        result = run_manova(body.rows, body.factorCol, body.valueCols)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Không đủ dữ liệu hoặc cột không hợp lệ (cần nhân tố và ít nhất 2 biến phụ thuộc)")
+        if result.get("error"):
+            raise HTTPException(status_code=400, detail=result["error"])
         return {"result": result}
     except HTTPException:
         raise

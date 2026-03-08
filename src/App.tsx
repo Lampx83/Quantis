@@ -57,20 +57,23 @@ import {
   ThumbsUp,
   ThumbsDown,
   GripVertical,
+  Save,
+  ImagePlus,
 } from "lucide-react";
 import { getPortalTheme, applyPortalTheme } from "./portal-theme";
-import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadAiApiUrl, saveAiApiUrl, saveAiFeedback, saveAppFeedback, setServerSettings } from "./store";
+import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadAiApiUrl, saveAiApiUrl, saveAiFeedback, saveAppFeedback, setServerSettings, loadReportCharts, saveReportChart, removeReportChart } from "./store";
+import type { SavedReportChart } from "./store";
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
 import { AI_MAX_PROMPT_CHARS } from "./api";
 import ReactMarkdown from "react-markdown";
-import { parseCSV, parseFileContent, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
+import { parseCSV, parseFileContent, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, kernelDensityEstimate, binNumericForPie, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
 import * as archiveApi from "./archive-api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "./archive-api";
 import { SAMPLE_DATASETS } from "./sampleDatasets";
 import { getSampleWorkflowStandalone, getDefaultStandardWorkflow, getDemoWorkflowTemplates } from "./sample-data";
 import type { DescriptiveRow, TTestResult, ChiSquareResult, ANOVAResult, BoxGroupStats, MannWhitneyResult, OLSResult, BetaPosteriorResult, KMeansResult, LogisticResult, EFAResult, MediationResult, ShapiroWilkResult, MulticlassLogisticResult, SampleSizeProportionResult, SampleSizeChiSquareResult, SampleSizeAnovaResult, SampleSizeRegressionResult, PairedTTestResult, WilcoxonSignedRankResult, FriedmanResult, LeveneResult, McNemarResult, FisherExactResult, OneSampleTTestResult, BinomialTestResult, TwoProportionZTestResult, SignTestResult } from "./utils/stats";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, CartesianGrid, PieChart, Pie, LineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, CartesianGrid, PieChart, Pie, LineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend, ComposedChart, ReferenceArea, ReferenceLine } from "recharts";
 
 type DataTab = "import" | "profiling" | "transform" | "preview" | "descriptive";
 type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian";
@@ -104,7 +107,7 @@ export default function App() {
   const [analysisTab, setAnalysisTab] = useState<AnalysisTab>("correlation");
   const [reproTab, setReproTab] = useState<ReproducibilityTab>("workflows");
   const [presentationTab, setPresentationTab] = useState<PresentationTab>("visualization");
-  type PresentationChartType = "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab";
+  type PresentationChartType = "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "histogramDensity" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density";
   const [presentationChartType, setPresentationChartType] = useState<PresentationChartType>("scatter");
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(() => loadSelectedDatasetId());
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
@@ -855,6 +858,8 @@ export default function App() {
             <button type="button" onClick={() => setPresentationChartType("pie")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "pie" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Tròn"><PieChartIcon className="w-4 h-4 shrink-0" /><span>Tròn</span></button>
             <button type="button" onClick={() => setPresentationChartType("box")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "box" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Box plot"><BoxSelect className="w-4 h-4 shrink-0" /><span>Box plot</span></button>
             <button type="button" onClick={() => setPresentationChartType("histogram")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "histogram" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Histogram"><BarChart2 className="w-4 h-4 shrink-0" /><span>Histogram</span></button>
+            <button type="button" onClick={() => setPresentationChartType("histogramDensity")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "histogramDensity" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột tần suất + đường mật độ"><BarChart2 className="w-4 h-4 shrink-0" /><span>Cột + mật độ</span></button>
+            <button type="button" onClick={() => setPresentationChartType("density")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "density" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Density so sánh hai nhóm"><TrendingUp className="w-4 h-4 shrink-0" /><span>Density</span></button>
             <button type="button" onClick={() => setPresentationChartType("radar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "radar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Radar"><Gauge className="w-4 h-4 shrink-0" /><span>Radar</span></button>
             <button type="button" onClick={() => setPresentationChartType("heatmap")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "heatmap" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Heatmap tương quan"><Grid3X3 className="w-4 h-4 shrink-0" /><span>Heatmap</span></button>
             <button type="button" onClick={() => setPresentationChartType("summary")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "summary" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Thẻ tóm tắt"><LayoutTemplate className="w-4 h-4 shrink-0" /><span>Thẻ tóm tắt</span></button>
@@ -3974,7 +3979,7 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showTo
 
 function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAvailable = false, showToast }: { selectedDataset: Dataset; onHypothesisResult?: (r: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null) => void; analysisBackendAvailable?: boolean; showToast: (msg: string) => void }) {
   const rows = getDataRows(selectedDataset);
-  const [testKind, setTestKind] = useState<"ttest" | "chisquare" | "anova" | "kruskal" | "nonparametric" | "normality" | "power" | "paired" | "wilcoxon_paired" | "friedman" | "levene" | "mcnemar" | "fisher" | "onesample_ttest" | "binomial" | "twoprop" | "sign_test" | "ftest" | "ztest_means">("ttest");
+  const [testKind, setTestKind] = useState<"ttest" | "chisquare" | "anova" | "ancova" | "manova" | "kruskal" | "nonparametric" | "normality" | "power" | "paired" | "wilcoxon_paired" | "friedman" | "levene" | "mcnemar" | "fisher" | "onesample_ttest" | "binomial" | "twoprop" | "sign_test" | "ftest" | "ztest_means">("ttest");
   const [groupCol, setGroupCol] = useState("");
   const [groupVal1, setGroupVal1] = useState("");
   const [groupVal2, setGroupVal2] = useState("");
@@ -4020,6 +4025,13 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const [anovaFactorCol, setAnovaFactorCol] = useState("");
   const [anovaValueCol, setAnovaValueCol] = useState("");
   const [anovaResult, setAnovaResult] = useState<ANOVAResult | null>(null);
+  const [ancovaFactorCol, setAncovaFactorCol] = useState("");
+  const [ancovaValueCol, setAncovaValueCol] = useState("");
+  const [ancovaCovariateCols, setAncovaCovariateCols] = useState<string[]>([]);
+  const [ancovaResult, setAncovaResult] = useState<{ f: number; dfBetween: number; dfWithin: number; pValue: number; etaSq: number; groupMeans: { group: string; n: number; mean: number; std: number }[] } | null>(null);
+  const [manovaFactorCol, setManovaFactorCol] = useState("");
+  const [manovaValueCols, setManovaValueCols] = useState<string[]>([]);
+  const [manovaResult, setManovaResult] = useState<{ factorCol: string; valueCols: string[]; n: number; summary?: string; factorTest?: string; error?: string } | null>(null);
   const [kruskalResult, setKruskalResult] = useState<{ h: number; pValue: number; df: number; nGroups: number; groupMedians: { group: string; n: number; median: number; mean: number; std: number }[] } | null>(null);
   const [mannWhitneyResult, setMannWhitneyResult] = useState<MannWhitneyResult | null>(null);
   const [normalityCol, setNormalityCol] = useState("");
@@ -4160,6 +4172,30 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
     setKruskalResult(res ?? null);
     setAnovaResult(null);
   };
+  const runAncova = async () => {
+    if (!ancovaFactorCol || !ancovaValueCol || ancovaCovariateCols.length === 0) {
+      showToast("Chọn nhân tố, biến phụ thuộc và ít nhất 1 covariate.");
+      return;
+    }
+    if (!analysisBackendAvailable) {
+      showToast(BACKEND_PYTHON_REQUIRED_MSG);
+      return;
+    }
+    const res = await quantisApi.analyzeAncova(rows, ancovaFactorCol, ancovaValueCol, ancovaCovariateCols);
+    setAncovaResult(res ?? null);
+  };
+  const runManova = async () => {
+    if (!manovaFactorCol || manovaValueCols.length < 2) {
+      showToast("Chọn nhân tố và ít nhất 2 biến phụ thuộc.");
+      return;
+    }
+    if (!analysisBackendAvailable) {
+      showToast(BACKEND_PYTHON_REQUIRED_MSG);
+      return;
+    }
+    const res = await quantisApi.analyzeManova(rows, manovaFactorCol, manovaValueCols);
+    setManovaResult(res ?? null);
+  };
     const runMannWhitney = async () => {
     if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
     if (analysisBackendAvailable) {
@@ -4174,7 +4210,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
     if (res) onHypothesisResult?.({ type: "mannwhitney", payload: res, meta: { groupCol, groupVal1, groupVal2, numCol } });
     else onHypothesisResult?.(null);
   };
-  const clearResults = () => { setTResult(null); setChiResult(null); setAnovaResult(null); setKruskalResult(null); setMannWhitneyResult(null); setShapiroResult(null); setPowerResult(null); setSampleSizeExtra(null); setPairedResult(null); setWilcoxonPairedResult(null); setFriedmanResult(null); setLeveneResult(null); setMcNemarResult(null); setFisherResult(null); setOnesampleResult(null); setBinomialResult(null); setTwopropResult(null); setSignTestResult(null); setFtestResult(null); setZtestMeansResult(null); };
+  const clearResults = () => { setTResult(null); setChiResult(null); setAnovaResult(null); setAncovaResult(null); setManovaResult(null); setKruskalResult(null); setMannWhitneyResult(null); setShapiroResult(null); setPowerResult(null); setSampleSizeExtra(null); setPairedResult(null); setWilcoxonPairedResult(null); setFriedmanResult(null); setLeveneResult(null); setMcNemarResult(null); setFisherResult(null); setOnesampleResult(null); setBinomialResult(null); setTwopropResult(null); setSignTestResult(null); setFtestResult(null); setZtestMeansResult(null); };
   const runShapiroWilk = async () => {
     if (!normalityCol || !numericCols.includes(normalityCol)) return;
     const ci = rows[0].indexOf(normalityCol);
@@ -4272,6 +4308,8 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
             <optgroup label="So sánh trung bình">
               <option value="ttest">t-test (hai nhóm độc lập)</option>
               <option value="anova">ANOVA 1 nhân tố</option>
+              <option value="ancova">ANCOVA (kiểm soát covariate)</option>
+              <option value="manova">MANOVA (nhiều biến phụ thuộc)</option>
               <option value="paired">t-test cặp</option>
               <option value="onesample_ttest">t-test một mẫu</option>
               <option value="ztest_means">z-Test 2 trung bình</option>
@@ -4406,7 +4444,83 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
           )}
         </>
       )}
-      
+      {testKind === "ancova" && (
+        <>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">ANCOVA: so sánh nhóm trên biến phụ thuộc sau khi kiểm soát (covariate). Cần backend Python.</p>
+          <div className="flex flex-wrap gap-4 items-end mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nhân tố (nhóm)</label>
+              <select value={ancovaFactorCol} onChange={(e) => { setAncovaFactorCol(e.target.value); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (DV)</label>
+              <select value={ancovaValueCol} onChange={(e) => { setAncovaValueCol(e.target.value); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Covariate(s) — chọn nhiều</label>
+              <select multiple value={ancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setAncovaCovariateCols(sel); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+                {numericCols.filter((c) => c !== ancovaValueCol).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột</p>
+            </div>
+            <button type="button" onClick={runAncova} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy ANCOVA</button>
+          </div>
+          {ancovaResult && (
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
+              <p className="font-medium">Kết quả ANCOVA</p>
+              <p>F({ancovaResult.dfBetween}, {ancovaResult.dfWithin}) = {ancovaResult.f.toFixed(4)}, p-value = {ancovaResult.pValue < 0.001 ? "< 0.001" : ancovaResult.pValue.toFixed(4)}, η² = {ancovaResult.etaSq.toFixed(4)}</p>
+              <p className="text-neutral-600 dark:text-neutral-400">Covariate: {ancovaCovariateCols.join(", ")}</p>
+              <p className="text-neutral-600 dark:text-neutral-400">Trung bình theo nhóm (sau kiểm soát):</p>
+              <ul className="list-disc list-inside">
+                {ancovaResult.groupMeans.map((m) => (
+                  <li key={m.group}>{m.group}: M = {m.mean.toFixed(2)}, SD = {m.std.toFixed(2)}, n = {m.n}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+      {testKind === "manova" && (
+        <>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">MANOVA: nhiều biến phụ thuộc (DV), một nhân tố (IV). Cần backend Python.</p>
+          <div className="flex flex-wrap gap-4 items-end mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nhân tố (nhóm)</label>
+              <select value={manovaFactorCol} onChange={(e) => { setManovaFactorCol(e.target.value); setManovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (DV) — chọn từ 2 trở lên</label>
+              <select multiple value={manovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setManovaValueCols(sel); setManovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+                {numericCols.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột (tối thiểu 2)</p>
+            </div>
+            <button type="button" onClick={runManova} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy MANOVA</button>
+          </div>
+          {manovaResult && (
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
+              <p className="font-medium">Kết quả MANOVA</p>
+              {manovaResult.error && <p className="text-amber-600 dark:text-amber-400">{manovaResult.error}</p>}
+              <p>Nhân tố: {manovaResult.factorCol}, Biến phụ thuộc: {manovaResult.valueCols.join(", ")}, n = {manovaResult.n}</p>
+              {manovaResult.factorTest != null && <p className="font-medium">Kiểm định nhân tố: {String(manovaResult.factorTest)}</p>}
+              {manovaResult.summary && <pre className="text-xs whitespace-pre-wrap bg-neutral-100 dark:bg-neutral-900 p-2 rounded overflow-x-auto">{manovaResult.summary}</pre>}
+            </div>
+          )}
+        </>
+      )}
       {testKind === "kruskal" && (
         <>
           <div className="flex flex-wrap gap-4 items-end mb-4">
@@ -5268,7 +5382,7 @@ function formatAPA(result: { type: "ttest" | "chisquare" | "anova" | "mannwhitne
   return "";
 }
 
-function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisResult, analysisBackendAvailable = false, chartType }: { tab: PresentationTab; onTabChange?: (t: PresentationTab) => void; selectedDataset: Dataset | undefined; lastHypothesisResult?: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null; analysisBackendAvailable?: boolean; chartType: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab"; setChartType: (t: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab") => void }) {
+function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisResult, analysisBackendAvailable = false, chartType }: { tab: PresentationTab; onTabChange?: (t: PresentationTab) => void; selectedDataset: Dataset | undefined; lastHypothesisResult?: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null; analysisBackendAvailable?: boolean; chartType: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "histogramDensity" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density"; setChartType: (t: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "histogramDensity" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density") => void }) {
   const [chartXCol, setChartXCol] = useState("");
   const [chartYCol, setChartYCol] = useState("");
   const [histogramCol, setHistogramCol] = useState("");
@@ -5279,10 +5393,17 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
   const [multiLineYCols, setMultiLineYCols] = useState<string[]>([]);
   const [crosstabCol1, setCrosstabCol1] = useState("");
   const [crosstabCol2, setCrosstabCol2] = useState("");
+  const [barSortOrder, setBarSortOrder] = useState<"none" | "asc" | "desc">("none");
+  const [densityGroupCol, setDensityGroupCol] = useState("");
+  const [densityValueCol, setDensityValueCol] = useState("");
+  const [pieBinNumeric, setPieBinNumeric] = useState(false);
+  const [pieBinCount, setPieBinCount] = useState(4);
+  const [pieNumericCol, setPieNumericCol] = useState("");
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [boxStatsBackendResult, setBoxStatsBackendResult] = useState<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null>(null);
   const [histBinsBackendResult, setHistBinsBackendResult] = useState<Array<{ binStart: number; binEnd: number; count: number }> | null>(null);
   const PIE_COLORS = ["#0061bb", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"];
+  const [reportCharts, setReportCharts] = useState<SavedReportChart[]>(() => loadReportCharts());
 
   useEffect(() => {
     if (tab !== "visualization" || !selectedDataset || chartType !== "box" || !chartXCol || !chartYCol || !analysisBackendAvailable) {
@@ -5294,7 +5415,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
   }, [tab, selectedDataset?.id, chartType, chartXCol, chartYCol, analysisBackendAvailable]);
 
   useEffect(() => {
-    if (tab !== "visualization" || !selectedDataset || chartType !== "histogram" || !histogramCol || !analysisBackendAvailable) {
+    if (tab !== "visualization" || !selectedDataset || (chartType !== "histogram" && chartType !== "histogramDensity") || !histogramCol || !analysisBackendAvailable) {
       setHistBinsBackendResult(null);
       return;
     }
@@ -5321,15 +5442,63 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
       ? rows.slice(1).map((r) => ({ x: isScatter ? Number(r[xIdx]) : r[xIdx], y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
       : [];
     const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
+    const barDataSorted = barSortOrder === "none" ? barData : [...barData].sort((a, b) => (barSortOrder === "asc" ? a.count - b.count : b.count - a.count));
     const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
       ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
       : [];
     const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n }));
+    const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
+    const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
+    const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
+      const groups: Record<string, number[]> = {};
+      rows.slice(1).forEach((r) => {
+        const g = String(r[densityGroupIdx] ?? "").trim();
+        const v = Number(r[densityValueIdx]);
+        if (g === "" || Number.isNaN(v)) return;
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(v);
+      });
+      const allVals = Object.values(groups).flat();
+      if (allVals.length < 2) return [];
+      const lo = Math.min(...allVals);
+      const hi = Math.max(...allVals);
+      const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
+      const series: { group: string; points: { x: number; density: number }[] }[] = [];
+      Object.entries(groups).forEach(([group, vals]) => {
+        if (vals.length < 2) return;
+        const pts = kernelDensityEstimate(vals, grid);
+        series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
+      });
+      return series;
+    })() : [];
     const histColIdx = cols.indexOf(histogramCol);
     const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => Number(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
     const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
     const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "?" + b.binEnd.toFixed(1), count: b.count }));
-    const pieData = barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : [];
+    const histDensityCurve = (chartType === "histogramDensity" && histValues.length >= 2) ? (() => {
+      const lo = Math.min(...histValues);
+      const hi = Math.max(...histValues);
+      const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
+      return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
+    })() : [];
+    const histComboData = (chartType === "histogramDensity" && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
+      const maxCount = Math.max(...histChartData.map((d) => d.count));
+      const maxDens = Math.max(...histDensityCurve.map((d) => d.density));
+      const scale = maxDens > 0 ? maxCount / maxDens : 1;
+      return histChartData.map((d, i) => {
+        const binStart = histBins[i].binStart;
+        const binEnd = histBins[i].binEnd;
+        const center = (binStart + binEnd) / 2;
+        const nearest = histDensityCurve.reduce((a, p) => (Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a));
+        return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
+      });
+    })() : [];
+    const pieData = (chartType === "pie" || chartType === "donut") && pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol) ? (() => {
+      const idx = cols.indexOf(pieNumericCol);
+      const vals = rows.slice(1).map((r) => Number(r[idx])).filter((v) => !Number.isNaN(v));
+      const binned = binNumericForPie(vals, pieBinCount);
+      return binned.map((b) => ({ name: b.label, value: b.count })).filter((d) => d.value > 0);
+    })() : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
     const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
       ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
@@ -5428,7 +5597,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
           />
         </div>
         {(() => {
-          const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && !isScatter && barData.length > 0) || (chartType === "barH" && barData.length > 0) || (chartType === "line" && lineData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
+          const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && !isScatter && barData.length > 0) || (chartType === "barH" && barData.length > 0) || (chartType === "line" && lineData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "histogramDensity" && histComboData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
           const handleExportSvg = () => {
             const el = chartContainerRef.current?.querySelector("svg");
             if (!el) return;
@@ -5471,6 +5640,43 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             img.onerror = () => URL.revokeObjectURL(url);
             img.src = url;
           };
+          const handleSaveToReport = () => {
+            const el = chartContainerRef.current?.querySelector("svg");
+            if (!el) return;
+            const svg = new XMLSerializer().serializeToString(el);
+            const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+            const url = URL.createObjectURL(svgBlob);
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.fillStyle = "white";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob((blob) => {
+                  if (!blob) { URL.revokeObjectURL(url); return; }
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const dataUrl = reader.result as string;
+                    const title = window.prompt("Tên biểu đồ (để chèn vào báo cáo):", `Biểu đồ ${chartType}`);
+                    if (title === null) return;
+                    const caption = window.prompt("Chú thích (caption) tùy chọn:", "");
+                    saveReportChart({ title: title.trim() || `Biểu đồ ${chartType}`, caption: caption?.trim() || undefined, chartType, imageDataUrl: dataUrl });
+                    setReportCharts(loadReportCharts());
+                    URL.revokeObjectURL(url);
+                  };
+                  reader.readAsDataURL(blob);
+                }, "image/png");
+              } else {
+                URL.revokeObjectURL(url);
+              }
+            };
+            img.onerror = () => URL.revokeObjectURL(url);
+            img.src = url;
+          };
           return hasExportableChart ? (
             <div className="mb-3 flex items-center gap-2">
               <button type="button" onClick={handleExportSvg} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700">
@@ -5479,9 +5685,80 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
               <button type="button" onClick={handleExportPng} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                 <Download className="w-4 h-4" /> Xuất PNG
               </button>
+              <button type="button" onClick={handleSaveToReport} className="rounded-lg border border-brand bg-brand/10 text-brand dark:bg-brand/20 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:opacity-90">
+                <Save className="w-4 h-4" /> Lưu vào báo cáo
+              </button>
             </div>
           ) : null;
         })()}
+        {/* Biểu đồ đã lưu cho báo cáo nghiên cứu */}
+        <div className="mt-6 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-4">
+          <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-2 flex items-center gap-2">
+            <FileText className="w-4 h-4" /> Biểu đồ cho báo cáo
+          </h3>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">Lưu biểu đồ hiện tại bằng nút &quot;Lưu vào báo cáo&quot; hoặc tải ảnh từ máy để tập trung tại đây, sau đó tải từng ảnh để chèn vào Word/LaTeX.</p>
+          <label className="mb-3 inline-flex items-center gap-2 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700">
+            <ImagePlus className="w-4 h-4" /> Tải biểu đồ từ file (PNG/SVG/JPEG)
+            <input
+              type="file"
+              accept="image/png,image/svg+xml,image/jpeg,image/webp"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const dataUrl = reader.result as string;
+                  const title = window.prompt("Tên biểu đồ:", file.name.replace(/\.[^.]+$/, ""));
+                  if (title === null) return;
+                  saveReportChart({ title: title.trim() || file.name, chartType: "image", imageDataUrl: dataUrl });
+                  setReportCharts(loadReportCharts());
+                };
+                reader.readAsDataURL(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+          {reportCharts.length === 0 ? (
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">Chưa có biểu đồ nào. Tạo biểu đồ phía trên rồi bấm &quot;Lưu vào báo cáo&quot; hoặc tải ảnh từ file.</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {reportCharts.map((c) => (
+                <div key={c.id} className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 overflow-hidden">
+                  <div className="aspect-video bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center p-1">
+                    <img src={c.imageDataUrl} alt={c.title} className="max-w-full max-h-full object-contain" />
+                  </div>
+                  <div className="p-2">
+                    <p className="text-xs font-medium text-neutral-800 dark:text-neutral-200 truncate" title={c.title}>{c.title}</p>
+                    {c.caption && <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate" title={c.caption}>{c.caption}</p>}
+                    <div className="flex items-center gap-1 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const a = document.createElement("a");
+                          a.href = c.imageDataUrl;
+                          const ext = c.imageDataUrl.startsWith("data:image/svg") ? "svg" : c.imageDataUrl.startsWith("data:image/jpeg") ? "jpg" : "png";
+                          a.download = `${c.title.replace(/[^a-zA-Z0-9\u00C0-\u024F\-_]/g, "_")}.${ext}`;
+                          a.click();
+                        }}
+                        className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                      >
+                        <Download className="w-3 h-3 inline mr-0.5" /> Tải
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { removeReportChart(c.id); setReportCharts(loadReportCharts()); }}
+                        className="rounded border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-2 py-0.5 text-xs hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 className="w-3 h-3 inline" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         {(chartType === "scatter" || chartType === "bar" || chartType === "line" || chartType === "pie" || chartType === "area") && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
@@ -5498,6 +5775,16 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            {chartType === "bar" && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Sắp xếp trục X</label>
+                <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="none">Không sắp xếp</option>
+                  <option value="asc">Tăng dần (theo tần số)</option>
+                  <option value="desc">Giảm dần (theo tần số)</option>
+                </select>
+              </div>
+            )}
           </div>
         )}
         {chartType === "stackedBar" && (
@@ -5578,22 +5865,79 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             )}
           </div>
         )}
+        {chartType === "pie" && (
+          <div className="mb-4 space-y-3">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">Dùng Trục X ở trên làm cột phân loại, hoặc bật &quot;Chia theo khoảng&quot; để chia biến số thành các khoảng (vd. &lt;0.25, 0.25–0.5, 0.5–0.75, ≥0.75).</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
+              Chia theo khoảng (biến số)
+            </label>
+            {pieBinNumeric && (
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Cột số</label>
+                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                    <option value="">— Chọn —</option>
+                    {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Số khoảng</label>
+                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} khoảng</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {chartType === "donut" && (
-          <div className="mb-4">
+          <div className="mb-4 space-y-3">
             <label className="block text-sm font-medium mb-1">Cột phân loại</label>
-            <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={xCol} onChange={(e) => { setXCol(e.target.value); setPieBinNumeric(false); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">— Chọn —</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
+              Chia theo khoảng (biến số)
+            </label>
+            {pieBinNumeric && (
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Cột số</label>
+                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                    <option value="">— Chọn —</option>
+                    {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Số khoảng</label>
+                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} khoảng</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {chartType === "barH" && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Trục (danh mục)</label>
-            <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
-              {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <div className="mb-4 flex flex-wrap items-end gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Trục (danh mục)</label>
+              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Sắp xếp trục</label>
+              <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="none">Không sắp xếp</option>
+                <option value="asc">Tăng dần (theo tần số)</option>
+                <option value="desc">Giảm dần (theo tần số)</option>
+              </select>
+            </div>
           </div>
         )}
         {chartType === "box" && (
@@ -5623,6 +5967,33 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             </select>
           </div>
         )}
+        {chartType === "histogramDensity" && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Cột số (phân bố + đường mật độ)</label>
+            <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <option value="">— Chọn —</option>
+              {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        )}
+        {chartType === "density" && (
+          <div className="flex flex-wrap gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Biến nhóm (2 nhóm, ví dụ có/không gợi ý)</label>
+              <select value={densityGroupCol} onChange={(e) => setDensityGroupCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Biến số (điểm / giá trị)</label>
+              <select value={densityValueCol} onChange={(e) => setDensityValueCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
         {chartType === "scatter" && isScatter && chartData.length > 0 && (
           <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
             <ResponsiveContainer width="100%" height="100%">
@@ -5643,10 +6014,33 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
           if (chartData.length === 0) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được: không có dữ liệu cặp (X, Y) hợp lệ. Hai cột <strong>"{xCol}"</strong> và <strong>"{yCol}"</strong> có thể toàn ô trống hoặc giá trị không phải số. Kiểm tra lại dữ liệu.</p>;
           return null;
         })()}
-        {chartType === "bar" && !isScatter && barData.length > 0 && (
+        {chartType === "density" && densityData.length > 0 && (() => {
+          const keys = densityData.map((d) => d.group);
+          const merged = densityData[0].points.map((_, i) => ({
+            x: densityData[0].points[i].x,
+            ...Object.fromEntries(keys.map((k, j) => [k, densityData[j].points[i].density])),
+          }));
+          return (
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={merged} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="x" name={densityValueCol} type="number" tick={{ fontSize: 11 }} />
+                  <YAxis name="Mật độ" tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend />
+                  {keys.map((key, i) => (
+                    <Line key={key} type="monotone" dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={key} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        })()}
+        {chartType === "bar" && !isScatter && barDataSorted.length > 0 && (
           <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <BarChart data={barDataSorted} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
@@ -5656,10 +6050,10 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             </ResponsiveContainer>
           </div>
         )}
-        {chartType === "barH" && xCol && barData.length > 0 && (
+        {chartType === "barH" && xCol && barDataSorted.length > 0 && (
           <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <BarChart data={barDataSorted} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
                 <YAxis type="category" dataKey="name" width={100} />
@@ -5714,13 +6108,29 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
           <>
             <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 mb-2">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <ComposedChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip formatter={(val: number, name: string) => [val.toFixed(2), name]} />
-                  <Bar dataKey="median" fill="#0061bb" name="Trung vị" />
-                </BarChart>
+                  <YAxis domain={["auto", "auto"]} allowDataOverflow />
+                  <Tooltip content={({ active, payload }) => {
+                    if (!active || !payload?.length || !payload[0].payload) return null;
+                    const b = payload[0].payload as { name: string; min: number; q1: number; median: number; q3: number; max: number; n: number };
+                    return (
+                      <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
+                        <p className="font-medium">{b.name}</p>
+                        <p>n = {b.n} | Min = {b.min.toFixed(2)} | Q1 = {b.q1.toFixed(2)} | Median = {b.median.toFixed(2)} | Q3 = {b.q3.toFixed(2)} | Max = {b.max.toFixed(2)}</p>
+                      </div>
+                    );
+                  }} />
+                  {boxStats.map((b) => (
+                    <React.Fragment key={b.group}>
+                      <ReferenceArea x1={b.group} x2={b.group} y1={b.q1} y2={b.q3} fill="#0061bb" fillOpacity={0.5} stroke="#0061bb" strokeWidth={1} />
+                      <ReferenceLine x={b.group} y={b.median} stroke="#111" strokeWidth={2} />
+                      <ReferenceLine segment={[{ x: b.group, y: b.q3 }, { x: b.group, y: b.max }]} stroke="#333" strokeWidth={1} />
+                      <ReferenceLine segment={[{ x: b.group, y: b.q1 }, { x: b.group, y: b.min }]} stroke="#333" strokeWidth={1} />
+                    </React.Fragment>
+                  ))}
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
@@ -5748,6 +6158,20 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 <Tooltip />
                 <Bar dataKey="count" fill="#0061bb" name="Tần số" />
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        {chartType === "histogramDensity" && histComboData.length > 0 && (
+          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={histComboData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
+                <YAxis label={{ value: "Tần số / Mật độ", angle: -90, position: "insideLeft" }} />
+                <Tooltip />
+                <Bar dataKey="count" fill="#0061bb" name="Tần số" />
+                <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name="Đường mật độ (KDE)" />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -5981,6 +6405,8 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn một cột phân loại cho biểu đồ tròn (tỉ lệ thành phần).</p>}
         {chartType === "box" && (!xCol || !yCol || boxChartData.length === 0) && <p className="text-neutral-500 text-sm">Chọn biến nhóm và biến số cho box plot.</p>}
         {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">Chọn một cột số cho histogram.</p>}
+        {chartType === "histogramDensity" && !histogramCol && <p className="text-neutral-500 text-sm">Chọn một cột số cho biểu đồ cột + đường mật độ.</p>}
+        {chartType === "density" && (!densityGroupCol || !densityValueCol) && <p className="text-neutral-500 text-sm">Chọn biến nhóm (ví dụ có/không gợi ý) và biến số để so sánh phân bố hai nhóm.</p>}
         {chartType === "radar" && radarNumericCols.length < 2 && <p className="text-neutral-500 text-sm">Chọn ít nhất 2 cột số cho biểu đồ radar.</p>}
         {chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2) && <p className="text-neutral-500 text-sm">Cần ít nhất 2 cột số trong dataset để vẽ ma trận tương quan.</p>}
         {chartType === "summary" && summaryStats.length === 0 && <p className="text-neutral-500 text-sm">Không có thống kê mô tả (cần ít nhất 2 dòng dữ liệu).</p>}

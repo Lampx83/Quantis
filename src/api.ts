@@ -232,6 +232,49 @@ export async function analyzeAnova(
   }
 }
 
+/** Phân tích: ANCOVA (Analysis of Covariance) — kiểm soát covariate khi so sánh nhóm. */
+export async function analyzeAncova(
+  rows: string[][],
+  factorCol: string,
+  valueCol: string,
+  covariateCols: string[]
+): Promise<{ f: number; dfBetween: number; dfWithin: number; dfTotal: number; pValue: number; etaSq: number; factorCol: string; valueCol: string; covariateCols: string[]; groupMeans: { group: string; n: number; mean: number; std: number }[]; n: number } | null> {
+  try {
+    const res = await fetch(`${getANALYZE_BASE()}/ancova`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorCol, valueCol, covariateCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: MANOVA (nhiều biến phụ thuộc, một nhân tố). */
+export async function analyzeManova(
+  rows: string[][],
+  factorCol: string,
+  valueCols: string[]
+): Promise<{ factorCol: string; valueCols: string[]; n: number; summary?: string; factorTest?: string; error?: string } | null> {
+  try {
+    const res = await fetch(`${getANALYZE_BASE()}/manova`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorCol, valueCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Phân tích: Kruskal-Wallis H (non-parametric ANOVA cho 3+ nhóm). */
 export async function analyzeKruskalWallis(
   rows: string[][],

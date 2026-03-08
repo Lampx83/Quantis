@@ -1,6 +1,7 @@
 import type { Dataset, Workflow } from "./types";
 
 const STORAGE_PREFIX = "quantis_";
+const REPORT_CHARTS_KEY = "reportCharts";
 
 /** Cấu hình lấy từ server (dùng chung mọi tài khoản). Ưu tiên hơn localStorage. */
 export type ServerSettings = {
@@ -88,6 +89,7 @@ export function clearWorkspaceStorage(): void {
     localStorage.removeItem(getKey("datasets"));
     localStorage.removeItem(getKey("workflows"));
     localStorage.removeItem(getKey("selectedDatasetId"));
+    localStorage.removeItem(getKey(REPORT_CHARTS_KEY));
   } catch {
     /* ignore */
   }
@@ -255,6 +257,52 @@ export function saveAppFeedback(content: string): void {
       content: content.trim().slice(0, 4000),
     });
     localStorage.setItem(getKey(FEEDBACK_KEY), JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Biểu đồ đã lưu để đưa vào báo cáo nghiên cứu */
+export type SavedReportChart = {
+  id: string;
+  title: string;
+  caption?: string;
+  chartType: string;
+  /** PNG base64 data URL hoặc SVG string (prefix data:image/svg+xml;base64,...) */
+  imageDataUrl: string;
+  createdAt: string;
+};
+
+export function loadReportCharts(): SavedReportChart[] {
+  try {
+    const raw = localStorage.getItem(getKey(REPORT_CHARTS_KEY));
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveReportChart(entry: Omit<SavedReportChart, "id" | "createdAt">): SavedReportChart {
+  const list = loadReportCharts();
+  const newEntry: SavedReportChart = {
+    ...entry,
+    id: generateId(),
+    createdAt: new Date().toISOString(),
+  };
+  list.push(newEntry);
+  try {
+    localStorage.setItem(getKey(REPORT_CHARTS_KEY), JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+  return newEntry;
+}
+
+export function removeReportChart(id: string): void {
+  const list = loadReportCharts().filter((c) => c.id !== id);
+  try {
+    localStorage.setItem(getKey(REPORT_CHARTS_KEY), JSON.stringify(list));
   } catch {
     /* ignore */
   }
