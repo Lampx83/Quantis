@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Package Quantis app (frontend-only) into zip for installation from AI Portal.
- * Run: npm run pack  → dist/quantis-app-package.zip
+ * Run: npm run pack  → dist/quantis-app-package.zip (build từ public/)
+ * Run: npm run pack:build  → build vào dist/build rồi đóng gói (tránh ghi đè public/)
  * Run: npm run pack:basepath  → dist/quantis-app-package-basepath.zip
  */
 import fs from "fs";
@@ -10,7 +11,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const publicDir = path.join(root, "public");
+const publicDir = path.join(root, process.env.PACK_SOURCE || "public");
 const outDir = path.join(root, "dist");
 const baseName = process.env.PACK_BASEPATH ? "quantis-app-package-basepath" : "quantis-app-package";
 const outZip = path.join(outDir, baseName + ".zip");
@@ -37,12 +38,12 @@ async function main() {
     process.exit(1);
   }
   if (!fs.existsSync(publicDir)) {
-    console.error("Missing public/ directory. Run: npm run build before pack");
+    console.error("Missing directory:", publicDir, "- Run: npm run build (or npm run pack:build)");
     process.exit(1);
   }
   const indexPath = path.join(publicDir, "index.html");
   if (!fs.existsSync(indexPath)) {
-    console.error("Missing public/index.html. Run: npm run build before pack");
+    console.error("Missing index.html in", publicDir, "- Run: npm run build (or npm run pack:build)");
     process.exit(1);
   }
 

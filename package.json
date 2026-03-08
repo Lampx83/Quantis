@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "build:basepath": "EMBED_BASE_PATH=/tuyen-sinh/embed/quantis vite build",
+    "build:pack": "vite build --outDir dist/build",
     "pack": "npm run build && node scripts/pack.mjs",
+    "pack:build": "npm run build:pack && PACK_SOURCE=dist/build node scripts/pack.mjs",
     "pack:basepath": "npm run build:basepath && PACK_BASEPATH=1 node scripts/pack.mjs",
     "install:all": "npm install && cd backend && npm install",
     "start": "concurrently -n fe,be \"npm run dev\" \"npm run dev --prefix backend\""
