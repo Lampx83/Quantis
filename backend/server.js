@@ -10,7 +10,7 @@ const path = require("path");
 
 const PORT = Number(process.env.PORT) || 4001;
 const ARCHIVE_NEU_URL = (process.env.ARCHIVE_NEU_URL || "https://archive.neu.edu.vn").replace(/\/+$/, "");
-const OLLAMA_UPSTREAM_URL = (process.env.OLLAMA_UPSTREAM_URL || "http://101.96.66.232:8002").replace(/\/+$/, "");
+const OLLAMA_URL = (process.env.OLLAMA_URL || "https://research.neu.edu.vn/ollama").replace(/\/+$/, "");
 const ARCHIVE_NEU_TOKEN = process.env.ARCHIVE_NEU_TOKEN || "";
 const DATA_DIR = path.join(__dirname, "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
@@ -53,7 +53,7 @@ const INFO_HTML = `<!DOCTYPE html>
     <ul>
       <li><strong>Lưu trữ dữ liệu:</strong> Lưu datasets và workflows của Quantis vào file JSON (<code>backend/data/store.json</code>), đồng bộ với frontend qua API.</li>
       <li><strong>Proxy Archive NEU:</strong> Chuyển tiếp các request tới Archive NEU (<code>/api/quantis/archive/*</code>) để tìm và tải dataset, tránh CORS.</li>
-      <li><strong>Proxy Ollama (AI):</strong> Chuyển tiếp <code>/api/quantis/ollama/*</code> tới Ollama upstream (<code>OLLAMA_UPSTREAM_URL</code>), tránh CORS khi frontend gọi từ trình duyệt.</li>
+      <li><strong>Proxy Ollama (AI):</strong> Chuyển tiếp <code>/api/quantis/ollama/*</code> tới Ollama (<code>OLLAMA_URL</code>), tránh CORS khi frontend gọi từ trình duyệt.</li>
       <li><strong>Proxy phân tích (tùy chọn):</strong> Khi cấu hình <code>ANALYZE_PYTHON_URL</code>, chuyển tiếp <code>/api/quantis/analyze/*</code> tới backend Python (R/stats).</li>
     </ul>
   </section>
@@ -65,7 +65,7 @@ const INFO_HTML = `<!DOCTYPE html>
       <li><span class="method get">GET</span> <code>/api/quantis/data</code> — Lấy toàn bộ datasets và workflows (JSON).</li>
       <li><span class="method post">POST</span> <code>/api/quantis/data</code> — Lưu datasets và workflows. Body: <code>{ "datasets": [...], "workflows": [...] }</code>.</li>
       <li><span class="method any">*</span> <code>/api/quantis/archive/*</code> — Proxy tới Archive NEU (<code>api/v1/*</code>). Dùng để tìm kiếm và tải dataset vào Quantis.</li>
-      <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới Ollama upstream (cấu hình <code>OLLAMA_UPSTREAM_URL</code>). Tránh CORS khi dùng AI từ trình duyệt.</li>
+      <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới Ollama (cấu hình <code>OLLAMA_URL</code>). Tránh CORS khi dùng AI từ trình duyệt.</li>
       <li><span class="method any">*</span> <code>/api/quantis/analyze/*</code> — Proxy tới backend phân tích Python (nếu đã cấu hình <code>ANALYZE_PYTHON_URL</code>).</li>
     </ul>
   </section>
@@ -100,7 +100,7 @@ app.get("/api/quantis", (req, res) => {
       { method: "GET", path: "/api/quantis/settings", description: "Cấu hình dùng chung (Archive, AI, …)" },
       { method: "PUT", path: "/api/quantis/settings", description: "Lưu cấu hình dùng chung", body: { archiveUrl: "...", archiveFileUrl: "...", aiApiUrl: "...", defaultAiModel: "..." } },
       { method: "*", path: "/api/quantis/archive/*", description: "Proxy Archive NEU" },
-      { method: "*", path: "/api/quantis/ollama/*", description: "Proxy Ollama AI (OLLAMA_UPSTREAM_URL)" },
+      { method: "*", path: "/api/quantis/ollama/*", description: "Proxy Ollama AI (OLLAMA_URL)" },
       { method: "*", path: "/api/quantis/analyze/*", description: "Proxy backend phân tích (khi cấu hình ANALYZE_PYTHON_URL)" },
     ],
     docs: "Truy cập GET / để xem trang thông tin đầy đủ.",
@@ -141,10 +141,23 @@ function readSettings() {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const raw = fs.readFileSync(SETTINGS_FILE, "utf8");
-      return JSON.parse(raw);
+      const data = JSON.parse(raw);
+      if (data && typeof data === "object") return data;
     }
   } catch (e) {
     console.warn("readSettings:", e.message);
+  }
+  // Khi chưa có settings.json: nếu deploy research.neu.edu.vn thì trả về mặc định để người dùng không cần cấu hình
+  const researchDeploy = process.env.RESEARCH_NEU_DEPLOY === "1" || process.env.RESEARCH_NEU_DEPLOY === "true";
+  if (researchDeploy) {
+    const base = (process.env.RESEARCH_NEU_BASE_URL || "https://research.neu.edu.vn").replace(/\/+$/, "");
+    return {
+      backendApiUrl: `${base}/api/quantis/backend`,
+      archiveUrl: `${base}/api/archive`,
+      archiveFileUrl: `${base}/api/archive-file`,
+      aiApiUrl: `${base}/ollama/v1`,
+      defaultAiModel: "qwen3:8b",
+    };
   }
   return {};
 }
@@ -259,11 +272,11 @@ app.use("/api/quantis/analyze", async (req, res) => {
   }
 });
 
-// Proxy Ollama: /api/quantis/ollama/* -> OLLAMA_UPSTREAM_URL/* (tránh CORS khi frontend gọi từ browser)
+// Proxy Ollama: /api/quantis/ollama/* -> OLLAMA_URL/* (tránh CORS khi frontend gọi từ browser)
 app.use("/api/quantis/ollama", async (req, res) => {
   const pathAndQuery = req.url.startsWith("/") ? req.url : "/" + req.url;
-  const targetUrl = `${OLLAMA_UPSTREAM_URL}${pathAndQuery}`;
-  const headers = { ...req.headers, host: new URL(OLLAMA_UPSTREAM_URL).host };
+  const targetUrl = `${OLLAMA_URL}${pathAndQuery}`;
+  const headers = { ...req.headers, host: new URL(OLLAMA_URL).host };
   delete headers["origin"];
   delete headers["referer"];
   try {
@@ -348,7 +361,10 @@ app.listen(PORT, () => {
   console.log(`  POST /api/quantis/data`);
   console.log(`  GET  /api/quantis/settings`);
   console.log(`  PUT  /api/quantis/settings`);
+  if (process.env.RESEARCH_NEU_DEPLOY === "1" || process.env.RESEARCH_NEU_DEPLOY === "true") {
+    console.log(`  [research.neu.edu.vn] Mặc định: khi chưa có settings.json, GET /api/quantis/settings trả về cấu hình research (người dùng không cần cấu hình).`);
+  }
   if (ANALYZE_PYTHON_URL) console.log(`  *    /api/quantis/analyze/* -> ${ANALYZE_PYTHON_URL}/api/quantis/analyze/*`);
-  console.log(`  *    /api/quantis/ollama/* -> ${OLLAMA_UPSTREAM_URL}/*`);
+  console.log(`  *    /api/quantis/ollama/* -> ${OLLAMA_URL}/*`);
   console.log(`  *    /api/quantis/archive/* -> ${ARCHIVE_NEU_URL}/api/v1/*`);
 });

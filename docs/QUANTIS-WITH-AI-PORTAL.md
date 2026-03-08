@@ -115,6 +115,28 @@ Backend Python (phân tích) được cấu hình **trên server** (biến `ANAL
 
 ---
 
+## Mặc định khi chạy trên research.neu.edu.vn
+
+Khi người dùng **không chỉnh** gì trong Cài đặt và truy cập từ **research.neu.edu.vn**, ứng dụng tự dùng:
+
+| Thành phần | URL mặc định |
+|------------|----------------|
+| Backend Quantis (Node) | https://research.neu.edu.vn/api/quantis/backend |
+| Backend Python (phân tích) | https://research.neu.edu.vn/api/quantis/backend-python (proxy qua Node khi cấu hình ANALYZE_PYTHON_URL) |
+| Ollama (API AI) | https://research.neu.edu.vn/ollama/v1 |
+| Archive (tìm kiếm dataset) | https://research.neu.edu.vn/api/archive/ |
+| Archive file (tải file) | https://research.neu.edu.vn/api/archive-file/ |
+| Mô hình AI mặc định | qwen3:8b |
+
+Chỉ cần đảm bảo server research.neu.edu.vn đã cấu hình proxy tương ứng. **Để người dùng hoàn toàn không cần mở Cài đặt**, khi deploy backend Node lên research.neu.edu.vn hãy đặt biến môi trường:
+
+- **`RESEARCH_NEU_DEPLOY=1`** — Khi chưa có file `data/settings.json`, GET `/api/quantis/settings` sẽ trả về sẵn các URL mặc định (backend, archive, archive-file, ollama, mô hình qwen3:8b). Mọi client lần đầu mở app sẽ nhận cấu hình này, không cần chỉnh gì.
+- **`RESEARCH_NEU_BASE_URL`** (tùy chọn) — Base URL, mặc định `https://research.neu.edu.vn`. Chỉ cần đổi nếu dùng domain/port khác.
+
+Ví dụ Docker / systemd: `RESEARCH_NEU_DEPLOY=1` (và nếu cần `RESEARCH_NEU_BASE_URL=https://research.neu.edu.vn`). Sau khi có người bấm Lưu trong Cài đặt, backend sẽ ghi `settings.json` và dùng file đó thay vì mặc định.
+
+---
+
 ## Cấu hình dùng chung (mọi tài khoản)
 
 Khi đã cấu hình **Địa chỉ backend Quantis** và backend đang chạy, các mục trong **Cài đặt** (Backend Quantis, Archive, Archive file, API AI, Mô hình AI) khi bấm **Lưu** sẽ được ghi lên server (file `backend/data/settings.json`). Cấu hình này **áp dụng cho tất cả tài khoản** dùng cùng instance backend. Khi mở ứng dụng, frontend tải cấu hình từ `GET /api/quantis/settings` và ưu tiên dùng thay cho localStorage. Nếu không kết nối được backend thì chỉ lưu trên trình duyệt (theo từng máy). Để dùng cơ sở dữ liệu thật (PostgreSQL, MongoDB…) thay cho file JSON, có thể sửa backend đọc/ghi từ DB trong `readSettings` / `writeSettings`.

@@ -32,7 +32,7 @@ Chỉ cần tạo stack từ Git repository, không cần clone hay paste file:
    - **Branch:** `main`
 5. (Tùy chọn) **Environment variables** — nếu dùng Docker Hub user khác hoặc Ollama khác:
    - `DOCKERHUB_USER` = username Docker Hub (mặc định: Lampx83)
-   - `OLLAMA_UPSTREAM_URL` = URL Ollama (mặc định: `http://host.docker.internal:8002`)
+   - `OLLAMA_URL` = URL Ollama (mặc định: `https://research.neu.edu.vn/ollama`)
 6. **Deploy the stack**.
 
 Portainer sẽ kéo file `portainer-stack.yml` từ repo và dùng image đã build sẵn trên Docker Hub. Backend **Node** lộ cổng **4001**, backend **Python** (phân tích) lộ cổng **4000**. Kiểm tra:
@@ -46,7 +46,7 @@ Portainer sẽ kéo file `portainer-stack.yml` từ repo và dùng image đã bu
 3. Đặt tên stack (ví dụ `quantis`).
 4. Chọn **Web editor**, dán nội dung file `docker-compose.yml` (ở thư mục gốc Quantis) — dùng khi bạn cần build tại chỗ từ source.
 5. Chỉnh **Environment variables** (nếu cần):
-   - `OLLAMA_UPSTREAM_URL`: URL Ollama trên host (nếu chạy port khác mặc định, đổi đúng port, vd. `http://host.docker.internal:8002`).
+   - `OLLAMA_URL`: URL Ollama (mặc định: https://research.neu.edu.vn/ollama).
    - `ARCHIVE_NEU_TOKEN`: Chỉ thêm nếu Archive NEU yêu cầu token.
 6. **Deploy the stack**.
 7. Kiểm tra: mở `<URL-backend>:4001` → trang thông tin backend; `<URL-backend>:4001/api/quantis/health` → `{"status":"ok","service":"quantis"}`.
@@ -113,7 +113,7 @@ Sau khi build lại frontend với biến môi trường trên và đưa lên AI
 
 - Trong stack Portainer có thể thêm/sửa biến môi trường:
   - `PORT`: port của backend Node (mặc định 4001).
-  - `OLLAMA_UPSTREAM_URL`: URL Ollama (vd. `http://host.docker.internal:8002` nếu Ollama chạy port 8002 trên host).
+  - `OLLAMA_URL`: URL Ollama (vd. https://research.neu.edu.vn/ollama).
 - Sau khi sửa, **Re-deploy** stack.
 
 ## Xử lý lỗi "Connection reset by peer" khi curl localhost:4000

@@ -9,7 +9,7 @@ services:
     environment:
       PORT: "4001"
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
-      OLLAMA_UPSTREAM_URL: "http://host.docker.internal:8002"
+      OLLAMA_URL: "https://research.neu.edu.vn/ollama"
       ANALYZE_PYTHON_URL: "http://quantis-python:8000"
     volumes:
       - quantis-data:/app/data

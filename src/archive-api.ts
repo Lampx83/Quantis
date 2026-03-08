@@ -7,13 +7,25 @@
 
 import { loadArchiveUrl, loadArchiveFileUrl, loadBackendApiUrl } from "./store";
 
-const _env = typeof import.meta !== "undefined" ? (import.meta as { env?: { VITE_ARCHIVE_NEU_URL?: string; VITE_QUANTIS_API_URL?: string } }).env : undefined;
+const _env = typeof import.meta !== "undefined" ? (import.meta as { env?: { VITE_ARCHIVE_NEU_URL?: string; VITE_QUANTIS_API_URL?: string; VITE_RESEARCH_NEU_ARCHIVE?: string; VITE_RESEARCH_NEU_ARCHIVE_FILE?: string } }).env : undefined;
 const explicitBase = _env?.VITE_ARCHIVE_NEU_URL;
 const envBackendBase = _env?.VITE_QUANTIS_API_URL;
 const isLocalhost =
   typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-/** API Archive mặc định khi không cấu hình (DataNEU). */
-const DEFAULT_ARCHIVE_BASE = "http://101.96.66.222:8010";
+const isResearchNeu =
+  typeof window !== "undefined" && window.location.hostname.toLowerCase() === "research.neu.edu.vn";
+const RESEARCH_NEU_ARCHIVE = _env?.VITE_RESEARCH_NEU_ARCHIVE ?? "https://research.neu.edu.vn/api/archive";
+const RESEARCH_NEU_ARCHIVE_FILE = _env?.VITE_RESEARCH_NEU_ARCHIVE_FILE ?? "https://research.neu.edu.vn/api/archive-file";
+
+/** URL Archive mặc định để hiển thị trong form (research.neu.edu.vn). */
+export function getDefaultArchiveUrl(): string {
+  return isResearchNeu ? RESEARCH_NEU_ARCHIVE : "";
+}
+
+/** URL Archive file mặc định để hiển thị trong form (research.neu.edu.vn). */
+export function getDefaultArchiveFileUrl(): string {
+  return isResearchNeu ? RESEARCH_NEU_ARCHIVE_FILE : "";
+}
 
 /** Trả về base URL hiện tại cho Archive API (cấu hình từ Cài đặt > env > proxy > mặc định). */
 function getEffectiveArchiveBase(): string {
@@ -22,7 +34,8 @@ function getEffectiveArchiveBase(): string {
   const backendBase = loadBackendApiUrl() || (envBackendBase != null && String(envBackendBase).trim() !== "" ? String(envBackendBase).trim().replace(/\/+$/, "") : "");
   if (backendBase) return backendBase + "/api/quantis/archive";
   if (explicitBase != null && String(explicitBase).trim() !== "") return String(explicitBase).trim();
-  return isLocalhost ? "/api/quantis/archive" : DEFAULT_ARCHIVE_BASE;
+  if (isResearchNeu) return RESEARCH_NEU_ARCHIVE;
+  return isLocalhost ? "/api/quantis/archive" : RESEARCH_NEU_ARCHIVE;
 }
 
 /** Base URL đầy đủ cho API (có /api/v1 khi gọi trực tiếp, hoặc origin + path khi proxy). */
@@ -33,13 +46,14 @@ function getEffectiveArchiveApi(): string {
   return `${base}/api/v1`;
 }
 
-/** Host tải file: chỉ từ Cài đặt hoặc env VITE_ARCHIVE_FILE_BASE_URL; không có mặc định fix cứng. */
+/** Host tải file: chỉ từ Cài đặt hoặc env; research.neu.edu.vn mặc định /api/archive-file. */
 function getEffectiveArchiveFileBase(): string {
   const stored = loadArchiveFileUrl();
   if (stored != null && String(stored).trim() !== "") return String(stored).trim().replace(/\/+$/, "");
   const envBase =
     typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_ARCHIVE_FILE_BASE_URL?: string } }).env?.VITE_ARCHIVE_FILE_BASE_URL;
   if (envBase != null && String(envBase).trim() !== "") return String(envBase).trim().replace(/\/+$/, "");
+  if (isResearchNeu) return RESEARCH_NEU_ARCHIVE_FILE;
   return "";
 }
 

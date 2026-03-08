@@ -6,16 +6,35 @@
 import type { Dataset, Workflow } from "./types";
 import { loadBackendApiUrl, loadAiApiUrl } from "./store";
 
+/** Base URL backend Quantis (để hiển thị trong Cài đặt). Mặc định research.neu.edu.vn */
+const RESEARCH_NEU_HOST = "research.neu.edu.vn";
+const RESEARCH_NEU_BACKEND = "https://research.neu.edu.vn/api/quantis/backend";
+const RESEARCH_NEU_BACKEND_PYTHON = "https://research.neu.edu.vn/api/quantis/backend-python";
+const RESEARCH_NEU_OLLAMA = "https://research.neu.edu.vn/ollama/v1";
+const RESEARCH_NEU_DEFAULT_MODEL = "qwen3:8b";
+
+function isResearchNeu(): boolean {
+  return typeof window !== "undefined" && window.location.hostname.toLowerCase() === RESEARCH_NEU_HOST;
+}
+
 function getBase(): string {
   const stored = loadBackendApiUrl();
   const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_API_URL?: string } }).env?.VITE_QUANTIS_API_URL) || "";
   const b = (stored != null && String(stored).trim() !== "") ? stored : env;
-  return String(b).replace(/\/+$/, "");
+  const base = String(b).replace(/\/+$/, "");
+  if (base) return base;
+  if (isResearchNeu()) return RESEARCH_NEU_BACKEND;
+  return "";
 }
 
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). */
 export function getApiBase(): string {
   return getBase();
+}
+
+/** URL backend Python mặc định khi chạy trên research.neu.edu.vn (phân tích định lượng). */
+export function getDefaultBackendPythonUrl(): string {
+  return isResearchNeu() ? RESEARCH_NEU_BACKEND_PYTHON : "";
 }
 
 /** Lấy cấu hình dùng chung từ server (áp dụng cho mọi tài khoản). */
@@ -1167,17 +1186,31 @@ export async function saveData(payload: { datasets: Dataset[]; workflows: Workfl
   }
 }
 
-/** Gọi LLM (OpenAI/Ollama). Có thể cấu hình địa chỉ API trong Cài đặt (hoặc VITE_QUANTIS_AI_API). */
-const DEFAULT_OLLAMA = "http://localhost:11434/v1"
-const defModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL
+/** Gọi LLM (OpenAI/Ollama). Có thể cấu hình địa chỉ API trong Cài đặt (hoặc .env OLLAMA_URL / VITE_OLLAMA_URL). */
+const DEFAULT_OLLAMA = "http://localhost:11434/v1";
+const defModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
 
-/** Base URL API AI (Ollama): Cài đặt → env VITE_QUANTIS_AI_API → mặc định localhost:11434/v1. */
+/** Chuẩn hóa base Ollama thành URL API (có /v1). */
+function normalizeOllamaApiBase(url: string): string {
+  const u = String(url).trim().replace(/\/+$/, "");
+  if (!u) return "";
+  return u.endsWith("/v1") ? u : `${u}/v1`;
+}
+
+/** Base URL API AI (Ollama): Cài đặt → env VITE_OLLAMA_URL → research.neu.edu.vn mặc định → localhost. */
 export function getAiApiBase(): string {
   const stored = loadAiApiUrl();
-  if (stored != null && String(stored).trim() !== "") return String(stored).trim().replace(/\/+$/, "");
-  const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_AI_API?: string } }).env?.VITE_QUANTIS_AI_API);
-  if (env != null && String(env).trim() !== "") return String(env).trim().replace(/\/+$/, "");
+  if (stored != null && String(stored).trim() !== "") return normalizeOllamaApiBase(stored);
+  const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_OLLAMA_URL?: string } }).env?.VITE_OLLAMA_URL);
+  if (env != null && env !== false && String(env).trim() !== "") return normalizeOllamaApiBase(String(env));
+  if (isResearchNeu()) return RESEARCH_NEU_OLLAMA;
   return DEFAULT_OLLAMA;
+}
+
+/** Mô hình AI mặc định khi không cấu hình: research.neu.edu.vn = qwen3:8b, còn lại = llama3.2:8b. */
+export function getDefaultAiModel(): string {
+  if (isResearchNeu()) return RESEARCH_NEU_DEFAULT_MODEL;
+  return "llama3.2:8b";
 }
 
 /** Kiểm tra API AI (Ollama) có phản hồi /api/tags không. */

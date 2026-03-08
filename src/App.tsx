@@ -6058,7 +6058,7 @@ function AIAssistPanel({
   const dragStartRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const api = quantisApi.getAiApiBase();
   const defaultModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
-  const modelToUse = loadAiModel() ?? defaultModel ?? undefined;
+  const modelToUse = loadAiModel() ?? defaultModel ?? quantisApi.getDefaultAiModel();
 
   const fullContext = [metadata?.trim(), process?.trim(), context?.trim()].filter(Boolean).length
     ? [
@@ -6425,7 +6425,7 @@ function AIAssistPanel({
 function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: Dataset; compact?: boolean }) {
   const api = quantisApi.getAiApiBase();
   const defaultModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
-  const modelToUse = loadAiModel() ?? defaultModel ?? undefined;
+  const modelToUse = loadAiModel() ?? defaultModel ?? quantisApi.getDefaultAiModel();
   const systemHint = "Bạn là trợ lý chuyên về ứng dụng Quantis và phân tích định lượng. Nhiệm vụ: (1) Hướng dẫn cách sử dụng ứng dụng Quantis (import dữ liệu, các tab Khám phá, Phân tích thống kê, Trực quan, kiểm định, hồi quy, SEM, v.v.). (2) Gợi ý phương pháp phân tích định lượng phù hợp, cách chọn kiểm định, diễn giải kết quả, báo cáo APA. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt.";
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [input, setInput] = useState("");
@@ -6649,19 +6649,19 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const envModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>(() => loadAiModel() || envModel || "llama3.2:8b");
+  const [selectedModel, setSelectedModel] = useState<string>(() => loadAiModel() || envModel || quantisApi.getDefaultAiModel());
 
   const defaultBackendUrl = loadBackendApiUrl() || quantisApi.getApiBase() || "";
   const [backendUrlInput, setBackendUrlInput] = useState(defaultBackendUrl);
   const [backendTestLoading, setBackendTestLoading] = useState(false);
   const [backendTestResult, setBackendTestResult] = useState<{ node: boolean; python: boolean } | null>(null);
 
-  const defaultArchiveUrl = loadArchiveUrl() || "";
+  const defaultArchiveUrl = loadArchiveUrl() || archiveApi.getDefaultArchiveUrl();
   const [archiveUrlInput, setArchiveUrlInput] = useState(defaultArchiveUrl);
   const [archiveTestLoading, setArchiveTestLoading] = useState(false);
   const [archiveTestResult, setArchiveTestResult] = useState<boolean | null>(null);
 
-  const defaultArchiveFileUrl = loadArchiveFileUrl() || "";
+  const defaultArchiveFileUrl = loadArchiveFileUrl() || archiveApi.getDefaultArchiveFileUrl();
   const [archiveFileUrlInput, setArchiveFileUrlInput] = useState(defaultArchiveFileUrl);
   const [archiveFileTestLoading, setArchiveFileTestLoading] = useState(false);
   const [archiveFileTestResult, setArchiveFileTestResult] = useState<boolean | null>(null);
@@ -6674,8 +6674,8 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     setBackendUrlInput(loadBackendApiUrl() || quantisApi.getApiBase() || "");
-    setArchiveUrlInput(loadArchiveUrl() || "");
-    setArchiveFileUrlInput(loadArchiveFileUrl() || "");
+    setArchiveUrlInput(loadArchiveUrl() || archiveApi.getDefaultArchiveUrl());
+    setArchiveFileUrlInput(loadArchiveFileUrl() || archiveApi.getDefaultArchiveFileUrl());
     setAiApiUrlInput(loadAiApiUrl() || quantisApi.getAiApiBase() || "");
   }, []);
 
@@ -6690,7 +6690,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       const stored = loadAiModel();
       if (stored && filtered.includes(stored)) setSelectedModel(stored);
       else if (envModel && filtered.includes(envModel)) setSelectedModel(envModel);
-      else if (filtered.length > 0 && !loadAiModel()) setSelectedModel(filtered[0]);
+      else if (filtered.length > 0 && !loadAiModel()) {
+        const def = quantisApi.getDefaultAiModel();
+        setSelectedModel(filtered.includes(def) ? def : filtered[0]);
+      }
     }).catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [api, aiApiKey]);
@@ -6814,11 +6817,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
           <Settings className="w-4 h-4" /> Cài đặt
         </h3>
-        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">Lưu sẽ ghi lên server (áp dụng cho mọi tài khoản). Nếu không kết nối được backend Quantis thì chỉ lưu trên trình duyệt.</p>
+        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">Lưu sẽ ghi lên server (áp dụng cho mọi tài khoản). Nếu không kết nối được backend Quantis thì chỉ lưu trên trình duyệt. Trên <strong>research.neu.edu.vn</strong> mặc định: Backend <code>/api/quantis/backend</code>, Backend Python <code>/api/quantis/backend-python</code>, Ollama <code>/ollama/v1</code>, Archive <code>/api/archive</code>, Archive file <code>/api/archive-file</code>, mô hình qwen3:8b — các ô được điền sẵn nếu chưa chỉnh.</p>
         <div className="space-y-3 text-sm">
           <div className={rowClass}>
             <label className={labelClass}>Backend Quantis (Node)</label>
-            <p className={hintClass}>Phân tích định lượng, proxy. Python: cấu hình ANALYZE_PYTHON_URL trên server.</p>
+            <p className={hintClass}>Trên research.neu.edu.vn mặc định: backend Node tại /api/quantis/backend, backend Python tại /api/quantis/backend-python (cấu hình ANALYZE_PYTHON_URL trên server).</p>
             <div className={inputRowClass}>
               <input type="url" value={backendUrlInput} onChange={(e) => { setBackendUrlInput(e.target.value); setBackendTestResult(null); }} onBlur={handleSaveBackendUrl} placeholder="http://localhost:4001" className={inputClass} />
               <button type="button" onClick={handleSaveBackendUrl} className={btnClass}>Lưu</button>
@@ -6853,7 +6856,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className={rowClass}>
             <label className={labelClass}>API AI (Ollama)</label>
-            <p className={hintClass}>Địa chỉ API Ollama (vd. https://research.neu.edu.vn/ollama/v1). Để trống = env VITE_QUANTIS_AI_API hoặc localhost:11434/v1.</p>
+            <p className={hintClass}>Địa chỉ API Ollama. Mặc định từ .env (OLLAMA_URL / VITE_OLLAMA_URL): https://research.neu.edu.vn/ollama/. Để trống = giá trị build hoặc localhost:11434/v1.</p>
             <div className={inputRowClass}>
               <input type="url" value={aiApiUrlInput} onChange={(e) => setAiApiUrlInput(e.target.value)} onBlur={handleSaveAiApiUrl} placeholder="http://localhost:11434/v1" className={inputClass} />
               <button type="button" onClick={handleSaveAiApiUrl} className={btnClass}>Lưu</button>
@@ -6874,7 +6877,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                 {selectedModel && <span className="text-xs text-neutral-500">Đang dùng: {selectedModel}</span>}
               </div>
             ) : (
-              <p className="text-xs text-amber-600 dark:text-amber-400">Chưa lấy được danh sách. Cấu hình địa chỉ API AI ở trên (hoặc VITE_QUANTIS_AI_API trong .env) rồi bấm Kiểm tra.</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">Chưa lấy được danh sách. Cấu hình địa chỉ API AI ở trên (hoặc OLLAMA_URL / VITE_OLLAMA_URL trong .env) rồi bấm Kiểm tra.</p>
             )}
           </div>
         </div>

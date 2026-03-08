@@ -107,7 +107,7 @@ Tài liệu này liệt kê **đã có**, **thiếu / chưa đủ**, và **check
 |-----------|---------|--------|
 | Backend API (data, health) | ✅ | getData, saveData, checkBackendAvailable |
 | Archive NEU (frontend) | ✅ | search, files, download |
-| AI gợi ý (LLM) | ✅ | Ollama/OpenAI (VITE_QUANTIS_AI_API). Mọi kết quả có nút AI với prompt **Viết đoạn Results theo APA** và **Giải thích ý nghĩa kết quả**. Cài đặt chọn model. |
+| AI gợi ý (LLM) | ✅ | Ollama (OLLAMA_URL / VITE_OLLAMA_URL trong .env). Mọi kết quả có nút AI với prompt **Viết đoạn Results theo APA** và **Giải thích ý nghĩa kết quả**. Cài đặt chọn model. |
 | Lưu trữ local (localStorage) | ✅ | Khi không backend |
 
 ---
