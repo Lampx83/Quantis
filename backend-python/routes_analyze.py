@@ -12,6 +12,7 @@ from analysis_impl import (
     run_anova,
     run_ancova,
     run_manova,
+    run_mancova,
     run_kruskal_wallis,
     run_ols,
     run_logistic,
@@ -101,6 +102,13 @@ class ManovaBody(BaseModel):
     rows: list[list[str]]
     factorCol: str
     valueCols: list[str]
+
+
+class MancovaBody(BaseModel):
+    rows: list[list[str]]
+    factorCol: str
+    valueCols: list[str]
+    covariateCols: list[str]
 
 
 class OLSBody(BaseModel):
@@ -466,6 +474,23 @@ async def analyze_manova(body: ManovaBody):
         result = run_manova(body.rows, body.factorCol, body.valueCols)
         if result is None:
             raise HTTPException(status_code=400, detail="Không đủ dữ liệu hoặc cột không hợp lệ (cần nhân tố và ít nhất 2 biến phụ thuộc)")
+        if result.get("error"):
+            raise HTTPException(status_code=400, detail=result["error"])
+        return {"result": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mancova")
+async def analyze_mancova(body: MancovaBody):
+    try:
+        result = run_mancova(body.rows, body.factorCol, body.valueCols, body.covariateCols)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Không đủ dữ liệu hoặc cột không hợp lệ (cần nhân tố, ít nhất 2 biến phụ thuộc và ít nhất 1 covariate)")
         if result.get("error"):
             raise HTTPException(status_code=400, detail=result["error"])
         return {"result": result}

@@ -10,7 +10,7 @@ import { loadBackendApiUrl, loadAiApiUrl } from "./store";
 const RESEARCH_NEU_HOST = "research.neu.edu.vn";
 const RESEARCH_NEU_BACKEND = "https://research.neu.edu.vn/api/quantis/backend";
 const RESEARCH_NEU_BACKEND_PYTHON = "https://research.neu.edu.vn/api/quantis/backend-python";
-const RESEARCH_NEU_OLLAMA = "https://research.neu.edu.vn/ollama/v1";
+const RESEARCH_NEU_OLLAMA = "https://research.neu.edu.vn/ollama";
 const RESEARCH_NEU_DEFAULT_MODEL = "qwen3:8b";
 
 function isResearchNeu(): boolean {
@@ -266,6 +266,28 @@ export async function analyzeManova(
       credentials: "include",
       headers: getHeaders(),
       body: JSON.stringify({ rows, factorCol, valueCols }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Phân tích: MANCOVA (MANOVA + kiểm soát covariate). */
+export async function analyzeMancova(
+  rows: string[][],
+  factorCol: string,
+  valueCols: string[],
+  covariateCols: string[]
+): Promise<{ factorCol: string; valueCols: string[]; covariateCols: string[]; n: number; summary?: string; factorTest?: string; error?: string } | null> {
+  try {
+    const res = await fetch(`${getANALYZE_BASE()}/mancova`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, factorCol, valueCols, covariateCols }),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -1240,13 +1262,18 @@ function normalizeOllamaApiBase(url: string): string {
   return u.endsWith("/v1") ? u : `${u}/v1`;
 }
 
-/** Base URL API AI (Ollama): Cài đặt → env VITE_OLLAMA_URL → research.neu.edu.vn mặc định → localhost. */
+/** Base URL API AI (Ollama): Cài đặt → env VITE_OLLAMA_URL → proxy qua backend (nếu có) → research.neu.edu.vn → localhost. */
 export function getAiApiBase(): string {
   const stored = loadAiApiUrl();
   if (stored != null && String(stored).trim() !== "") return normalizeOllamaApiBase(stored);
   const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_OLLAMA_URL?: string } }).env?.VITE_OLLAMA_URL);
   if (env != null && env !== false && String(env).trim() !== "") return normalizeOllamaApiBase(String(env));
   if (isResearchNeu()) return RESEARCH_NEU_OLLAMA;
+  const backendBase = loadBackendApiUrl();
+  if (backendBase != null && String(backendBase).trim() !== "") {
+    const b = String(backendBase).trim().replace(/\/+$/, "");
+    return `${b}/api/quantis/ollama/v1`;
+  }
   return DEFAULT_OLLAMA;
 }
 
@@ -1299,6 +1326,21 @@ export async function getOllamaModels(apiBase: string): Promise<string[]> {
     return list
   } catch {
     return []
+  }
+}
+
+/** Lấy danh sách model qua proxy backend Quantis (tránh CORS khi Ollama ở domain khác). */
+export async function getOllamaModelsViaProxy(backendBase: string): Promise<string[]> {
+  const base = (backendBase || "").replace(/\/+$/, "");
+  if (!base) return [];
+  const url = `${base}/api/quantis/ollama/api/tags`;
+  try {
+    const res = await fetch(url, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { models?: Array<{ name: string }> };
+    return data?.models?.map((m) => m.name) ?? [];
+  } catch {
+    return [];
   }
 }
 
@@ -1389,9 +1431,7 @@ export async function aiComplete(apiBase: string, prompt: string, systemHint?: s
   const url = String(base).includes("completions") ? base : `${String(base).replace(/\/+$/, "")}/chat/completions`
   const isLocalOllama = /ollama/i.test(String(base)) || /localhost:11434/.test(String(base))
   const fallbackModel = isLocalOllama ? "llama3.2:8b" : "gpt-4o-mini"
-  let model = modelOverride || defModel || fallbackModel
-  const sizeB = parseModelSizeB(model)
-  if (sizeB !== null && sizeB < 8) model = (defModel && (parseModelSizeB(defModel) ?? 8) >= 8) ? defModel : fallbackModel
+  const model = modelOverride || defModel || fallbackModel
   const messages = systemWithHint
     ? [{ role: "system" as const, content: systemWithHint }, { role: "user" as const, content: promptToSend }]
     : [{ role: "user" as const, content: promptToSend }]

@@ -394,5 +394,21 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
         return { workflow: w, datasets: [d] };
       },
     },
+    {
+      id: "demo-crm",
+      domain: "CRM",
+      name: "Phân khúc khách hàng (K-means)",
+      description: "Đặc điểm khách hàng. K-means phân cụm, tương quan, mô tả theo nhóm.",
+      getWorkflowAndData: () => {
+        const d = datasetFromSampleDef(def("customer-seg"));
+        const steps = makeSteps(
+          { 0: "Đã import 75 dòng, 5 cột (tuổi, thu_nhập_tr, số_giao_dịch, giá_trị_đơn_tr, khu_vực)", 3: "Đã mô tả theo khu vực và thu nhập", 5: "Đã chạy K-means phân cụm (tab Học máy)" },
+          d.rows,
+          d.columns
+        );
+        const w: Workflow = { id: generateId(), name: "Workflow mẫu — CRM (phân cụm)", description: "Phân tích phân khúc khách hàng với K-means.", steps, datasetId: d.id, datasetIds: [d.id], createdAt: now, updatedAt: now };
+        return { workflow: w, datasets: [d] };
+      },
+    },
   ];
 }

@@ -388,8 +388,8 @@ function regularizedIncompleteBeta(x: number, a: number, b: number): number {
 }
 
 function betacf(x: number, a: number, b: number): number {
-  const maxIter = 200;
-  const epsilon = 3e-7;
+  const maxIter = 1000;
+  const epsilon = 1e-12;
   let m = 1;
   let aa: number;
   const qab = a + b;

@@ -61,8 +61,7 @@ import {
   ImagePlus,
 } from "lucide-react";
 import { getPortalTheme, applyPortalTheme } from "./portal-theme";
-import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadAiApiUrl, saveAiApiUrl, saveAiFeedback, saveAppFeedback, setServerSettings, loadReportCharts, saveReportChart, removeReportChart } from "./store";
-import type { SavedReportChart } from "./store";
+import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadAiApiUrl, saveAiApiUrl, saveAiFeedback, saveAppFeedback, setServerSettings } from "./store";
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
 import { AI_MAX_PROMPT_CHARS } from "./api";
@@ -107,8 +106,8 @@ export default function App() {
   const [analysisTab, setAnalysisTab] = useState<AnalysisTab>("correlation");
   const [reproTab, setReproTab] = useState<ReproducibilityTab>("workflows");
   const [presentationTab, setPresentationTab] = useState<PresentationTab>("visualization");
-  type PresentationChartType = "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "histogramDensity" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density";
-  const [presentationChartType, setPresentationChartType] = useState<PresentationChartType>("scatter");
+  type PresentationChartType = "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density";
+  const [presentationChartType, setPresentationChartType] = useState<PresentationChartType>("bar");
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(() => loadSelectedDatasetId());
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [selectedWorkflowStepId, setSelectedWorkflowStepId] = useState<string | null>(null);
@@ -143,6 +142,7 @@ export default function App() {
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const [showDemoGallery, setShowDemoGallery] = useState(false);
   const [showSampleModal, setShowSampleModal] = useState(false);
+  const [sampleDatasetSearch, setSampleDatasetSearch] = useState("");
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [archiveSearchResult, setArchiveSearchResult] = useState<ArchiveSearchItem[]>([]);
   const [archiveSearchLoading, setArchiveSearchLoading] = useState(false);
@@ -850,24 +850,20 @@ export default function App() {
         {/* Trực quan: toolbar loại biểu đồ (cùng vị trí với tab Data / Analysis) */}
         {mainSection === "presentation" && (!selectedWorkflowId || selectedStep) && (
           <div role="toolbar" aria-label="Loại biểu đồ" className="toolbar flex-shrink-0 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
-            <button type="button" onClick={() => setPresentationChartType("scatter")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "scatter" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Scatter"><ScatterChartIcon className="w-4 h-4 shrink-0" /><span>Scatter</span></button>
-            <button type="button" onClick={() => setPresentationChartType("bar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "bar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột"><BarChart3 className="w-4 h-4 shrink-0" /><span>Cột</span></button>
-            <button type="button" onClick={() => setPresentationChartType("line")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "line" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Đường"><LineChartIcon className="w-4 h-4 shrink-0" /><span>Đường</span></button>
-            <button type="button" onClick={() => setPresentationChartType("area")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "area" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Vùng"><AreaChartIcon className="w-4 h-4 shrink-0" /><span>Vùng</span></button>
-            <button type="button" onClick={() => setPresentationChartType("stackedBar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "stackedBar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột chồng"><Layers className="w-4 h-4 shrink-0" /><span>Cột chồng</span></button>
-            <button type="button" onClick={() => setPresentationChartType("pie")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "pie" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Tròn"><PieChartIcon className="w-4 h-4 shrink-0" /><span>Tròn</span></button>
-            <button type="button" onClick={() => setPresentationChartType("box")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "box" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Box plot"><BoxSelect className="w-4 h-4 shrink-0" /><span>Box plot</span></button>
-            <button type="button" onClick={() => setPresentationChartType("histogram")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "histogram" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Histogram"><BarChart2 className="w-4 h-4 shrink-0" /><span>Histogram</span></button>
-            <button type="button" onClick={() => setPresentationChartType("histogramDensity")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "histogramDensity" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột tần suất + đường mật độ"><BarChart2 className="w-4 h-4 shrink-0" /><span>Cột + mật độ</span></button>
-            <button type="button" onClick={() => setPresentationChartType("density")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "density" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Density so sánh hai nhóm"><TrendingUp className="w-4 h-4 shrink-0" /><span>Density</span></button>
-            <button type="button" onClick={() => setPresentationChartType("radar")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "radar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Radar"><Gauge className="w-4 h-4 shrink-0" /><span>Radar</span></button>
-            <button type="button" onClick={() => setPresentationChartType("heatmap")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "heatmap" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Heatmap tương quan"><Grid3X3 className="w-4 h-4 shrink-0" /><span>Heatmap</span></button>
-            <button type="button" onClick={() => setPresentationChartType("summary")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "summary" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Thẻ tóm tắt"><LayoutTemplate className="w-4 h-4 shrink-0" /><span>Thẻ tóm tắt</span></button>
-            <button type="button" onClick={() => setPresentationChartType("donut")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "donut" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Donut"><CircleDot className="w-4 h-4 shrink-0" /><span>Donut</span></button>
-            <button type="button" onClick={() => setPresentationChartType("barH")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "barH" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột ngang"><BarChart3 className="w-4 h-4 shrink-0 rotate-90" /><span>Cột ngang</span></button>
-            <button type="button" onClick={() => setPresentationChartType("dashboard")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "dashboard" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Dashboard"><LayoutDashboard className="w-4 h-4 shrink-0" /><span>Dashboard</span></button>
-            <button type="button" onClick={() => setPresentationChartType("multiLine")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "multiLine" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Đa đường"><TrendingUp className="w-4 h-4 shrink-0" /><span>Đa đường</span></button>
-            <button type="button" onClick={() => setPresentationChartType("crosstab")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${presentationChartType === "crosstab" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Bảng chéo"><Table2 className="w-4 h-4 shrink-0" /><span>Bảng chéo</span></button>
+            {/* Thứ tự: hay dùng trong báo cáo nghiên cứu lên trước */}
+            <button type="button" onClick={() => setPresentationChartType("bar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "bar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột"><BarChart3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột</span></button>
+            <button type="button" onClick={() => setPresentationChartType("line")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "line" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Đường"><LineChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Đường</span></button>
+            <button type="button" onClick={() => setPresentationChartType("scatter")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "scatter" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Phân tán"><ScatterChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Phân tán</span></button>
+            <button type="button" onClick={() => setPresentationChartType("histogram")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "histogram" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Histogram"><BarChart2 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Histogram</span></button>
+            <button type="button" onClick={() => setPresentationChartType("box")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "box" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Box plot"><BoxSelect className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Box plot</span></button>
+            <button type="button" onClick={() => setPresentationChartType("heatmap")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "heatmap" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Heatmap tương quan"><Grid3X3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Heatmap</span></button>
+            <button type="button" onClick={() => setPresentationChartType("pie")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "pie" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Tròn"><PieChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Tròn</span></button>
+            <button type="button" onClick={() => setPresentationChartType("stackedBar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "stackedBar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột chồng"><Layers className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột chồng</span></button>
+            <button type="button" onClick={() => setPresentationChartType("barH")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "barH" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột ngang"><BarChart3 className="w-4 h-4 shrink-0 rotate-90" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột ngang</span></button>
+            <button type="button" onClick={() => setPresentationChartType("area")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "area" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Vùng"><AreaChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Vùng</span></button>
+            <button type="button" onClick={() => setPresentationChartType("donut")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "donut" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Donut"><CircleDot className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Donut</span></button>
+            <button type="button" onClick={() => setPresentationChartType("density")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "density" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Density so sánh hai nhóm"><TrendingUp className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Density</span></button>
+            <button type="button" onClick={() => setPresentationChartType("radar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "radar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Radar"><Gauge className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Radar</span></button>
           </div>
         )}
         {/* Toolbar ở theo bước workflow (khi đang xem Các bước, chọn 1 bước) — không hiện khi đang ở tab AI hướng dẫn */}
@@ -1278,7 +1274,7 @@ export default function App() {
           />
         )}
         {mainSection === "presentation" && (!selectedWorkflowId || selectedStep) && (
-          <PresentationView tab={presentationTab} onTabChange={setPresentationTab} selectedDataset={selectedDataset} lastHypothesisResult={lastHypothesisResult} analysisBackendAvailable={analysisBackendAvailable} chartType={presentationChartType} setChartType={setPresentationChartType} />
+          <PresentationView tab={presentationTab} onTabChange={setPresentationTab} selectedDataset={selectedDataset} lastHypothesisResult={lastHypothesisResult} analysisBackendAvailable={analysisBackendAvailable} chartType={presentationChartType} setChartType={setPresentationChartType} showToast={showToast} />
         )}
         {mainSection === "reproducibility" && (
           <ReproducibilityView tab={reproTab} workflows={workflows} setWorkflows={setWorkflows} selectedWorkflowId={selectedWorkflowId} onSelectWorkflow={setSelectedWorkflowId} showToast={showToast} />
@@ -1313,11 +1309,18 @@ export default function App() {
 
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setConfirmDialog(null)}>
-          <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-xl max-w-md w-full border border-neutral-200 dark:border-neutral-700 p-4 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
-            <p className="text-neutral-700 dark:text-neutral-300">{confirmDialog.message}</p>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirmDialog(null)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">Hủy</button>
-              <button type="button" onClick={() => confirmDialog.onConfirm()} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">Xác nhận</button>
+          <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-xl max-w-md w-full border border-neutral-200 dark:border-neutral-700 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-end p-2 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+              <button type="button" onClick={() => setConfirmDialog(null)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-4">
+              <p className="text-neutral-700 dark:text-neutral-300">{confirmDialog.message}</p>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setConfirmDialog(null)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">Hủy</button>
+                <button type="button" onClick={() => confirmDialog.onConfirm()} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">Xác nhận</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1368,19 +1371,42 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="px-4 pb-2 text-sm text-neutral-500 dark:text-neutral-400">Thêm vào workflow hiện tại.</p>
+            <div className="px-4 pb-2">
+              <input
+                type="text"
+                value={sampleDatasetSearch}
+                onChange={(e) => setSampleDatasetSearch(e.target.value)}
+                placeholder="Tìm theo tên, lĩnh vực, mô tả..."
+                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
+              />
+            </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {SAMPLE_DATASETS.map((def) => (
-                <button
-                  key={def.id}
-                  type="button"
-                  onClick={() => addSampleDatasetFromSidebar(def)}
-                  className="w-full text-left p-3 rounded-lg border border-neutral-200 dark:border-neutral-600 hover:border-brand/50 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors"
-                >
-                  <p className="font-medium text-neutral-800 dark:text-neutral-200">{def.name}</p>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{def.description}</p>
-                </button>
-              ))}
+              {(() => {
+                const q = sampleDatasetSearch.trim().toLowerCase();
+                const list = !q
+                  ? SAMPLE_DATASETS
+                  : SAMPLE_DATASETS.filter((def) => {
+                      const name = def.name.toLowerCase();
+                      const domain = def.domain.toLowerCase();
+                      const desc = def.description.toLowerCase();
+                      const tagsStr = (def.tags || []).join(" ").toLowerCase();
+                      return name.includes(q) || domain.includes(q) || desc.includes(q) || tagsStr.includes(q);
+                    });
+                if (list.length === 0) {
+                  return <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4">Không có dataset mẫu nào trùng với từ khóa. Thử gõ khác (vd. t-test, ANOVA, K-means, tương quan).</p>;
+                }
+                return list.map((def) => (
+                  <button
+                    key={def.id}
+                    type="button"
+                    onClick={() => addSampleDatasetFromSidebar(def)}
+                    className="w-full text-left p-3 rounded-lg border border-neutral-200 dark:border-neutral-600 hover:border-brand/50 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors"
+                  >
+                    <p className="font-medium text-neutral-800 dark:text-neutral-200">{def.name}</p>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{def.description}</p>
+                  </button>
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -2470,8 +2496,14 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
       <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Áp dụng</button>
       {showTransformChoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowTransformChoiceModal(false)}>
-          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg max-w-md w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Biến đổi dữ liệu</h3>
+          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Biến đổi dữ liệu</h3>
+              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
             <p className="text-neutral-600 dark:text-neutral-400">Bạn muốn biến đổi dữ liệu gốc hay sinh ra file (dataset) mới?</p>
             <div className="flex flex-col gap-2">
               <button type="button" onClick={() => applyTransform(true)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
@@ -2483,6 +2515,7 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
               <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                 Hủy
               </button>
+            </div>
             </div>
           </div>
         </div>
@@ -3685,6 +3718,26 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
   };
   const importanceFromCoeffs = multiclassResult ? computeFeatureImportanceFromMulticlass(multiclassResult) : [];
 
+  const KMEANS_CLUSTER_COLORS = ["#2563eb", "#16a34a", "#1f2937", "#7c3aed", "#dc2626", "#0891b2", "#ca8a04", "#db2777"];
+  const kmeansScatterData = (() => {
+    if (!kmeansResult || selectedCols.length < 2 || kmeansResult.assignments.length === 0) return null;
+    const headers = rows[0] || [];
+    const indices = selectedCols.map((c) => headers.indexOf(c)).filter((i) => i >= 0);
+    if (indices.length < 2) return null;
+    const data: number[][] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = indices.map((ci) => Number(rows[i][ci]));
+      if (row.every((v) => !Number.isNaN(v))) data.push(row);
+    }
+    if (data.length !== kmeansResult.assignments.length) return null;
+    const pointsBefore = data.map((r) => ({ x: r[0], y: r[1] }));
+    const pointsAfter = data.map((r, i) => ({ x: r[0], y: r[1], cluster: kmeansResult!.assignments[i] }));
+    const centroidPoints = kmeansResult.centroids.map((c) => ({ x: c[0], y: c[1] }));
+    const colX = selectedCols[0];
+    const colY = selectedCols[1];
+    return { pointsBefore, pointsAfter, centroidPoints, colX, colY };
+  })();
+
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Học máy</h2>
@@ -3726,6 +3779,55 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
               </div>
               {kmeansResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
+                  {kmeansScatterData && selectedCols.length >= 2 && (
+                    <div className="mb-6">
+                      <p className="font-medium mb-3">Biểu đồ phân tán (2D: {kmeansScatterData.colX} × {kmeansScatterData.colY})</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2">Trước K-Means</p>
+                          <div className="aspect-square max-w-md w-full rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800/50 p-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ScatterChart margin={{ top: 12, right: 12, bottom: 24, left: 24 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="x" name={kmeansScatterData.colX} type="number" />
+                                <YAxis dataKey="y" name={kmeansScatterData.colY} type="number" />
+                                <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+                                <Scatter data={kmeansScatterData.pointsBefore} fill="#16a34a" name="Điểm" />
+                              </ScatterChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2">Sau K-Means</p>
+                          <div className="aspect-square max-w-md w-full rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800/50 p-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ScatterChart margin={{ top: 12, right: 12, bottom: 24, left: 24 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="x" name={kmeansScatterData.colX} type="number" />
+                                <YAxis dataKey="y" name={kmeansScatterData.colY} type="number" />
+                                <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+                                {Array.from({ length: K }, (_, k) => (
+                                  <Scatter
+                                    key={k}
+                                    data={kmeansScatterData.pointsAfter.filter((p) => p.cluster === k)}
+                                    fill={KMEANS_CLUSTER_COLORS[k % KMEANS_CLUSTER_COLORS.length]}
+                                    name={`Cụm ${k + 1}`}
+                                  />
+                                ))}
+                                <Scatter
+                                  data={kmeansScatterData.centroidPoints}
+                                  fill="#b91c1c"
+                                  shape="diamond"
+                                  name="Tâm cụm"
+                                />
+                                <Legend />
+                              </ScatterChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <AIAssistPanel
                     context={`K-means: ${kmeansResult.centroids.length} cụm, ${kmeansResult.iterations} lần lặp, Within-SS = ${kmeansResult.withinSS.toFixed(2)}. Centroids từng cụm: ${kmeansResult.centroids.map((c, i) => `Cụm ${i + 1}: [${c.map((v) => v.toFixed(2)).join(", ")}]`).join("; ")}.`}
                     quickPrompts={[{ label: "Diễn giải K-means", systemHint: "Bạn là chuyên gia phân cụm (clustering). Giải thích kết quả K-means: số cụm, tâm (centroid) từng cụm trên từng biến, Within-SS. Gợi ý cách đặt tên/đặc trưng từng cụm dựa trên centroid. Trả lời ngắn gọn bằng tiếng Việt." }]}
@@ -3861,7 +3963,7 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                 {importanceFromCoeffs.length > 0 && (
                   <div className="mt-3 h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={importanceFromCoeffs.map((d) => ({ name: d.feature.length > 18 ? d.feature.slice(0, 16) + "?" : d.feature, value: d.importance }))} layout="vertical" margin={{ left: 4, right: 4 }}>
+                      <BarChart data={importanceFromCoeffs.map((d) => ({ name: d.feature.length > 18 ? d.feature.slice(0, 16) + "…" : d.feature, value: d.importance }))} layout="vertical" margin={{ left: 4, right: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis type="number" />
                         <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10 }} />
@@ -3979,7 +4081,7 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showTo
 
 function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAvailable = false, showToast }: { selectedDataset: Dataset; onHypothesisResult?: (r: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null) => void; analysisBackendAvailable?: boolean; showToast: (msg: string) => void }) {
   const rows = getDataRows(selectedDataset);
-  const [testKind, setTestKind] = useState<"ttest" | "chisquare" | "anova" | "ancova" | "manova" | "kruskal" | "nonparametric" | "normality" | "power" | "paired" | "wilcoxon_paired" | "friedman" | "levene" | "mcnemar" | "fisher" | "onesample_ttest" | "binomial" | "twoprop" | "sign_test" | "ftest" | "ztest_means">("ttest");
+  const [testKind, setTestKind] = useState<"ttest" | "chisquare" | "anova" | "ancova" | "manova" | "mancova" | "kruskal" | "nonparametric" | "normality" | "power" | "paired" | "wilcoxon_paired" | "friedman" | "levene" | "mcnemar" | "fisher" | "onesample_ttest" | "binomial" | "twoprop" | "sign_test" | "ftest" | "ztest_means">("ttest");
   const [groupCol, setGroupCol] = useState("");
   const [groupVal1, setGroupVal1] = useState("");
   const [groupVal2, setGroupVal2] = useState("");
@@ -4032,6 +4134,10 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const [manovaFactorCol, setManovaFactorCol] = useState("");
   const [manovaValueCols, setManovaValueCols] = useState<string[]>([]);
   const [manovaResult, setManovaResult] = useState<{ factorCol: string; valueCols: string[]; n: number; summary?: string; factorTest?: string; error?: string } | null>(null);
+  const [mancovaFactorCol, setMancovaFactorCol] = useState("");
+  const [mancovaValueCols, setMancovaValueCols] = useState<string[]>([]);
+  const [mancovaCovariateCols, setMancovaCovariateCols] = useState<string[]>([]);
+  const [mancovaResult, setMancovaResult] = useState<{ factorCol: string; valueCols: string[]; covariateCols: string[]; n: number; summary?: string; factorTest?: string; error?: string } | null>(null);
   const [kruskalResult, setKruskalResult] = useState<{ h: number; pValue: number; df: number; nGroups: number; groupMedians: { group: string; n: number; median: number; mean: number; std: number }[] } | null>(null);
   const [mannWhitneyResult, setMannWhitneyResult] = useState<MannWhitneyResult | null>(null);
   const [normalityCol, setNormalityCol] = useState("");
@@ -4196,6 +4302,18 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
     const res = await quantisApi.analyzeManova(rows, manovaFactorCol, manovaValueCols);
     setManovaResult(res ?? null);
   };
+  const runMancova = async () => {
+    if (!mancovaFactorCol || mancovaValueCols.length < 2 || mancovaCovariateCols.length === 0) {
+      showToast("Chọn nhân tố, ít nhất 2 biến phụ thuộc và ít nhất 1 covariate.");
+      return;
+    }
+    if (!analysisBackendAvailable) {
+      showToast(BACKEND_PYTHON_REQUIRED_MSG);
+      return;
+    }
+    const res = await quantisApi.analyzeMancova(rows, mancovaFactorCol, mancovaValueCols, mancovaCovariateCols);
+    setMancovaResult(res ?? null);
+  };
     const runMannWhitney = async () => {
     if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
     if (analysisBackendAvailable) {
@@ -4210,7 +4328,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
     if (res) onHypothesisResult?.({ type: "mannwhitney", payload: res, meta: { groupCol, groupVal1, groupVal2, numCol } });
     else onHypothesisResult?.(null);
   };
-  const clearResults = () => { setTResult(null); setChiResult(null); setAnovaResult(null); setAncovaResult(null); setManovaResult(null); setKruskalResult(null); setMannWhitneyResult(null); setShapiroResult(null); setPowerResult(null); setSampleSizeExtra(null); setPairedResult(null); setWilcoxonPairedResult(null); setFriedmanResult(null); setLeveneResult(null); setMcNemarResult(null); setFisherResult(null); setOnesampleResult(null); setBinomialResult(null); setTwopropResult(null); setSignTestResult(null); setFtestResult(null); setZtestMeansResult(null); };
+  const clearResults = () => { setTResult(null); setChiResult(null); setAnovaResult(null); setAncovaResult(null); setManovaResult(null); setMancovaResult(null); setKruskalResult(null); setMannWhitneyResult(null); setShapiroResult(null); setPowerResult(null); setSampleSizeExtra(null); setPairedResult(null); setWilcoxonPairedResult(null); setFriedmanResult(null); setLeveneResult(null); setMcNemarResult(null); setFisherResult(null); setOnesampleResult(null); setBinomialResult(null); setTwopropResult(null); setSignTestResult(null); setFtestResult(null); setZtestMeansResult(null); };
   const runShapiroWilk = async () => {
     if (!normalityCol || !numericCols.includes(normalityCol)) return;
     const ci = rows[0].indexOf(normalityCol);
@@ -4310,6 +4428,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               <option value="anova">ANOVA 1 nhân tố</option>
               <option value="ancova">ANCOVA (kiểm soát covariate)</option>
               <option value="manova">MANOVA (nhiều biến phụ thuộc)</option>
+              <option value="mancova">MANCOVA (nhiều DV + kiểm soát covariate)</option>
               <option value="paired">t-test cặp</option>
               <option value="onesample_ttest">t-test một mẫu</option>
               <option value="ztest_means">z-Test 2 trung bình</option>
@@ -4517,6 +4636,48 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               <p>Nhân tố: {manovaResult.factorCol}, Biến phụ thuộc: {manovaResult.valueCols.join(", ")}, n = {manovaResult.n}</p>
               {manovaResult.factorTest != null && <p className="font-medium">Kiểm định nhân tố: {String(manovaResult.factorTest)}</p>}
               {manovaResult.summary && <pre className="text-xs whitespace-pre-wrap bg-neutral-100 dark:bg-neutral-900 p-2 rounded overflow-x-auto">{manovaResult.summary}</pre>}
+            </div>
+          )}
+        </>
+      )}
+      {testKind === "mancova" && (
+        <>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">MANCOVA: nhiều biến phụ thuộc (DV), một nhân tố (IV), kiểm soát covariate(s). Cần backend Python.</p>
+          <div className="flex flex-wrap gap-4 items-end mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nhân tố (nhóm)</label>
+              <select value={mancovaFactorCol} onChange={(e) => { setMancovaFactorCol(e.target.value); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (DV) — chọn từ 2 trở lên</label>
+              <select multiple value={mancovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaValueCols(sel); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+                {numericCols.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột (tối thiểu 2)</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Covariate(s) — chọn ít nhất 1</label>
+              <select multiple value={mancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaCovariateCols(sel); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+                {numericCols.filter((c) => !mancovaValueCols.includes(c)).map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột</p>
+            </div>
+            <button type="button" onClick={runMancova} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy MANCOVA</button>
+          </div>
+          {mancovaResult && (
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
+              <p className="font-medium">Kết quả MANCOVA</p>
+              {mancovaResult.error && <p className="text-amber-600 dark:text-amber-400">{mancovaResult.error}</p>}
+              <p>Nhân tố: {mancovaResult.factorCol}, DV: {mancovaResult.valueCols.join(", ")}, Covariate: {mancovaResult.covariateCols.join(", ")}, n = {mancovaResult.n}</p>
+              {mancovaResult.factorTest != null && <p className="font-medium">Kiểm định nhân tố: {String(mancovaResult.factorTest)}</p>}
+              {mancovaResult.summary && <pre className="text-xs whitespace-pre-wrap bg-neutral-100 dark:bg-neutral-900 p-2 rounded overflow-x-auto">{mancovaResult.summary}</pre>}
             </div>
           )}
         </>
@@ -5255,8 +5416,14 @@ function ReproducibilityView({
         </button>
         {showNewWorkflowDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }}>
-            <div className="rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-xl max-w-md w-full p-4" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Tạo workflow mới</h3>
+            <div className="rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-xl max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+                <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Tạo workflow mới</h3>
+                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4">
               <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">Tên workflow</label>
               <input
                 type="text"
@@ -5270,6 +5437,7 @@ function ReproducibilityView({
               <div className="flex justify-end gap-2 mt-4">
                 <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600">Hủy</button>
                 <button type="button" onClick={() => addWorkflow(newWorkflowName)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90">Tạo</button>
+              </div>
               </div>
             </div>
           </div>
@@ -5382,10 +5550,11 @@ function formatAPA(result: { type: "ttest" | "chisquare" | "anova" | "mannwhitne
   return "";
 }
 
-function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisResult, analysisBackendAvailable = false, chartType }: { tab: PresentationTab; onTabChange?: (t: PresentationTab) => void; selectedDataset: Dataset | undefined; lastHypothesisResult?: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null; analysisBackendAvailable?: boolean; chartType: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "histogramDensity" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density"; setChartType: (t: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "histogramDensity" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density") => void }) {
+function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisResult, analysisBackendAvailable = false, chartType, showToast }: { tab: PresentationTab; onTabChange?: (t: PresentationTab) => void; selectedDataset: Dataset | undefined; lastHypothesisResult?: { type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: Record<string, string> } | null; analysisBackendAvailable?: boolean; chartType: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density"; setChartType: (t: "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density") => void; showToast?: (msg: string) => void }) {
   const [chartXCol, setChartXCol] = useState("");
   const [chartYCol, setChartYCol] = useState("");
   const [histogramCol, setHistogramCol] = useState("");
+  const [showHistogramDensity, setShowHistogramDensity] = useState(false);
   const [stackByCol, setStackByCol] = useState("");
   const [heatmapCorrMethod, setHeatmapCorrMethod] = useState<"pearson" | "spearman" | "kendall">("pearson");
   const [radarGroupCol, setRadarGroupCol] = useState("");
@@ -5403,7 +5572,6 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
   const [boxStatsBackendResult, setBoxStatsBackendResult] = useState<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null>(null);
   const [histBinsBackendResult, setHistBinsBackendResult] = useState<Array<{ binStart: number; binEnd: number; count: number }> | null>(null);
   const PIE_COLORS = ["#0061bb", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"];
-  const [reportCharts, setReportCharts] = useState<SavedReportChart[]>(() => loadReportCharts());
 
   useEffect(() => {
     if (tab !== "visualization" || !selectedDataset || chartType !== "box" || !chartXCol || !chartYCol || !analysisBackendAvailable) {
@@ -5415,7 +5583,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
   }, [tab, selectedDataset?.id, chartType, chartXCol, chartYCol, analysisBackendAvailable]);
 
   useEffect(() => {
-    if (tab !== "visualization" || !selectedDataset || (chartType !== "histogram" && chartType !== "histogramDensity") || !histogramCol || !analysisBackendAvailable) {
+    if (tab !== "visualization" || !selectedDataset || chartType !== "histogram" || !histogramCol || !analysisBackendAvailable) {
       setHistBinsBackendResult(null);
       return;
     }
@@ -5442,7 +5610,22 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
       ? rows.slice(1).map((r) => ({ x: isScatter ? Number(r[xIdx]) : r[xIdx], y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
       : [];
     const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
-    const barDataSorted = barSortOrder === "none" ? barData : [...barData].sort((a, b) => (barSortOrder === "asc" ? a.count - b.count : b.count - a.count));
+    /** Biểu đồ cột: dùng X làm danh mục; nếu có Y (số) thì chiều cao = tổng Y theo nhóm, không thì = tần số */
+    const barChartData = (chartType === "bar" || chartType === "barH") && xCol && xIdx >= 0
+      ? (yCol && yIdx >= 0 && numericCols.includes(yCol)
+          ? (() => {
+              const sums: Record<string, number> = {};
+              rows.slice(1).forEach((r) => {
+                const name = String(r[xIdx] ?? "").trim();
+                const val = Number(r[yIdx]);
+                if (name === "" || Number.isNaN(val)) return;
+                sums[name] = (sums[name] || 0) + val;
+              });
+              return Object.entries(sums).map(([name, count]) => ({ name, count })).slice(0, 24);
+            })()
+          : (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 24); })())
+      : barData;
+    const barDataSorted = barSortOrder === "none" ? barChartData : [...barChartData].sort((a, b) => (barSortOrder === "asc" ? a.count - b.count : b.count - a.count));
     const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
       ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
       : [];
@@ -5474,14 +5657,14 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
     const histColIdx = cols.indexOf(histogramCol);
     const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => Number(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
     const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
-    const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "?" + b.binEnd.toFixed(1), count: b.count }));
-    const histDensityCurve = (chartType === "histogramDensity" && histValues.length >= 2) ? (() => {
+    const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
+    const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
       const lo = Math.min(...histValues);
       const hi = Math.max(...histValues);
       const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
       return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
     })() : [];
-    const histComboData = (chartType === "histogramDensity" && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
+    const histComboData = (chartType === "histogram" && showHistogramDensity && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
       const maxCount = Math.max(...histChartData.map((d) => d.count));
       const maxDens = Math.max(...histDensityCurve.map((d) => d.density));
       const scale = maxDens > 0 ? maxCount / maxDens : 1;
@@ -5493,12 +5676,28 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
       });
     })() : [];
-    const pieData = (chartType === "pie" || chartType === "donut") && pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol) ? (() => {
-      const idx = cols.indexOf(pieNumericCol);
-      const vals = rows.slice(1).map((r) => Number(r[idx])).filter((v) => !Number.isNaN(v));
-      const binned = binNumericForPie(vals, pieBinCount);
-      return binned.map((b) => ({ name: b.label, value: b.count })).filter((d) => d.value > 0);
-    })() : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
+    const pieData = (chartType === "pie" || chartType === "donut")
+      ? (pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol)
+          ? (() => {
+              const idx = cols.indexOf(pieNumericCol);
+              const vals = rows.slice(1).map((r) => Number(r[idx])).filter((v) => !Number.isNaN(v));
+              const binned = binNumericForPie(vals, pieBinCount);
+              return binned.map((b) => ({ name: b.label, value: b.count })).filter((d) => d.value > 0);
+            })()
+          : (xCol && xIdx >= 0
+              ? (() => {
+                  const counts: Record<string, number> = {};
+                  rows.slice(1).forEach((r) => {
+                    const v = String(r[xIdx] ?? "").trim();
+                    if (v !== "") counts[v] = (counts[v] || 0) + 1;
+                  });
+                  return Object.entries(counts)
+                    .map(([name, count]) => ({ name, value: count }))
+                    .filter((d) => d.value > 0)
+                    .slice(0, 24);
+                })()
+              : []))
+      : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
     const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
       ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
@@ -5523,7 +5722,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
       const fullMark = 100;
       return radarNumericCols.map((col) => {
         const colIdx = cols.indexOf(col);
-        const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "?" : col, fullMark };
+        const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
         radarGroups.forEach((g) => {
           const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
           const vals = subset.map((r) => Number(r[colIdx])).filter((v) => !Number.isNaN(v));
@@ -5564,7 +5763,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         ? `Nhóm: ${xCol}, Giá trị: ${yCol}. Số nhóm: ${boxChartData.length}.`
         : "",
       chartType === "histogram" && histogramCol
-        ? `Biến: ${histogramCol}. Số bins: ${histChartData.length}.`
+        ? `Biến: ${histogramCol}. Số bins: ${histChartData.length}.${showHistogramDensity ? " Có đường mật độ (KDE)." : ""}`
         : "",
       chartType === "heatmap" ? "Heatmap ma trận tương quan." : "",
       chartType === "radar" && radarNumericCols.length > 0
@@ -5583,182 +5782,95 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
       { label: "Giải thích cách đọc biểu đồ", systemHint: "Bạn là chuyên gia thống kê. Giải thích cách đọc biểu đồ hiện tại: trục, đơn vị, ý nghĩa màu/size nếu có, cách rút ra kết luận. Trả lời ngắn gọn bằng tiếng Việt.", userMessage: "Giải thích cách đọc biểu đồ này." },
     ];
 
+    const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && barChartData.length > 0) || (chartType === "barH" && barChartData.length > 0) || (chartType === "line" && lineData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
+    const getChartSvgFromButton = (btn: HTMLElement): SVGElement | null => {
+      const wrapper = btn.closest("[data-chart-export-wrapper]");
+      if (!wrapper) return null;
+      const chartBox = wrapper.querySelector(".h-80");
+      return chartBox ? chartBox.querySelector("svg") : null;
+    };
+    const handleExportPng = (e: React.MouseEvent<HTMLButtonElement>) => {
+      const el = getChartSvgFromButton(e.currentTarget);
+      if (!el) return;
+      const svg = new XMLSerializer().serializeToString(el);
+      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.scale(scale, scale);
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, img.width, img.height);
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = `quantis-${chartType}.png`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }
+          }, "image/png");
+        }
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
+    };
+    const handleCopyToClipboard = (e: React.MouseEvent<HTMLButtonElement>) => {
+      const el = getChartSvgFromButton(e.currentTarget);
+      if (!el) return;
+      const svg = new XMLSerializer().serializeToString(el);
+      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.scale(scale, scale);
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, img.width, img.height);
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            if (!blob) { URL.revokeObjectURL(url); return; }
+            navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]).then(() => {
+              URL.revokeObjectURL(url);
+              if (typeof showToast === "function") showToast("Đã sao chép biểu đồ vào clipboard. Dán (Ctrl+V / Cmd+V) vào Word hoặc bài báo.");
+            }).catch(() => {
+              URL.revokeObjectURL(url);
+              if (typeof showToast === "function") showToast("Không sao chép được. Hãy dùng \"Lưu PNG\" rồi chèn ảnh thủ công.");
+            });
+          }, "image/png");
+        } else {
+          URL.revokeObjectURL(url);
+        }
+      };
+      img.onerror = () => URL.revokeObjectURL(url);
+      img.src = url;
+    };
+    const chartExportIcons = hasExportableChart ? (
+      <div className="absolute top-2 right-2 z-10 flex gap-1 rounded-lg bg-white/95 dark:bg-neutral-800/95 border border-neutral-200 dark:border-neutral-600 p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+        <button type="button" onClick={handleExportPng} title="Lưu PNG" className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Download className="w-4 h-4" /></button>
+        <button type="button" onClick={handleCopyToClipboard} title="Sao chép vào clipboard" className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /></button>
+      </div>
+    ) : null;
+
     return (
       <div ref={chartContainerRef} className="w-full max-w-full">
-        <h2 className="text-xl font-semibold mb-2">Biểu đồ</h2>
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">AI hỗ trợ trực quan:</span>
-          <AIAssistPanel
-            context={visualizationContext}
-            quickPrompts={visualizationQuickPrompts}
-            defaultSystemHint="Bạn là chuyên gia trực quan hóa dữ liệu và phân tích. Diễn giải biểu đồ, gợi ý loại biểu đồ, viết caption hoặc nêu insight. Trả lời ngắn gọn bằng tiếng Việt."
-            title="Hỏi AI về biểu đồ"
-            includeStandardResultPrompts={false}
-          />
-        </div>
-        {(() => {
-          const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && !isScatter && barData.length > 0) || (chartType === "barH" && barData.length > 0) || (chartType === "line" && lineData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "histogramDensity" && histComboData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
-          const handleExportSvg = () => {
-            const el = chartContainerRef.current?.querySelector("svg");
-            if (!el) return;
-            const svg = new XMLSerializer().serializeToString(el);
-            const blob = new Blob([svg], { type: "image/svg+xml" });
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = `quantis-${chartType}.svg`;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          };
-          const handleExportPng = () => {
-            const el = chartContainerRef.current?.querySelector("svg");
-            if (!el) return;
-            const svg = new XMLSerializer().serializeToString(el);
-            const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-            const url = URL.createObjectURL(svgBlob);
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement("canvas");
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const ctx = canvas.getContext("2d");
-              if (ctx) {
-                ctx.fillStyle = "white";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-                canvas.toBlob((blob) => {
-                  if (blob) {
-                    const a = document.createElement("a");
-                    a.href = URL.createObjectURL(blob);
-                    a.download = `quantis-${chartType}.png`;
-                    a.click();
-                    URL.revokeObjectURL(a.href);
-                  }
-                }, "image/png");
-              }
-              URL.revokeObjectURL(url);
-            };
-            img.onerror = () => URL.revokeObjectURL(url);
-            img.src = url;
-          };
-          const handleSaveToReport = () => {
-            const el = chartContainerRef.current?.querySelector("svg");
-            if (!el) return;
-            const svg = new XMLSerializer().serializeToString(el);
-            const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-            const url = URL.createObjectURL(svgBlob);
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement("canvas");
-              canvas.width = img.width;
-              canvas.height = img.height;
-              const ctx = canvas.getContext("2d");
-              if (ctx) {
-                ctx.fillStyle = "white";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-                canvas.toBlob((blob) => {
-                  if (!blob) { URL.revokeObjectURL(url); return; }
-                  const reader = new FileReader();
-                  reader.onloadend = () => {
-                    const dataUrl = reader.result as string;
-                    const title = window.prompt("Tên biểu đồ (để chèn vào báo cáo):", `Biểu đồ ${chartType}`);
-                    if (title === null) return;
-                    const caption = window.prompt("Chú thích (caption) tùy chọn:", "");
-                    saveReportChart({ title: title.trim() || `Biểu đồ ${chartType}`, caption: caption?.trim() || undefined, chartType, imageDataUrl: dataUrl });
-                    setReportCharts(loadReportCharts());
-                    URL.revokeObjectURL(url);
-                  };
-                  reader.readAsDataURL(blob);
-                }, "image/png");
-              } else {
-                URL.revokeObjectURL(url);
-              }
-            };
-            img.onerror = () => URL.revokeObjectURL(url);
-            img.src = url;
-          };
-          return hasExportableChart ? (
-            <div className="mb-3 flex items-center gap-2">
-              <button type="button" onClick={handleExportSvg} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700">
-                <Download className="w-4 h-4" /> Xuất SVG
-              </button>
-              <button type="button" onClick={handleExportPng} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700">
-                <Download className="w-4 h-4" /> Xuất PNG
-              </button>
-              <button type="button" onClick={handleSaveToReport} className="rounded-lg border border-brand bg-brand/10 text-brand dark:bg-brand/20 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:opacity-90">
-                <Save className="w-4 h-4" /> Lưu vào báo cáo
-              </button>
-            </div>
-          ) : null;
-        })()}
-        {/* Biểu đồ đã lưu cho báo cáo nghiên cứu */}
-        <div className="mt-6 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-4">
-          <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-2 flex items-center gap-2">
-            <FileText className="w-4 h-4" /> Biểu đồ cho báo cáo
-          </h3>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">Lưu biểu đồ hiện tại bằng nút &quot;Lưu vào báo cáo&quot; hoặc tải ảnh từ máy để tập trung tại đây, sau đó tải từng ảnh để chèn vào Word/LaTeX.</p>
-          <label className="mb-3 inline-flex items-center gap-2 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700">
-            <ImagePlus className="w-4 h-4" /> Tải biểu đồ từ file (PNG/SVG/JPEG)
-            <input
-              type="file"
-              accept="image/png,image/svg+xml,image/jpeg,image/webp"
-              className="sr-only"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  const dataUrl = reader.result as string;
-                  const title = window.prompt("Tên biểu đồ:", file.name.replace(/\.[^.]+$/, ""));
-                  if (title === null) return;
-                  saveReportChart({ title: title.trim() || file.name, chartType: "image", imageDataUrl: dataUrl });
-                  setReportCharts(loadReportCharts());
-                };
-                reader.readAsDataURL(file);
-                e.target.value = "";
-              }}
-            />
-          </label>
-          {reportCharts.length === 0 ? (
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">Chưa có biểu đồ nào. Tạo biểu đồ phía trên rồi bấm &quot;Lưu vào báo cáo&quot; hoặc tải ảnh từ file.</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {reportCharts.map((c) => (
-                <div key={c.id} className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 overflow-hidden">
-                  <div className="aspect-video bg-neutral-100 dark:bg-neutral-700 flex items-center justify-center p-1">
-                    <img src={c.imageDataUrl} alt={c.title} className="max-w-full max-h-full object-contain" />
-                  </div>
-                  <div className="p-2">
-                    <p className="text-xs font-medium text-neutral-800 dark:text-neutral-200 truncate" title={c.title}>{c.title}</p>
-                    {c.caption && <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate" title={c.caption}>{c.caption}</p>}
-                    <div className="flex items-center gap-1 mt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const a = document.createElement("a");
-                          a.href = c.imageDataUrl;
-                          const ext = c.imageDataUrl.startsWith("data:image/svg") ? "svg" : c.imageDataUrl.startsWith("data:image/jpeg") ? "jpg" : "png";
-                          a.download = `${c.title.replace(/[^a-zA-Z0-9\u00C0-\u024F\-_]/g, "_")}.${ext}`;
-                          a.click();
-                        }}
-                        className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700"
-                      >
-                        <Download className="w-3 h-3 inline mr-0.5" /> Tải
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { removeReportChart(c.id); setReportCharts(loadReportCharts()); }}
-                        className="rounded border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-2 py-0.5 text-xs hover:bg-red-50 dark:hover:bg-red-900/20"
-                      >
-                        <Trash2 className="w-3 h-3 inline" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex flex-wrap items-center gap-4">
+        <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 shrink-0">
+          {({ bar: "Cột", line: "Đường", scatter: "Phân tán", histogram: "Histogram", box: "Box plot", heatmap: "Heatmap", pie: "Tròn", stackedBar: "Cột chồng", barH: "Cột ngang", area: "Vùng", donut: "Donut", density: "Density", radar: "Radar" } as Record<string, string>)[chartType] ?? chartType}
+        </span>
         {(chartType === "scatter" || chartType === "bar" || chartType === "line" || chartType === "pie" || chartType === "area") && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
@@ -5867,7 +5979,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         )}
         {chartType === "pie" && (
           <div className="mb-4 space-y-3">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">Dùng Trục X ở trên làm cột phân loại, hoặc bật &quot;Chia theo khoảng&quot; để chia biến số thành các khoảng (vd. &lt;0.25, 0.25–0.5, 0.5–0.75, ≥0.75).</p>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">Chọn <strong>Trục X</strong> (cột phân loại) ở trên là đủ để vẽ theo tỉ lệ thành phần. Tùy chọn: bật &quot;Chia theo khoảng&quot; nếu muốn chia biến số thành các khoảng.</p>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
               Chia theo khoảng (biến số)
@@ -5959,21 +6071,18 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
           </div>
         )}
         {chartType === "histogram" && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Cột số (phân bố)</label>
-            <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
-              {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        )}
-        {chartType === "histogramDensity" && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Cột số (phân bố + đường mật độ)</label>
-            <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
-              {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <div className="mb-4 flex flex-wrap items-center gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Cột số (phân bố)</label>
+              <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <option value="">— Chọn —</option>
+                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer mt-6">
+              <input type="checkbox" checked={showHistogramDensity} onChange={(e) => setShowHistogramDensity(e.target.checked)} className="rounded border-neutral-400" />
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">Hiển thị đường mật độ (KDE)</span>
+            </label>
           </div>
         )}
         {chartType === "density" && (
@@ -5994,17 +6103,29 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             </div>
           </div>
         )}
+          </div>
+          <AIAssistPanel
+            context={visualizationContext}
+            quickPrompts={visualizationQuickPrompts}
+            defaultSystemHint="Bạn là chuyên gia trực quan hóa dữ liệu và phân tích. Diễn giải biểu đồ, gợi ý loại biểu đồ, viết caption hoặc nêu insight. Trả lời ngắn gọn bằng tiếng Việt."
+            title="Hỏi AI về biểu đồ"
+            includeStandardResultPrompts={false}
+          />
+        </div>
         {chartType === "scatter" && isScatter && chartData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid />
-                <XAxis dataKey="x" name={xCol} />
-                <YAxis dataKey="y" name={yCol} />
-                <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-                <Scatter data={chartData} fill="#0061bb" name="điểm" />
-              </ScatterChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid />
+                  <XAxis dataKey="x" name={xCol} />
+                  <YAxis dataKey="y" name={yCol} />
+                  <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+                  <Scatter data={chartData} fill="#0061bb" name="điểm" />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "scatter" && (() => {
@@ -6021,91 +6142,110 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             ...Object.fromEntries(keys.map((k, j) => [k, densityData[j].points[i].density])),
           }));
           return (
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={merged} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="x" name={densityValueCol} type="number" tick={{ fontSize: 11 }} />
-                  <YAxis name="Mật độ" tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Legend />
-                  {keys.map((key, i) => (
-                    <Line key={key} type="monotone" dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={key} />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="relative group" data-chart-export-wrapper>
+              {chartExportIcons}
+              <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={merged} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="x" name={densityValueCol} type="number" tick={{ fontSize: 11 }} />
+                    <YAxis name="Mật độ" tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Legend />
+                    {keys.map((key, i) => (
+                      <Line key={key} type="monotone" dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={key} />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           );
         })()}
-        {chartType === "bar" && !isScatter && barDataSorted.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barDataSorted} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0061bb" name="Số lượng" />
-              </BarChart>
-            </ResponsiveContainer>
+        {chartType === "bar" && barDataSorted.length > 0 && (
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barDataSorted} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `Tổng ${yCol}` : "Số lượng"} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "barH" && xCol && barDataSorted.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barDataSorted} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="name" width={100} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0061bb" name="Số lượng" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={barDataSorted} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="name" width={100} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `Tổng ${yCol}` : "Số lượng"} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "line" && lineData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
-                <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="y" stroke="#0061bb" strokeWidth={2} dot={{ r: 4 }} name={yCol || "Giá trị"} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={lineData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
+                  <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="y" stroke="#0061bb" strokeWidth={2} dot={{ r: 4 }} name={yCol || "Giá trị"} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "pie" && pieData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(0)}%`}>
-                  {pieData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => [v, "Số lượng"]} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(0)}%`}>
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [v, "Số lượng"]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "donut" && pieData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={60} label={({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(0)}%`}>
-                  {pieData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => [v, "Số lượng"]} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={60} label={({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(0)}%`}>
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [v, "Số lượng"]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "box" && boxChartData.length > 0 && (
-          <>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
             <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 mb-2">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
@@ -6146,99 +6286,117 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 </tbody>
               </table>
             </div>
-          </>
-        )}
-        {chartType === "histogram" && histChartData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={histChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
-                <YAxis label={{ value: "Tần số", angle: -90, position: "insideLeft" }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0061bb" name="Tần số" />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         )}
-        {chartType === "histogramDensity" && histComboData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={histComboData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
-                <YAxis label={{ value: "Tần số / Mật độ", angle: -90, position: "insideLeft" }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0061bb" name="Tần số" />
-                <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name="Đường mật độ (KDE)" />
-              </ComposedChart>
-            </ResponsiveContainer>
+        {chartType === "histogram" && histChartData.length > 0 && !(showHistogramDensity && histComboData.length > 0) && (
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={histChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
+                  <YAxis label={{ value: "Tần số", angle: -90, position: "insideLeft" }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0061bb" name="Tần số" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+        {chartType === "histogram" && showHistogramDensity && histComboData.length > 0 && (
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={histComboData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
+                  <YAxis label={{ value: "Tần số / Mật độ", angle: -90, position: "insideLeft" }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0061bb" name="Tần số" />
+                  <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name="Đường mật độ (KDE)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "area" && areaData.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={areaData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
-                <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Area type="monotone" dataKey="y" stroke="#0061bb" fill="#0061bb" fillOpacity={0.4} name={yCol || "Giá trị"} />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={areaData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
+                  <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Area type="monotone" dataKey="y" stroke="#0061bb" fill="#0061bb" fillOpacity={0.4} name={yCol || "Giá trị"} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "stackedBar" && stackedBarData.length > 0 && (() => {
           const stackKeys = Object.keys(stackedBarData[0] || {}).filter((k) => k !== "name");
           return (
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={stackedBarData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  {stackKeys.map((key, i) => (
-                    <Bar key={key} dataKey={key} stackId="stack" fill={PIE_COLORS[i % PIE_COLORS.length]} name={key.length > 16 ? key.slice(0, 14) + "?" : key} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="relative group" data-chart-export-wrapper>
+              {chartExportIcons}
+              <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stackedBarData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    {stackKeys.map((key, i) => (
+                      <Bar key={key} dataKey={key} stackId="stack" fill={PIE_COLORS[i % PIE_COLORS.length]} name={key.length > 16 ? key.slice(0, 14) + "…" : key} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           );
         })()}
         {chartType === "radar" && radarData.length > 0 && (() => {
           const radarKeys = Object.keys(radarData[0] || {}).filter((k) => k !== "subject" && k !== "fullMark");
           return (
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="subject" />
-                  <PolarRadiusAxis angle={90} domain={[0, "auto"]} />
-                  {radarKeys.map((key, i) => (
-                    <Radar key={key} name={key} dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.3} strokeWidth={2} />
-                  ))}
-                  <Legend />
-                </RadarChart>
-              </ResponsiveContainer>
+            <div className="relative group" data-chart-export-wrapper>
+              {chartExportIcons}
+              <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData}>
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="subject" />
+                    <PolarRadiusAxis angle={90} domain={[0, "auto"]} />
+                    {radarKeys.map((key, i) => (
+                      <Radar key={key} name={key} dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.3} strokeWidth={2} />
+                    ))}
+                    <Legend />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           );
         })()}
         {chartType === "multiLine" && multiLineData.length > 0 && multiLineYCols.length > 0 && (
-          <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={multiLineData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="x" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Legend />
-                {multiLineYCols.map((col, i) => (
-                  <Line key={col} type="monotone" dataKey={col} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={{ r: 3 }} name={col.length > 14 ? col.slice(0, 12) + "?" : col} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="relative group" data-chart-export-wrapper>
+            {chartExportIcons}
+            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={multiLineData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="x" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend />
+                  {multiLineYCols.map((col, i) => (
+                    <Line key={col} type="monotone" dataKey={col} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={{ r: 3 }} name={col.length > 14 ? col.slice(0, 12) + "…" : col} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
         {chartType === "crosstab" && crosstabResult && (
@@ -6286,14 +6444,14 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             </div>
             <div className="h-64 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={crosstabResult.rowLabels.map((name, i) => ({ name: name.length > 10 ? name.slice(0, 8) + "?" : name, ...Object.fromEntries(crosstabResult.colLabels.map((col, j) => [col, crosstabResult.counts[i][j]])), total: crosstabResult.counts[i].reduce((a, b) => a + b, 0) }))} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
+                <BarChart data={crosstabResult.rowLabels.map((name, i) => ({ name: name.length > 10 ? name.slice(0, 8) + "…" : name, ...Object.fromEntries(crosstabResult.colLabels.map((col, j) => [col, crosstabResult.counts[i][j]])), total: crosstabResult.counts[i].reduce((a, b) => a + b, 0) }))} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <Tooltip />
                   <Legend />
                   {crosstabResult.colLabels.slice(0, 8).map((col, i) => (
-                    <Bar key={col} dataKey={col} stackId="ct" fill={PIE_COLORS[i % PIE_COLORS.length]} name={col.length > 12 ? col.slice(0, 10) + "?" : col} />
+                    <Bar key={col} dataKey={col} stackId="ct" fill={PIE_COLORS[i % PIE_COLORS.length]} name={col.length > 12 ? col.slice(0, 10) + "…" : col} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -6314,14 +6472,14 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 <tr>
                   <th className="p-1.5 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 font-medium" />
                   {corrResult.columnNames.map((c) => (
-                    <th key={c} className="p-1.5 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 font-medium text-left whitespace-nowrap max-w-[120px] truncate" title={c}>{c.length > 12 ? c.slice(0, 10) + "?" : c}</th>
+                    <th key={c} className="p-1.5 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 font-medium text-left whitespace-nowrap max-w-[120px] truncate" title={c}>{c.length > 12 ? c.slice(0, 10) + "…" : c}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {corrResult.matrix.map((row, i) => (
                   <tr key={i}>
-                    <td className="p-1.5 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 font-medium whitespace-nowrap max-w-[120px] truncate" title={corrResult.columnNames[i]}>{corrResult.columnNames[i].length > 12 ? corrResult.columnNames[i].slice(0, 10) + "?" : corrResult.columnNames[i]}</td>
+                    <td className="p-1.5 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 font-medium whitespace-nowrap max-w-[120px] truncate" title={corrResult.columnNames[i]}>{corrResult.columnNames[i].length > 12 ? corrResult.columnNames[i].slice(0, 10) + "…" : corrResult.columnNames[i]}</td>
                     {row.map((v, j) => {
                       const r = v >= 0 ? 255 : Math.round(255 * (1 + v));
                       const g = Math.round(255 * (1 - Math.abs(v)));
@@ -6358,7 +6516,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
               {dashboardStats.slice(0, 6).map((s) => (
                 <div key={s.column} className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-2">
-                  <p className="text-xs font-medium truncate" title={s.column}>{s.column.length > 10 ? s.column.slice(0, 8) + "?" : s.column}</p>
+                  <p className="text-xs font-medium truncate" title={s.column}>{s.column.length > 10 ? s.column.slice(0, 8) + "…" : s.column}</p>
                   <p className="text-xs text-neutral-500">n={s.n}</p>
                   {s.mean != null && <p className="text-xs">{s.mean.toFixed(1)}</p>}
                 </div>
@@ -6373,14 +6531,14 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                       <tr>
                         <th className="p-1 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700" />
                         {dashboardCorrResult.columnNames.map((c) => (
-                          <th key={c} className="p-1 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 truncate max-w-[80px]" title={c}>{c.length > 8 ? c.slice(0, 6) + "?" : c}</th>
+                          <th key={c} className="p-1 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 truncate max-w-[80px]" title={c}>{c.length > 8 ? c.slice(0, 6) + "…" : c}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {dashboardCorrResult.matrix.map((row, i) => (
                         <tr key={i}>
-                          <td className="p-1 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 truncate max-w-[80px]" title={dashboardCorrResult.columnNames[i]}>{dashboardCorrResult.columnNames[i].length > 8 ? dashboardCorrResult.columnNames[i].slice(0, 6) + "?" : dashboardCorrResult.columnNames[i]}</td>
+                          <td className="p-1 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 truncate max-w-[80px]" title={dashboardCorrResult.columnNames[i]}>{dashboardCorrResult.columnNames[i].length > 8 ? dashboardCorrResult.columnNames[i].slice(0, 6) + "…" : dashboardCorrResult.columnNames[i]}</td>
                           {row.map((v, j) => {
                             const r = v >= 0 ? 255 : Math.round(255 * (1 + v));
                             const g = Math.round(255 * (1 - Math.abs(v)));
@@ -6398,20 +6556,19 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             )}
           </div>
         )}
-        {chartType === "bar" && xCol && barData.length === 0 && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được biểu đồ cột: không có dữ liệu cho cột "{xCol}". Kiểm tra cột đã chọn có giá trị không.</p>}
+        {chartType === "bar" && xCol && barChartData.length === 0 && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được biểu đồ cột: không có dữ liệu cho cột &quot;{xCol}&quot;{yCol ? ` (trục Y: ${yCol})` : ""}. Kiểm tra cột đã chọn có giá trị không.</p>}
         {chartType === "line" && (!xCol || !yCol || lineData.length === 0) && <p className="text-neutral-500 text-sm">Chọn trục X (danh mục/thứ tự) và trục Y (số) cho biểu đồ đường.</p>}
         {chartType === "area" && (!xCol || !yCol || areaData.length === 0) && <p className="text-neutral-500 text-sm">Chọn trục X và trục Y (số) cho biểu đồ vùng.</p>}
         {chartType === "stackedBar" && (!xCol || !stackByCol || !yCol || stackedBarData.length === 0) && <p className="text-neutral-500 text-sm">Chọn trục X (danh mục), cột chồng (danh mục) và giá trị (số) cho biểu đồ cột chồng.</p>}
-        {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn một cột phân loại cho biểu đồ tròn (tỉ lệ thành phần).</p>}
+        {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn Trục X (cột phân loại) ở trên để vẽ biểu đồ tròn theo tỉ lệ thành phần.</p>}
         {chartType === "box" && (!xCol || !yCol || boxChartData.length === 0) && <p className="text-neutral-500 text-sm">Chọn biến nhóm và biến số cho box plot.</p>}
-        {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">Chọn một cột số cho histogram.</p>}
-        {chartType === "histogramDensity" && !histogramCol && <p className="text-neutral-500 text-sm">Chọn một cột số cho biểu đồ cột + đường mật độ.</p>}
+        {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">Chọn một cột số cho biểu đồ cột (histogram). Bật «Hiển thị đường mật độ» để vẽ thêm đường KDE.</p>}
         {chartType === "density" && (!densityGroupCol || !densityValueCol) && <p className="text-neutral-500 text-sm">Chọn biến nhóm (ví dụ có/không gợi ý) và biến số để so sánh phân bố hai nhóm.</p>}
         {chartType === "radar" && radarNumericCols.length < 2 && <p className="text-neutral-500 text-sm">Chọn ít nhất 2 cột số cho biểu đồ radar.</p>}
         {chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2) && <p className="text-neutral-500 text-sm">Cần ít nhất 2 cột số trong dataset để vẽ ma trận tương quan.</p>}
         {chartType === "summary" && summaryStats.length === 0 && <p className="text-neutral-500 text-sm">Không có thống kê mô tả (cần ít nhất 2 dòng dữ liệu).</p>}
-        {chartType === "donut" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn một cột phân loại cho biểu đồ donut.</p>}
-        {chartType === "barH" && (!xCol || barData.length === 0) && <p className="text-neutral-500 text-sm">Chọn một cột danh mục cho biểu đồ cột ngang.</p>}
+        {chartType === "donut" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn cột phân loại (Trục X hoặc ô bên trên) để vẽ biểu đồ donut.</p>}
+        {chartType === "barH" && (!xCol || barChartData.length === 0) && <p className="text-neutral-500 text-sm">Chọn Trục X (cột danh mục). Tùy chọn: chọn thêm Trục Y (số) để vẽ tổng giá trị theo nhóm.</p>}
         {chartType === "dashboard" && dashboardStats.length === 0 && !(dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2) && <p className="text-neutral-500 text-sm">Cần ít nhất 2 dòng dữ liệu; dashboard hiển thị tóm tắt và ma trận tương quan nếu có đủ cột số.</p>}
       </div>
     );
@@ -7040,10 +7197,16 @@ function AppFeedbackModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <FileText className="w-5 h-5" /> Góp ý ứng dụng
-        </h3>
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full mx-4 flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+          <h3 className="text-lg font-semibold flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
+            <FileText className="w-5 h-5" /> Góp ý ứng dụng
+          </h3>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
         {sent ? (
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">Đã gửi. Cảm ơn bạn đã góp ý!</p>
         ) : (
@@ -7065,6 +7228,7 @@ function AppFeedbackModal({ onClose }: { onClose: () => void }) {
           </>
         )}
         {sent && <button type="button" onClick={onClose} className="mt-2 rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Đóng</button>}
+        </div>
       </div>
     </div>
   );
@@ -7108,29 +7272,53 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    quantisApi.getOllamaModels(api).then((list) => {
+    const backendBase = quantisApi.getApiBase();
+    const tryLoad = async () => {
       if (cancelled) return;
-      const filtered = quantisApi.filterModelsMinSize(list, 8);
-      setModels(filtered);
-      setLoading(false);
-      const stored = loadAiModel();
-      if (stored && filtered.includes(stored)) setSelectedModel(stored);
-      else if (envModel && filtered.includes(envModel)) setSelectedModel(envModel);
-      else if (filtered.length > 0 && !loadAiModel()) {
-        const def = quantisApi.getDefaultAiModel();
-        setSelectedModel(filtered.includes(def) ? def : filtered[0]);
+      const apiForDirect = api;
+      if (backendBase) {
+        try {
+          const list = await quantisApi.getOllamaModelsViaProxy(backendBase);
+          if (!cancelled) {
+            setModels(list);
+            const stored = loadAiModel();
+            if (stored && list.includes(stored)) setSelectedModel(stored);
+            else if (envModel && list.includes(envModel)) setSelectedModel(envModel);
+            else if (list.length > 0 && !loadAiModel()) {
+              const def = quantisApi.getDefaultAiModel();
+              setSelectedModel(list.includes(def) ? def : list[0]);
+            }
+            setLoading(false);
+            return;
+          }
+        } catch {
+          /* fallback to direct */
+        }
       }
-    }).catch(() => { if (!cancelled) setLoading(false); });
+      quantisApi.getOllamaModels(apiForDirect).then((list) => {
+        if (cancelled) return;
+        setModels(list);
+        setLoading(false);
+        const stored = loadAiModel();
+        if (stored && list.includes(stored)) setSelectedModel(stored);
+        else if (envModel && list.includes(envModel)) setSelectedModel(envModel);
+        else if (list.length > 0 && !loadAiModel()) {
+          const def = quantisApi.getDefaultAiModel();
+          setSelectedModel(list.includes(def) ? def : list[0]);
+        }
+      }).catch(() => { if (!cancelled) setLoading(false); });
+    };
+    tryLoad();
     return () => { cancelled = true; };
   }, [api, aiApiKey]);
 
   const handleChange = (value: string) => {
     setSelectedModel(value);
     saveAiModel(value || null);
-    saveSettingsToServer();
+    saveSettingsToServer({ defaultAiModel: value || null });
   };
 
-  const saveSettingsToServer = async () => {
+  const saveSettingsToServer = async (overrides?: { defaultAiModel?: string | null }) => {
     const base = backendUrlInput.trim().replace(/\/+$/, "") || quantisApi.getApiBase();
     if (!base) return;
     const settings = {
@@ -7138,7 +7326,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       archiveUrl: archiveUrlInput.trim().replace(/\/+$/, "") || null,
       archiveFileUrl: archiveFileUrlInput.trim().replace(/\/+$/, "") || null,
       aiApiUrl: aiApiUrlInput.trim().replace(/\/+$/, "") || null,
-      defaultAiModel: selectedModel || null,
+      defaultAiModel: overrides?.defaultAiModel !== undefined ? overrides.defaultAiModel : (selectedModel || null),
     };
     const ok = await quantisApi.putQuantisSettings(settings, base);
     if (ok) setServerSettings(settings);
@@ -7221,9 +7409,21 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     setAiTestLoading(true);
     setAiTestResult(null);
     try {
-      const url = aiApiUrlInput.trim().replace(/\/+$/, "") || undefined;
-      const ok = await quantisApi.checkAiApiAvailable(url);
-      setAiTestResult(ok);
+      const backendBase = quantisApi.getApiBase();
+      if (backendBase) {
+        try {
+          const list = await quantisApi.getOllamaModelsViaProxy(backendBase);
+          setAiTestResult(true);
+          setAiApiKey((k) => k + 1);
+        } catch {
+          setAiTestResult(false);
+        }
+      } else {
+        const url = aiApiUrlInput.trim().replace(/\/+$/, "") || undefined;
+        const ok = await quantisApi.checkAiApiAvailable(url);
+        setAiTestResult(ok);
+        if (ok) setAiApiKey((k) => k + 1);
+      }
     } finally {
       setAiTestLoading(false);
     }
@@ -7238,11 +7438,17 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const testBtnClass = "rounded bg-brand text-white px-2 py-1.5 text-xs whitespace-nowrap hover:opacity-90 disabled:opacity-50";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 p-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
-          <Settings className="w-4 h-4" /> Cài đặt
-        </h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+          <h3 className="text-base font-semibold flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
+            <Settings className="w-4 h-4" /> Cài đặt
+          </h3>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4 overflow-y-auto">
         <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">Lưu sẽ ghi lên server (áp dụng cho mọi tài khoản). Nếu không kết nối được backend Quantis thì chỉ lưu trên trình duyệt. Trên <strong>research.neu.edu.vn</strong> mặc định: Backend <code>/api/quantis/backend</code>, Backend Python <code>/api/quantis/backend-python</code>, Ollama <code>/ollama/v1</code>, Archive <code>/api/archive</code>, Archive file <code>/api/archive-file</code>, mô hình qwen3:8b — các ô được điền sẵn nếu chưa chỉnh.</p>
         <div className="space-y-3 text-sm">
           <div className={rowClass}>
@@ -7256,8 +7462,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             {backendTestResult !== null && (
               <p className={backendTestResult.node ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
                 {backendTestResult.node ? "✓ Node OK" : "✗ Node lỗi"}
-                {backendTestResult.python ? " · Python OK" : " · Python chưa cấu hình"}
+                {backendTestResult.python ? " · Python OK" : " · Backend phân tích (Python/R) chưa cấu hình"}
               </p>
+            )}
+            {backendTestResult !== null && !backendTestResult.python && (
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">Backend phân tích là tùy chọn: cấu hình <code className="bg-neutral-100 dark:bg-neutral-700 px-0.5 rounded">ANALYZE_PYTHON_URL</code> trên server Node để bật. Ứng dụng vẫn dùng được (tính trên trình duyệt).</p>
             )}
           </div>
           <div className={rowClass}>
@@ -7291,7 +7500,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             {aiTestResult !== null && <p className={aiTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{aiTestResult ? "✓ API OK" : "✗ Không kết nối được"}</p>}
           </div>
           <div className={rowClass}>
-            <label className={labelClass}>Mô hình AI (≥8B)</label>
+            <label className={labelClass}>Mô hình AI</label>
             <p className={hintClass}>Giải thích / Diễn giải kết quả, tab AI hướng dẫn.</p>
             {loading ? (
               <p className="text-xs text-neutral-500">Đang tải danh sách...</p>
@@ -7307,7 +7516,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
         </div>
-        <button type="button" onClick={onClose} className="mt-4 rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90">Đóng</button>
+        </div>
+        <div className="p-4 border-t border-neutral-200 dark:border-neutral-700 shrink-0">
+          <button type="button" onClick={onClose} className="rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90">Đóng</button>
+        </div>
       </div>
     </div>
   );
@@ -7316,9 +7528,15 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 function GuideModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold mb-4">Quantis ? Hướng dẫn nhanh</h3>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3"><strong>Quantis</strong> là nền tảng phân tích dữ liệu nghiên cứu: import, chuyển đổi, thống kê, ML, xuất báo cáo. Hỗ trợ reproducibility với lưu workflow và audit trail.</p>
+      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 flex flex-col max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
+          <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Quantis ? Hướng dẫn nhanh</h3>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3"><strong>Quantis</strong> là nền tảng phân tích dữ liệu nghiên cứu: import, chuyển đổi, thống kê, ML, xuất báo cáo. Hỗ trợ reproducibility với lưu workflow và audit trail.</p>
         <ul className="space-y-2 text-sm text-neutral-600 dark:text-neutral-400 mb-4">
           <li><strong>Workflow nghiên cứu:</strong> Quy trình chuẩn từ import đến lưu workflow.</li>
           <li><strong>Data Layer:</strong> Import (panel trái), xem dữ liệu, phân tích sơ bộ, biến đổi (missing: mean/median/mode; chuẩn hóa z-score, min-max; lọc, sắp xếp, recode).</li>
@@ -7333,6 +7551,7 @@ function GuideModal({ onClose }: { onClose: () => void }) {
           <p className="text-xs text-neutral-600 dark:text-neutral-400"><strong>Nâng cao:</strong> Hồi quy OLS/Logistic, VIF (đa cộng tuyến), SEM (Mediation, Moderation), EFA, K-means, Bayesian (tỉ lệ). Xuất biểu đồ SVG/PNG, heatmap tương quan (xuất CSV). Tương đương nhiều tính năng SPSS, R, Python.</p>
         </div>
         <button type="button" onClick={onClose} className="mt-4 rounded-lg bg-neutral-200 dark:bg-neutral-700 px-4 py-2">Đóng</button>
+        </div>
       </div>
     </div>
   );

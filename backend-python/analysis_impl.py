@@ -293,6 +293,50 @@ def run_manova(rows: list, factor_col: str, value_cols: list[str]):
         return {"error": str(e), "factorCol": factor_col, "valueCols": value_cols, "n": len(df)}
 
 
+def run_mancova(rows: list, factor_col: str, value_cols: list[str], covariate_cols: list[str]):
+    """MANCOVA: MANOVA với covariate — nhiều biến phụ thuộc (DV), một nhân tố (IV), kiểm soát covariate(s)."""
+    try:
+        from statsmodels.multivariate.manova import MANOVA
+    except ImportError:
+        return {"error": "statsmodels.multivariate.manova không khả dụng", "factorCol": factor_col, "valueCols": value_cols, "covariateCols": covariate_cols, "n": 0}
+    df = _rows_to_df(rows)
+    if factor_col not in df.columns:
+        return None
+    for c in value_cols:
+        if c not in df.columns:
+            return None
+    for c in covariate_cols:
+        if c not in df.columns or c in value_cols:
+            return None
+    if not covariate_cols:
+        return None
+    cols_use = [factor_col] + value_cols + covariate_cols
+    df = df[cols_use].copy()
+    for c in value_cols + covariate_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df.dropna()
+    if len(df) < 4 or df[factor_col].nunique() < 2:
+        return None
+    # Công thức: DVs ~ C(factor) + cov1 + cov2 + ...
+    formula = " + ".join(value_cols) + " ~ C(" + factor_col + ") + " + " + ".join(covariate_cols)
+    try:
+        ma = MANOVA.from_formula(formula, data=df)
+        result = ma.mv_test()
+        out = {"factorCol": factor_col, "valueCols": value_cols, "covariateCols": covariate_cols, "n": len(df)}
+        if hasattr(result, "results"):
+            r = result.results
+            if "Intercept" in r:
+                out["intercept"] = str(r["Intercept"])
+            if "C(" + factor_col + ")" in r:
+                out["factorTest"] = str(r["C(" + factor_col + ")"])
+            out["summary"] = str(result)
+        else:
+            out["summary"] = str(result)
+        return out
+    except Exception as e:
+        return {"error": str(e), "factorCol": factor_col, "valueCols": value_cols, "covariateCols": covariate_cols, "n": len(df)}
+
+
 def run_kruskal_wallis(rows: list, factor_col: str, value_col: str):
     """Kruskal-Wallis H (non-parametric one-way ANOVA): so sánh 3+ nhóm độc lập."""
     df = _rows_to_df(rows)

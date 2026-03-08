@@ -115,6 +115,37 @@ Backend Python (phân tích) được cấu hình **trên server** (biến `ANAL
 
 ---
 
+## Cấu hình Backend Python khi chạy local (development)
+
+Để app hiển thị "Backend phân tích (Python/R) đã kết nối" và dùng phân tích thống kê qua Python:
+
+1. **Chạy backend Python** (FastAPI) trên port **4000**:
+   ```bash
+   cd backend-python
+   pip install -r requirements.txt   # nếu chưa cài
+   uvicorn main:app --reload --port 4000
+   ```
+   Kiểm tra: `curl http://localhost:4000/api/quantis/analyze/health` → `{"status":"ok",...}`
+
+2. **Cấu hình backend Node** để proxy sang Python:
+   - Vào thư mục `backend`, tạo file `.env` từ mẫu:
+     ```bash
+     cd backend
+     cp .env.example .env
+     ```
+   - Trong `backend/.env` đảm bảo có dòng:
+     ```
+     ANALYZE_PYTHON_URL=http://localhost:4000
+     ```
+   - Cài thêm dependency (nếu chưa): `npm install`
+   - Khởi động lại backend Node (từ thư mục gốc: `npm run start` hoặc `cd backend && npm run dev`).
+
+3. **Frontend**: trong Cài đặt, **Địa chỉ backend Quantis** trỏ tới backend Node (vd. `http://localhost:4001`). Không cần cấu hình URL Python ở frontend — Node tự proxy `/api/quantis/analyze/*` sang `ANALYZE_PYTHON_URL`.
+
+Sau khi cấu hình đúng, trang Cài đặt sẽ hiển thị "Backend phân tích (Python/R) đã kết nối". Nếu không set `ANALYZE_PYTHON_URL` hoặc Python không chạy, app vẫn chạy bình thường và dùng tính toán trên trình duyệt.
+
+---
+
 ## Mặc định khi chạy trên research.neu.edu.vn
 
 Khi người dùng **không chỉnh** gì trong Cài đặt và truy cập từ **research.neu.edu.vn**, ứng dụng tự dùng:

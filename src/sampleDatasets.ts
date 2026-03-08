@@ -1,6 +1,6 @@
 /**
  * Danh sách bộ dữ liệu mẫu đa lĩnh vực để thử nghiệm phân tích trên Quantis.
- * Mỗi bộ có name, domain, description và getData() trả về [header, ...rows].
+ * Mỗi bộ có name, domain, description, tags (từ khóa tìm kiếm / loại phân tích) và getData() trả về [header, ...rows].
  */
 
 export interface SampleDatasetDef {
@@ -8,6 +8,8 @@ export interface SampleDatasetDef {
   name: string;
   domain: string;
   description: string;
+  /** Từ khóa tìm kiếm và loại phân tích có thể chạy (t-test, ANOVA, Chi-square, tương quan, hồi quy, Cronbach, EFA, K-means, ...) */
+  tags?: string[];
   /** Số dòng (không tính header), số cột - để hiển thị */
   rows: number;
   columns: number;
@@ -24,7 +26,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "edu-scores",
     name: "Điểm học sinh (A/B)",
     domain: "Giáo dục",
-    description: "Điểm kiểm tra hai nhóm phương pháp dạy. Có một số ô thiếu để demo Biến đổi (làm sạch, lọc, sắp xếp, recode). Thử: Thống kê mô tả, t-test, tab Biến đổi.",
+    description: "Điểm kiểm tra hai nhóm phương pháp dạy (A/B). Có ô thiếu để demo Biến đổi. Thử: Thống kê mô tả, t-test hai mẫu độc lập, Mann-Whitney, ANOVA (theo lớp), biểu đồ box.",
+    tags: ["t-test", "Mann-Whitney", "ANOVA", "thống kê mô tả", "mô tả", "biến đổi", "missing", "giáo dục", "so sánh nhóm"],
     rows: 80,
     columns: 5,
     getData: () => {
@@ -49,7 +52,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "sales-branch",
     name: "Doanh thu theo chi nhánh",
     domain: "Kinh doanh",
-    description: "Doanh thu và chi phí quảng cáo theo tháng/chi nhánh. Thử: Crosstab, tương quan, hồi quy đơn.",
+    description: "Doanh thu, chi phí quảng cáo, lợi nhuận theo tháng/chi nhánh. Thử: Thống kê mô tả, Crosstab, tương quan Pearson/Spearman, hồi quy OLS, ANOVA (theo chi nhánh).",
+    tags: ["tương quan", "hồi quy", "OLS", "ANOVA", "crosstab", "mô tả", "kinh doanh"],
     rows: 60,
     columns: 5,
     getData: () => {
@@ -68,7 +72,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "health-bmi",
     name: "Chiều cao – Cân nặng",
     domain: "Y tế",
-    description: "Số đo theo nhóm tuổi. Thử: Tương quan Pearson, hồi quy tuyến tính, phân nhóm (ANOVA).",
+    description: "Số đo chiều cao, cân nặng theo nhóm tuổi và giới tính. Thử: Tương quan Pearson, hồi quy tuyến tính, ANOVA (theo tuổi_nhóm), Shapiro-Wilk, thống kê mô tả.",
+    tags: ["tương quan", "Pearson", "hồi quy", "OLS", "ANOVA", "Shapiro-Wilk", "mô tả", "y tế"],
     rows: 70,
     columns: 4,
     getData: () => {
@@ -86,7 +91,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "marketing-ab",
     name: "Tỷ lệ chuyển đổi A/B",
     domain: "Marketing",
-    description: "Phiên bản giao diện (A/B) và trạng thái chuyển đổi. Thử: Bảng chéo, Chi-square, so sánh tỷ lệ.",
+    description: "Phiên bản giao diện (A/B), chuyển đổi (Có/Không), thời gian xem, nguồn. Thử: Bảng chéo, Chi-square, Fisher exact, so sánh tỷ lệ, hồi quy logistic (chuyển đổi ~ thời_gian).",
+    tags: ["Chi-square", "crosstab", "Fisher", "logistic", "tỷ lệ", "A/B", "marketing"],
     rows: 100,
     columns: 4,
     getData: () => {
@@ -104,7 +110,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "hr-salary",
     name: "Lương theo phòng ban",
     domain: "Nhân sự",
-    description: "Lương và thâm niên theo phòng. Thử: ANOVA một nhân tố, mô tả theo nhóm, hồi quy.",
+    description: "Lương, thâm niên, bằng cấp, hiệu suất theo phòng (Kỹ thuật, Kinh doanh, Hành chính). Thử: ANOVA một nhân tố, Kruskal-Wallis, thống kê mô tả theo nhóm, hồi quy OLS, Levene.",
+    tags: ["ANOVA", "Kruskal-Wallis", "Levene", "hồi quy", "mô tả", "nhân sự"],
     rows: 65,
     columns: 5,
     getData: () => {
@@ -128,7 +135,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "retail-products",
     name: "Doanh số theo sản phẩm",
     domain: "Bán lẻ",
-    description: "Số lượng bán và doanh thu theo danh mục. Thử: Thống kê mô tả, crosstab, biểu đồ cột.",
+    description: "Số lượng bán, đơn giá, doanh thu theo danh mục. Thử: Thống kê mô tả, Crosstab (danh_mục × khoảng doanh_thu), tương quan, biểu đồ cột.",
+    tags: ["mô tả", "crosstab", "tương quan", "bán lẻ"],
     rows: 90,
     columns: 5,
     getData: () => {
@@ -146,7 +154,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "survey-likert",
     name: "Khảo sát mức độ hài lòng",
     domain: "Khảo sát",
-    description: "Thang Likert 5 mức cho các câu hỏi. Thử: Độ tin cậy Cronbach alpha, thống kê mô tả, phân tích nhân tố.",
+    description: "Thang Likert 1–5 (câu_1 đến câu_5), nhóm tuổi. Thử: Độ tin cậy Cronbach alpha, EFA, thống kê mô tả, ANOVA/Kruskal-Wallis theo nhóm_tuổi.",
+    tags: ["Cronbach", "EFA", "phân tích nhân tố", "Likert", "mô tả", "ANOVA", "khảo sát"],
     rows: 50,
     columns: 6,
     getData: () => {
@@ -166,7 +175,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "sport-performance",
     name: "Thành tích chạy theo độ tuổi",
     domain: "Thể thao",
-    description: "Thời gian chạy 5km và chỉ số sức bền. Thử: Tương quan, hồi quy, so sánh nhóm tuổi.",
+    description: "Thời gian chạy 5km, nhịp tim, giới tính theo độ tuổi. Thử: Tương quan, hồi quy, so sánh nhóm (t-test, ANOVA theo giới).",
+    tags: ["tương quan", "hồi quy", "t-test", "ANOVA", "mô tả", "thể thao"],
     rows: 55,
     columns: 4,
     getData: () => {
@@ -183,7 +193,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "env-temp",
     name: "Nhiệt độ – Độ ẩm",
     domain: "Môi trường",
-    description: "Số đo nhiệt độ và độ ẩm theo ngày. Thử: Tương quan, biểu đồ đường, mô tả theo mùa.",
+    description: "Nhiệt độ và độ ẩm theo ngày, mùa. Thử: Tương quan, ANOVA theo mùa, thống kê mô tả, biểu đồ đường.",
+    tags: ["tương quan", "ANOVA", "mô tả", "môi trường"],
     rows: 60,
     columns: 4,
     getData: () => {
@@ -202,7 +213,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "finance-quarterly",
     name: "Lợi nhuận theo quý",
     domain: "Tài chính",
-    description: "Doanh thu, chi phí, lợi nhuận theo quý và khu vực. Thử: Mô tả, ANOVA, xu hướng.",
+    description: "Doanh thu, chi phí, lợi nhuận theo năm và quý. Thử: Thống kê mô tả, ANOVA (theo quý/năm), xu hướng, hồi quy.",
+    tags: ["ANOVA", "hồi quy", "mô tả", "tài chính"],
     rows: 48,
     columns: 5,
     getData: () => {
@@ -219,7 +231,8 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
     id: "customer-seg",
     name: "Phân khúc khách hàng",
     domain: "CRM",
-    description: "Đặc điểm khách hàng để phân cụm. Thử: K-means, mô tả theo nhóm, tương quan.",
+    description: "Tuổi, thu nhập, số giao dịch, giá trị đơn, khu vực. Thử: K-means phân cụm, tương quan, thống kê mô tả theo nhóm, ANOVA theo khu_vực.",
+    tags: ["K-means", "phân cụm", "tương quan", "mô tả", "ANOVA", "CRM"],
     rows: 75,
     columns: 5,
     getData: () => {
@@ -231,6 +244,27 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
         String(200 + Math.floor(Math.random() * 800)),
         ["Bắc", "Trung", "Nam"][i % 3],
       ]);
+      return [header, ...rows];
+    },
+  },
+  {
+    id: "prepost-intervention",
+    name: "Đo trước / sau can thiệp",
+    domain: "Nghiên cứu",
+    description: "Điểm trước và sau can thiệp (hoặc kiểm soát), theo nhóm. Thử: t-test cặp (paired), Wilcoxon cặp, so sánh hai nhóm (t-test độc lập), thống kê mô tả.",
+    tags: ["t-test cặp", "paired", "Wilcoxon cặp", "trước sau", "can thiệp", "nghiên cứu", "mô tả"],
+    rows: 48,
+    columns: 5,
+    getData: () => {
+      const header = ["id", "nhóm", "điểm_trước", "điểm_sau", "chênh_lệch"];
+      const rows: string[][] = [];
+      for (let i = 0; i < 48; i++) {
+        const nhom = i % 2 ? "can_thiệp" : "đối_chứng";
+        const truoc = 50 + Math.floor(Math.random() * 20);
+        const sau = nhom === "can_thiệp" ? truoc + 5 + Math.floor(Math.random() * 12) : truoc + Math.floor(Math.random() * 5);
+        const chenh = sau - truoc;
+        rows.push([String(i + 1), nhom, String(truoc), String(sau), String(chenh)]);
+      }
       return [header, ...rows];
     },
   },

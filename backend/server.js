@@ -3,10 +3,11 @@
  * Chạy độc lập, không cần PostgreSQL. Frontend trỏ VITE_QUANTIS_API_URL tới đây.
  * Proxy Archive NEU: /api/quantis/archive/* -> archive.neu.edu.vn/api/v1/* (tránh CORS và route 422).
  */
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
-const path = require("path");
 
 const PORT = Number(process.env.PORT) || 4001;
 const ARCHIVE_NEU_URL = (process.env.ARCHIVE_NEU_URL || "https://archive.neu.edu.vn").replace(/\/+$/, "");
