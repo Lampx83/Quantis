@@ -8,6 +8,8 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
+const multer = require("multer");
+const FormData = require("form-data");
 
 const PORT = Number(process.env.PORT) || 4001;
 const ARCHIVE_NEU_URL = (process.env.ARCHIVE_NEU_URL || "https://archive.neu.edu.vn").replace(/\/+$/, "");
@@ -65,6 +67,7 @@ const INFO_HTML = `<!DOCTYPE html>
       <li><span class="method get">GET</span> <code>/api/quantis/health</code> — Kiểm tra backend còn sống. Trả về <code>{ "status": "ok", "service": "quantis" }</code>.</li>
       <li><span class="method get">GET</span> <code>/api/quantis/data</code> — Lấy toàn bộ datasets và workflows (JSON).</li>
       <li><span class="method post">POST</span> <code>/api/quantis/data</code> — Lưu datasets và workflows. Body: <code>{ "datasets": [...], "workflows": [...] }</code>.</li>
+      <li><span class="method post">POST</span> <code>/api/quantis/parse-file</code> — Parse file (Excel, ODS, SPSS, Stata, SAS, R) thành bảng. Gửi multipart <code>file</code>. Cần Python backend (<code>ANALYZE_PYTHON_URL</code>).</li>
       <li><span class="method any">*</span> <code>/api/quantis/archive/*</code> — Proxy tới Archive NEU (<code>api/v1/*</code>). Dùng để tìm kiếm và tải dataset vào Quantis.</li>
       <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới Ollama (cấu hình <code>OLLAMA_URL</code>). Tránh CORS khi dùng AI từ trình duyệt.</li>
       <li><span class="method any">*</span> <code>/api/quantis/analyze/*</code> — Proxy tới backend phân tích Python (nếu đã cấu hình <code>ANALYZE_PYTHON_URL</code>).</li>
@@ -98,6 +101,7 @@ app.get("/api/quantis", (req, res) => {
       { method: "GET", path: "/api/quantis/health", description: "Health check" },
       { method: "GET", path: "/api/quantis/data", description: "Lấy datasets và workflows" },
       { method: "POST", path: "/api/quantis/data", description: "Lưu datasets và workflows", body: { datasets: "[]", workflows: "[]" } },
+      { method: "POST", path: "/api/quantis/parse-file", description: "Parse file (Excel, ODS, SPSS, Stata, SAS, R) — multipart file, cần ANALYZE_PYTHON_URL" },
       { method: "GET", path: "/api/quantis/settings", description: "Cấu hình dùng chung (Archive, AI, …)" },
       { method: "PUT", path: "/api/quantis/settings", description: "Lưu cấu hình dùng chung", body: { archiveUrl: "...", archiveFileUrl: "...", aiApiUrl: "...", defaultAiModel: "..." } },
       { method: "*", path: "/api/quantis/archive/*", description: "Proxy Archive NEU" },
@@ -234,6 +238,39 @@ app.put("/api/quantis/settings", (req, res) => {
 });
 
 const ANALYZE_PYTHON_URL = (process.env.ANALYZE_PYTHON_URL || "").replace(/\/+$/, "");
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// POST /api/quantis/parse-file — upload file, proxy tới Python để parse (Excel, ODS, SPSS, Stata, SAS, R)
+app.post("/api/quantis/parse-file", upload.single("file"), async (req, res) => {
+  if (!ANALYZE_PYTHON_URL) {
+    return res.status(503).json({ error: "Parse file requires Python backend", detail: "Set ANALYZE_PYTHON_URL to enable parsing Excel, ODS, SPSS, Stata, SAS, R files." });
+  }
+  const file = req.file;
+  if (!file || !file.buffer) {
+    return res.status(400).json({ error: "No file uploaded", detail: "Send a multipart field named 'file'." });
+  }
+  try {
+    const form = new FormData();
+    form.append("file", file.buffer, { filename: file.originalname || "data", contentType: file.mimetype || "application/octet-stream" });
+    const body = form.getBuffer();
+    const headers = { ...form.getHeaders(), "Content-Length": String(body.length) };
+    const proxyRes = await fetch(`${ANALYZE_PYTHON_URL}/parse-file`, {
+      method: "POST",
+      body,
+      headers,
+    });
+    const json = await proxyRes.json().catch(() => ({ detail: "Invalid JSON from Python" }));
+    if (!proxyRes.ok) {
+      console.error("[parse-file] Python returned", proxyRes.status, json?.detail || json?.error || json);
+      return res.status(proxyRes.status).json(json);
+    }
+    res.json(json);
+  } catch (e) {
+    console.error("Parse-file proxy error:", e.message);
+    res.status(502).json({ error: "Parse file backend unreachable", detail: e.message });
+  }
+});
 
 // Proxy phân tích: /api/quantis/analyze/* -> Python backend (khi ANALYZE_PYTHON_URL được cấu hình)
 app.use("/api/quantis/analyze", async (req, res) => {
