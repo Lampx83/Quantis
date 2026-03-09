@@ -6,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py routes_analyze.py analysis_impl.py ./
+COPY main.py routes_analyze.py analysis_impl.py parse_file.py ./
 
 EXPOSE 8000
 
