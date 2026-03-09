@@ -8,7 +8,14 @@ const embedBase = process.env.EMBED_BASE_PATH || "./"
 const backendPort = Number(process.env.PORT) || 4001
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        generatorOpts: { compact: false },
+      },
+    }),
+    tailwindcss(),
+  ],
   base: embedBase,
   server: {
     port: 3000,

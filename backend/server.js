@@ -241,8 +241,8 @@ const ANALYZE_PYTHON_URL = (process.env.ANALYZE_PYTHON_URL || "").replace(/\/+$/
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-// POST /api/quantis/parse-file — upload file, proxy tới Python để parse (Excel, ODS, SPSS, Stata, SAS, R)
-app.post("/api/quantis/parse-file", upload.single("file"), async (req, res) => {
+// Handler dùng chung cho parse-file (path gốc và path khi embed: /api/quantis/backend/...)
+async function handleParseFile(req, res) {
   if (!ANALYZE_PYTHON_URL) {
     return res.status(503).json({ error: "Parse file requires Python backend", detail: "Set ANALYZE_PYTHON_URL to enable parsing Excel, ODS, SPSS, Stata, SAS, R files." });
   }
@@ -255,6 +255,7 @@ app.post("/api/quantis/parse-file", upload.single("file"), async (req, res) => {
     form.append("file", file.buffer, { filename: file.originalname || "data", contentType: file.mimetype || "application/octet-stream" });
     const body = form.getBuffer();
     const headers = { ...form.getHeaders(), "Content-Length": String(body.length) };
+    // Gọi Python (base có thể là http://host:8000 hoặc http://host:8000/api/quantis/backend-python)
     const proxyRes = await fetch(`${ANALYZE_PYTHON_URL}/parse-file`, {
       method: "POST",
       body,
@@ -270,7 +271,13 @@ app.post("/api/quantis/parse-file", upload.single("file"), async (req, res) => {
     console.error("Parse-file proxy error:", e.message);
     res.status(502).json({ error: "Parse file backend unreachable", detail: e.message });
   }
-});
+}
+
+// POST /api/quantis/parse-file — upload file, proxy tới Python để parse (Excel, ODS, SPSS, Stata, SAS, R)
+app.post("/api/quantis/parse-file", upload.single("file"), handleParseFile);
+
+// Khi embed trong Portal: frontend base = /api/quantis/backend → gọi /api/quantis/backend/api/quantis/parse-file (proxy có thể forward nguyên path)
+app.post("/api/quantis/backend/api/quantis/parse-file", upload.single("file"), handleParseFile);
 
 // Proxy phân tích: /api/quantis/analyze/* -> Python backend (khi ANALYZE_PYTHON_URL được cấu hình)
 app.use("/api/quantis/analyze", async (req, res) => {

@@ -66,7 +66,7 @@ import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
 import { AI_MAX_PROMPT_CHARS } from "./api";
 import ReactMarkdown from "react-markdown";
-import { parseCSV, parseFileContent, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, kernelDensityEstimate, binNumericForPie, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
+import { parseCSV, parseFileContent, getFormatFromFilename, isTextFormat, isBackendParseFormat, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, kernelDensityEstimate, binNumericForPie, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
 import * as archiveApi from "./archive-api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "./archive-api";
 import { SAMPLE_DATASETS } from "./sampleDatasets";
@@ -120,6 +120,7 @@ export default function App() {
   const [analysisBackendAvailable, setAnalysisBackendAvailable] = useState(false);
   const [descriptiveBackendResult, setDescriptiveBackendResult] = useState<DescriptiveRow[] | null>(null);
   const [correlationBackendResult, setCorrelationBackendResult] = useState<{ matrix: number[][]; columnNames: string[] } | null>(null);
+  const [correlationLoading, setCorrelationLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [lastHypothesisResult, setLastHypothesisResult] = useState<{ type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: { groupCol?: string; groupVal1?: string; groupVal2?: string; numCol?: string; chiCol1?: string; chiCol2?: string; factorCol?: string; valueCol?: string } } | null>(null);
   const [correlationMethod, setCorrelationMethod] = useState<"pearson" | "spearman" | "kendall">("pearson");
@@ -136,7 +137,6 @@ export default function App() {
   const [editingStepLabel, setEditingStepLabel] = useState("");
   const [editingStepType, setEditingStepType] = useState<WorkflowStep["type"]>("import");
   const [editingStepNote, setEditingStepNote] = useState("");
-  const [workflowOverviewMenuOpen, setWorkflowOverviewMenuOpen] = useState(false);
   const [stepMenuOpenId, setStepMenuOpenId] = useState<string | null>(null);
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
@@ -169,22 +169,36 @@ export default function App() {
   const handleSidebarCsvImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const format = getFormatFromFilename(file.name);
+
+    const applyRows = (rows: string[][], fmt: string) => {
+      if (!rows || rows.length < 2) return;
+      const headers = rows[0];
+      const kept = rows.slice(1, MAX_ROWS_STORED + 1);
+      const id = generateId();
+      const now = new Date().toISOString();
+      const baseName = file.name.replace(/\.(csv|tsv|json|txt|xlsx|xls|ods|sav|dta|sas7bdat|rds|rdata)$/i, "") || file.name;
+      setDatasets((prev) => [...prev, { id, name: baseName, rows: kept.length, columns: headers.length, columnNames: headers, preview: rows.slice(0, 6), data: [headers, ...kept], sourceFormat: fmt, createdAt: now, updatedAt: now }]);
+      setSelectedDatasetId(id);
+      if (selectedWorkflowId) {
+        setWorkflows((prev) => prev.map((w) => (w.id !== selectedWorkflowId ? w : { ...w, datasetIds: [...(w.datasetIds ?? []), id].filter((x, i, a) => a.indexOf(x) === i), updatedAt: now })));
+      }
+    };
+
+    if (isBackendParseFormat(format)) {
+      quantisApi.parseFileViaBackend(file).then(({ rows, format: fmt }) => applyRows(rows, fmt)).catch((err) => {
+        showToast?.(err?.message ?? "Không thể đọc file. Cần bật backend Quantis + Python để import Excel, ODS, SPSS, Stata, SAS, R.");
+      });
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const { rows, format } = parseFileContent(String(reader.result), file.name);
-        if (rows.length < 2) return;
-        const headers = rows[0];
-        const kept = rows.slice(1, MAX_ROWS_STORED + 1);
-        const id = generateId();
-        const now = new Date().toISOString();
-        const baseName = file.name.replace(/\.(csv|tsv|json|txt)$/i, "") || file.name;
-        setDatasets((prev) => [...prev, { id, name: baseName, rows: kept.length, columns: headers.length, columnNames: headers, preview: rows.slice(0, 6), data: [headers, ...kept], sourceFormat: format, createdAt: now, updatedAt: now }]);
-        setSelectedDatasetId(id);
-        if (selectedWorkflowId) {
-          setWorkflows((prev) => prev.map((w) => (w.id !== selectedWorkflowId ? w : { ...w, datasetIds: [...(w.datasetIds ?? []), id].filter((x, i, a) => a.indexOf(x) === i), updatedAt: now })));
-        }
-      } catch (_) { /* ignore parse error */ }
+        const { rows, format: fmt } = parseFileContent(String(reader.result), file.name);
+        applyRows(rows, fmt);
+      } catch (_) { /* ignore */ }
     };
     reader.readAsText(file, "UTF-8");
     e.target.value = "";
@@ -411,23 +425,30 @@ export default function App() {
     quantisApi.analyzeDescriptive(rows).then((res) => setDescriptiveBackendResult(res ?? null));
   }, [mainSection, dataTab, analysisTab, analysisBackendAvailable, selectedDataset?.id]);
 
-  // Khi tab correlation + backend Python: lấy ma trận tương quan từ server
+  // Khi tab correlation + backend Python: lấy ma trận tương quan từ server (chỉ khi đang ở section Phân tích)
   useEffect(() => {
-    if (analysisTab !== "correlation" || !analysisBackendAvailable || !selectedDataset) {
+    if (mainSection !== "analysis" || analysisTab !== "correlation" || !analysisBackendAvailable || !selectedDataset) {
       setCorrelationBackendResult(null);
+      setCorrelationLoading(false);
       return;
     }
     const rows = getDataRows(selectedDataset);
     if (rows.length < 3) {
       setCorrelationBackendResult(null);
+      setCorrelationLoading(false);
       return;
     }
     if (correlationMethod === "kendall") {
       setCorrelationBackendResult(null);
+      setCorrelationLoading(false);
       return;
     }
-    quantisApi.analyzeCorrelation(rows, correlationMethod).then((res) => setCorrelationBackendResult(res ?? null));
-  }, [analysisTab, analysisBackendAvailable, selectedDataset?.id, correlationMethod]);
+    setCorrelationLoading(true);
+    quantisApi.analyzeCorrelation(rows, correlationMethod).then((res) => {
+      setCorrelationBackendResult(res ?? null);
+      setCorrelationLoading(false);
+    }).catch(() => setCorrelationLoading(false));
+  }, [mainSection, analysisTab, analysisBackendAvailable, selectedDataset?.id, correlationMethod]);
 
   // Khi có backend: tải datasets + workflows từ server (nếu đã đăng nhập)
   useEffect(() => {
@@ -610,27 +631,6 @@ export default function App() {
                   <Download className="w-4 h-4" />
                   Tải workflow mẫu
                 </button>
-                {selectedWorkflow && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHeaderMenuOpen(false);
-                      setConfirmDialog({
-                        message: `Xóa workflow "${selectedWorkflow.name}"?`,
-                        onConfirm: () => {
-                          setWorkflows((prev) => prev.filter((x) => x.id !== selectedWorkflow.id));
-                          setSelectedWorkflowId(selectedWorkflowId === selectedWorkflow.id ? null : selectedWorkflowId);
-                          setSelectedWorkflowStepId(null);
-                          setConfirmDialog(null);
-                        },
-                      });
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-inset rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Xóa workflow
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => { setGuideOpen(true); setHeaderMenuOpen(false); }}
@@ -717,7 +717,7 @@ export default function App() {
                   <span className="text-sm font-semibold">Bộ dữ liệu (Import)</span>
                 </div>
                 <div className="flex-shrink-0 px-3 pb-2 flex flex-col gap-1.5">
-                  <input ref={csvFileInputRef} type="file" accept=".csv,.tsv,.txt,.json,application/json" className="hidden" onChange={handleSidebarCsvImport} />
+                  <input ref={csvFileInputRef} type="file" accept=".csv,.tsv,.txt,.json,.xlsx,.xls,.ods,.sav,.dta,.sas7bdat,.rds,.RData,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleSidebarCsvImport} />
                   <button
                     type="button"
                     onClick={() => csvFileInputRef.current?.click()}
@@ -972,54 +972,36 @@ export default function App() {
                     )}
                   </div>
                   {editingWorkflowNameId !== selectedWorkflow.id && (
-                    <div className="relative flex items-center shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={() => setWorkflowOverviewMenuOpen((v) => !v)}
-                        className="p-2 rounded-lg text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-800 dark:hover:text-neutral-200"
-                        title="Tùy chọn"
-                        aria-expanded={workflowOverviewMenuOpen}
+                        onClick={() => {
+                          setEditingWorkflowNameId(selectedWorkflow.id);
+                          setEditingWorkflowName(selectedWorkflow.name);
+                          setEditingWorkflowDescriptionId(selectedWorkflow.id);
+                          setEditingWorkflowDescription(selectedWorkflow.description ?? "");
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                       >
-                        <MoreVertical className="w-4 h-4" />
+                        <Edit2 className="w-4 h-4 shrink-0" /> Sửa
                       </button>
-                      {workflowOverviewMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setWorkflowOverviewMenuOpen(false)} aria-hidden />
-                          <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-lg py-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingWorkflowNameId(selectedWorkflow.id);
-                                setEditingWorkflowName(selectedWorkflow.name);
-                                setEditingWorkflowDescriptionId(selectedWorkflow.id);
-                                setEditingWorkflowDescription(selectedWorkflow.description ?? "");
-                                setWorkflowOverviewMenuOpen(false);
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
-                            >
-                              <Edit2 className="w-4 h-4 shrink-0" /> Sửa workflow
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setWorkflowOverviewMenuOpen(false);
-                                setConfirmDialog({
-                                  message: `Xóa workflow "${selectedWorkflow.name}"?`,
-                                  onConfirm: () => {
-                                    setWorkflows((prev) => prev.filter((x) => x.id !== selectedWorkflow.id));
-                                    setSelectedWorkflowId(selectedWorkflowId === selectedWorkflow.id ? null : selectedWorkflowId);
-                                    setSelectedWorkflowStepId(null);
-                                    setConfirmDialog(null);
-                                  },
-                                });
-                              }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            >
-                              <Trash2 className="w-4 h-4 shrink-0" /> Xóa workflow
-                            </button>
-                          </div>
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmDialog({
+                            message: `Xóa workflow "${selectedWorkflow.name}"?`,
+                            onConfirm: () => {
+                              setWorkflows((prev) => prev.filter((x) => x.id !== selectedWorkflow.id));
+                              setSelectedWorkflowId(selectedWorkflowId === selectedWorkflow.id ? null : selectedWorkflowId);
+                              setSelectedWorkflowStepId(null);
+                              setConfirmDialog(null);
+                            },
+                          });
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 className="w-4 h-4 shrink-0" /> Xóa workflow
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1270,6 +1252,7 @@ export default function App() {
             analysisBackendAvailable={analysisBackendAvailable}
             descriptiveBackendResult={descriptiveBackendResult}
             correlationBackendResult={correlationBackendResult}
+            correlationLoading={correlationLoading}
             showToast={showToast}
           />
         )}
@@ -1612,6 +1595,7 @@ function DescriptiveStatsView({
   const [kappaCol1, setKappaCol1] = useState("");
   const [kappaCol2, setKappaCol2] = useState("");
   const [kappaResult, setKappaResult] = useState<{ col1: string; col2: string; n: number; kappa: number; observedAgreement: number; expectedAgreement: number; table: Record<string, Record<string, number>> } | null>(null);
+  const [exploreLoading, setExploreLoading] = useState<string | null>(null);
   const [bootstrapCICol, setBootstrapCICol] = useState("");
   const [bootstrapCIResult, setBootstrapCIResult] = useState<{ mean: number; ciLower: number; ciUpper: number; n: number } | null>(null);
 
@@ -1839,7 +1823,28 @@ function DescriptiveStatsView({
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <button type="button" onClick={async () => { if (!textStatsCol) return; if (analysisBackendAvailable) { const res = await quantisApi.analyzeTextStats(rows, textStatsCol); setTextStatsResult(res ?? null); return; } const res = computeTextStats(rows, textStatsCol); setTextStatsResult(res ?? null); }} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Phân tích</button>
+                <button
+                  type="button"
+                  disabled={exploreLoading !== null}
+                  onClick={async () => {
+                    if (!textStatsCol) return;
+                    if (analysisBackendAvailable) {
+                      setExploreLoading("textstats");
+                      try {
+                        const res = await quantisApi.analyzeTextStats(rows, textStatsCol);
+                        setTextStatsResult(res ?? null);
+                      } finally {
+                        setExploreLoading(null);
+                      }
+                      return;
+                    }
+                    const res = computeTextStats(rows, textStatsCol);
+                    setTextStatsResult(res ?? null);
+                  }}
+                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {exploreLoading === "textstats" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Phân tích"}
+                </button>
               </div>
               {textStatsResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm space-y-2">
@@ -1872,7 +1877,30 @@ function DescriptiveStatsView({
                   <label className="block text-sm mb-1">Từ khóa (mỗi dòng hoặc cách nhau dấu phẩy)</label>
                   <textarea value={keywordCountsInput} onChange={(e) => { setKeywordCountsInput(e.target.value); setKeywordCountsResult(null); }} placeholder="ví dụ: tích cực, tiêu cực, trung tính" className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-h-[80px]" rows={3} />
                 </div>
-                <button type="button" onClick={async () => { if (!keywordCountsCol || !keywordCountsInput.trim()) return; const raw = keywordCountsInput.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean); if (!raw.length) return; if (analysisBackendAvailable) { const res = await quantisApi.analyzeKeywordCounts(rows, keywordCountsCol, raw); setKeywordCountsResult(res ?? null); return; } const res = computeKeywordCounts(rows, keywordCountsCol, raw); setKeywordCountsResult(res ?? null); }} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Đếm</button>
+                <button
+                  type="button"
+                  disabled={exploreLoading !== null}
+                  onClick={async () => {
+                    if (!keywordCountsCol || !keywordCountsInput.trim()) return;
+                    const raw = keywordCountsInput.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+                    if (!raw.length) return;
+                    if (analysisBackendAvailable) {
+                      setExploreLoading("keyword");
+                      try {
+                        const res = await quantisApi.analyzeKeywordCounts(rows, keywordCountsCol, raw);
+                        setKeywordCountsResult(res ?? null);
+                      } finally {
+                        setExploreLoading(null);
+                      }
+                      return;
+                    }
+                    const res = computeKeywordCounts(rows, keywordCountsCol, raw);
+                    setKeywordCountsResult(res ?? null);
+                  }}
+                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {exploreLoading === "keyword" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Đếm"}
+                </button>
               </div>
               {keywordCountsResult && keywordCountsResult.counts.length > 0 && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm">
@@ -1906,7 +1934,27 @@ function DescriptiveStatsView({
                     <option value={3}>3 (trigram)</option>
                   </select>
                 </div>
-                <button type="button" onClick={async () => { if (!ngramCol) return; if (analysisBackendAvailable) { const res = await quantisApi.analyzeNgramFreq(rows, ngramCol, ngramN, 50); setNgramResult(res ?? null); return; } setNgramResult(computeNgramFreq(rows, ngramCol, ngramN, 50) ?? null); }} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Phân tích</button>
+                <button
+                  type="button"
+                  disabled={exploreLoading !== null}
+                  onClick={async () => {
+                    if (!ngramCol) return;
+                    if (analysisBackendAvailable) {
+                      setExploreLoading("ngram");
+                      try {
+                        const res = await quantisApi.analyzeNgramFreq(rows, ngramCol, ngramN, 50);
+                        setNgramResult(res ?? null);
+                      } finally {
+                        setExploreLoading(null);
+                      }
+                      return;
+                    }
+                    setNgramResult(computeNgramFreq(rows, ngramCol, ngramN, 50) ?? null);
+                  }}
+                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {exploreLoading === "ngram" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Phân tích"}
+                </button>
               </div>
               {ngramResult && ngramResult.ngramFreq.length > 0 && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm">
@@ -1940,7 +1988,27 @@ function DescriptiveStatsView({
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <button type="button" onClick={async () => { if (!kappaCol1 || !kappaCol2) return; if (analysisBackendAvailable) { const res = await quantisApi.analyzeCohensKappa(rows, kappaCol1, kappaCol2); setKappaResult(res ?? null); return; } setKappaResult(computeCohensKappa(rows, kappaCol1, kappaCol2) ?? null); }} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Tính Kappa</button>
+                <button
+                  type="button"
+                  disabled={exploreLoading !== null}
+                  onClick={async () => {
+                    if (!kappaCol1 || !kappaCol2) return;
+                    if (analysisBackendAvailable) {
+                      setExploreLoading("kappa");
+                      try {
+                        const res = await quantisApi.analyzeCohensKappa(rows, kappaCol1, kappaCol2);
+                        setKappaResult(res ?? null);
+                      } finally {
+                        setExploreLoading(null);
+                      }
+                      return;
+                    }
+                    setKappaResult(computeCohensKappa(rows, kappaCol1, kappaCol2) ?? null);
+                  }}
+                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {exploreLoading === "kappa" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính Kappa"}
+                </button>
               </div>
               {kappaResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm space-y-2">
@@ -1966,7 +2034,30 @@ function DescriptiveStatsView({
                     ))}
                   </select>
                 </div>
-                <button type="button" onClick={async () => { if (!outlierCol) return; const ci = cols.indexOf(outlierCol); if (ci === -1) return; const values = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v)); if (analysisBackendAvailable) { const res = await quantisApi.analyzeOutlierIqr(values); setOutlierResult(res ?? null); return; } setOutlierResult(computeOutlierIqr(values)); }} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Kiểm tra</button>
+                <button
+                  type="button"
+                  disabled={exploreLoading !== null}
+                  onClick={async () => {
+                    if (!outlierCol) return;
+                    const ci = cols.indexOf(outlierCol);
+                    if (ci === -1) return;
+                    const values = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
+                    if (analysisBackendAvailable) {
+                      setExploreLoading("outlier");
+                      try {
+                        const res = await quantisApi.analyzeOutlierIqr(values);
+                        setOutlierResult(res ?? null);
+                      } finally {
+                        setExploreLoading(null);
+                      }
+                      return;
+                    }
+                    setOutlierResult(computeOutlierIqr(values));
+                  }}
+                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                >
+                  {exploreLoading === "outlier" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Kiểm tra"}
+                </button>
               </div>
               {outlierResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm">
@@ -2608,6 +2699,7 @@ function AnalysisView({
   analysisBackendAvailable = false,
   descriptiveBackendResult = null,
   correlationBackendResult = null,
+  correlationLoading = false,
   showToast,
 }: {
   tab: AnalysisTab;
@@ -2618,6 +2710,7 @@ function AnalysisView({
   analysisBackendAvailable?: boolean;
   descriptiveBackendResult?: DescriptiveRow[] | null;
   correlationBackendResult?: { matrix: number[][]; columnNames: string[] } | null;
+  correlationLoading?: boolean;
   showToast: (msg: string) => void;
 }) {
   const effectiveTab = tab === "descriptive" ? "hypothesis" : tab;
@@ -2639,6 +2732,7 @@ function AnalysisView({
   const [partialResult, setPartialResult] = useState<{ r: number; n: number } | null>(null);
   const [covarianceResult, setCovarianceResult] = useState<{ matrix: number[][]; columnNames: string[]; ddof: number } | null>(null);
   const [covarianceMethod, setCovarianceMethod] = useState<"population" | "sample">("sample");
+  const [covarianceLoading, setCovarianceLoading] = useState(false);
 
   if (effectiveTab === "correlation" && selectedDataset) {
     const rows = getDataRows(selectedDataset);
@@ -2660,10 +2754,16 @@ function AnalysisView({
             title="Hỏi AI về ma trận tương quan"
           />
         )}
+        {analysisBackendAvailable && correlationLoading && (
+          <p className="flex items-center gap-2 text-sm text-brand mb-2">
+            <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden />
+            Đang tải ma trận tương quan…
+          </p>
+        )}
         <div className="flex gap-2 mb-3">
-          <button type="button" onClick={() => setCorrelationMethod("pearson")} className={`rounded-lg px-3 py-1.5 text-sm ${correlationMethod === "pearson" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Pearson</button>
-          <button type="button" onClick={() => setCorrelationMethod("spearman")} className={`rounded-lg px-3 py-1.5 text-sm ${correlationMethod === "spearman" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Spearman</button>
-          <button type="button" onClick={() => setCorrelationMethod("kendall")} className={`rounded-lg px-3 py-1.5 text-sm ${correlationMethod === "kendall" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Kendall</button>
+          <button type="button" disabled={correlationLoading} onClick={() => setCorrelationMethod("pearson")} className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-60 ${correlationMethod === "pearson" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Pearson</button>
+          <button type="button" disabled={correlationLoading} onClick={() => setCorrelationMethod("spearman")} className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-60 ${correlationMethod === "spearman" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Spearman</button>
+          <button type="button" disabled={correlationLoading} onClick={() => setCorrelationMethod("kendall")} className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-60 ${correlationMethod === "kendall" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Kendall</button>
         </div>
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto mb-4">
           <table className="w-full text-sm">
@@ -2723,7 +2823,23 @@ function AnalysisView({
                 <option value="population">Population (N)</option>
               </select>
             </div>
-            <button type="button" onClick={async () => { if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeCovariance(rows, covarianceMethod); setCovarianceResult(res ?? null); }} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">Tính Covariance</button>
+            <button
+              type="button"
+              disabled={covarianceLoading}
+              onClick={async () => {
+                if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+                setCovarianceLoading(true);
+                try {
+                  const res = await quantisApi.analyzeCovariance(rows, covarianceMethod);
+                  setCovarianceResult(res ?? null);
+                } finally {
+                  setCovarianceLoading(false);
+                }
+              }}
+              className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {covarianceLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính Covariance"}
+            </button>
           </div>
           {covarianceResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto mt-2">
@@ -2851,13 +2967,19 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
   const [nFactors, setNFactors] = useState<number | "">("");
   const [result, setResult] = useState<EFAResult | null>(null);
+  const [efaLoading, setEfaLoading] = useState(false);
   const toggleCol = (c: string) => setSelectedCols((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]);
   const runEFA = async () => {
     if (selectedCols.length < 2) return;
     const k = typeof nFactors === "number" && nFactors >= 1 ? nFactors : undefined;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeEFA(rows, selectedCols, k);
-      setResult(res ?? null);
+      setEfaLoading(true);
+      try {
+        const res = await quantisApi.analyzeEFA(rows, selectedCols, k);
+        setResult(res ?? null);
+      } finally {
+        setEfaLoading(false);
+      }
       return;
     }
     const res = computeEFA(rows, selectedCols, k);
@@ -2891,7 +3013,9 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
               <label className="block text-sm font-medium mb-1">Số nhân tố (để trống = eigenvalue &gt; 1)</label>
               <input type="number" min={1} max={selectedCols.length} value={nFactors} onChange={(e) => { const v = e.target.value; setNFactors(v === "" ? "" : Math.max(1, parseInt(v, 10) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28" placeholder="Auto" />
             </div>
-            <button type="button" onClick={runEFA} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy EFA</button>
+            <button type="button" onClick={runEFA} disabled={efaLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {efaLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy EFA"}
+            </button>
           </div>
           {result && (
             <div className="space-y-4">
@@ -2964,6 +3088,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
   const [ridgeXSelected, setRidgeXSelected] = useState<string[]>([]);
   const [ridgeAlpha, setRidgeAlpha] = useState(1);
   const [ridgeResult, setRidgeResult] = useState<{ coefficients: Record<string, number>; intercept: number; r2: number; alpha: number; n: number; yName: string; xNames: string[] } | null>(null);
+  const [regressionLoading, setRegressionLoading] = useState<string | null>(null);
 
   const toggleX = (col: string) => setOlsXSelected((prev) => prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]);
   const toggleLogX = (col: string) => setLogXSelected((prev) => prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]);
@@ -2972,8 +3097,13 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
   const runOLS = async () => {
     if (!olsYCol || olsXSelected.length === 0 || !rows.length) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected);
-      setOlsResult(res ?? null);
+      setRegressionLoading("ols");
+      try {
+        const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected);
+        setOlsResult(res ?? null);
+      } finally {
+        setRegressionLoading(null);
+      }
       return;
     }
     const res = computeOLS(rows, olsYCol, olsXSelected);
@@ -2982,8 +3112,13 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
   const runLogistic = async () => {
     if (!logYCol || logXSelected.length === 0 || !rows.length) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeLogistic(rows, logYCol, logXSelected);
-      setLogResult(res ?? null);
+      setRegressionLoading("logistic");
+      try {
+        const res = await quantisApi.analyzeLogistic(rows, logYCol, logXSelected);
+        setLogResult(res ?? null);
+      } finally {
+        setRegressionLoading(null);
+      }
       return;
     }
     const res = computeLogisticRegression(rows, logYCol, logXSelected);
@@ -3036,7 +3171,9 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 ))}
               </div>
             </div>
-            <button type="button" onClick={runOLS} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy OLS</button>
+            <button type="button" onClick={runOLS} disabled={regressionLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {regressionLoading === "ols" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy OLS"}
+            </button>
           </div>
           {olsResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3132,7 +3269,9 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 ))}
               </div>
             </div>
-            <button type="button" onClick={runLogistic} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Logistic</button>
+            <button type="button" onClick={runLogistic} disabled={regressionLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {regressionLoading === "logistic" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Logistic"}
+            </button>
           </div>
           {logResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3206,7 +3345,24 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 ))}
               </div>
             </div>
-            <button type="button" onClick={async () => { if (!poissonYCol || poissonXSelected.length === 0) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzePoisson(rows, poissonYCol, poissonXSelected); setPoissonResult(res ?? null); }} disabled={!poissonYCol || poissonXSelected.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Poisson</button>
+            <button
+              type="button"
+              disabled={!poissonYCol || poissonXSelected.length === 0 || regressionLoading !== null}
+              onClick={async () => {
+                if (!poissonYCol || poissonXSelected.length === 0) return;
+                if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+                setRegressionLoading("poisson");
+                try {
+                  const res = await quantisApi.analyzePoisson(rows, poissonYCol, poissonXSelected);
+                  setPoissonResult(res ?? null);
+                } finally {
+                  setRegressionLoading(null);
+                }
+              }}
+              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {regressionLoading === "poisson" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Poisson"}
+            </button>
           </div>
           {poissonResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3277,7 +3433,24 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               <label className="block text-sm font-medium mb-1">Alpha (λ)</label>
               <input type="number" min={0.01} step={0.1} value={ridgeAlpha} onChange={(e) => { setRidgeAlpha(Math.max(0.01, parseFloat(e.target.value) || 1)); setRidgeResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
-            <button type="button" onClick={async () => { if (!ridgeYCol || ridgeXSelected.length === 0) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeRidge(rows, ridgeYCol, ridgeXSelected, ridgeAlpha); setRidgeResult(res ?? null); }} disabled={!ridgeYCol || ridgeXSelected.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Ridge</button>
+            <button
+              type="button"
+              disabled={!ridgeYCol || ridgeXSelected.length === 0 || regressionLoading !== null}
+              onClick={async () => {
+                if (!ridgeYCol || ridgeXSelected.length === 0) return;
+                if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+                setRegressionLoading("ridge");
+                try {
+                  const res = await quantisApi.analyzeRidge(rows, ridgeYCol, ridgeXSelected, ridgeAlpha);
+                  setRidgeResult(res ?? null);
+                } finally {
+                  setRegressionLoading(null);
+                }
+              }}
+              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {regressionLoading === "ridge" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Ridge"}
+            </button>
           </div>
           {ridgeResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3337,12 +3510,18 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
   const [plsInner, setPlsInner] = useState<Array<{ from: string; to: string }>>([]);
   const [plsResult, setPlsResult] = useState<{ pathCoefficients: Array<{ from: string; to: string; coefficient: number; se?: number; tStat?: number; pValue?: number; ciLower?: number; ciUpper?: number }>; loadings: Array<{ latent: string; indicator: string; loading: number }>; r2: Record<string, number>; n: number; fornellLarcker: Record<string, number> } | null>(null);
   const [plsRunning, setPlsRunning] = useState(false);
+  const [semLoading, setSemLoading] = useState<string | null>(null);
 
   const runMediation = async () => {
     if (!mediationX || !mediationM || !mediationY || !rows.length) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeMediation(rows, mediationX, mediationM, mediationY);
-      setMediationResult(res ?? null);
+      setSemLoading("mediation");
+      try {
+        const res = await quantisApi.analyzeMediation(rows, mediationX, mediationM, mediationY);
+        setMediationResult(res ?? null);
+      } finally {
+        setSemLoading(null);
+      }
       return;
     }
     const res = computeMediation(rows, mediationX, mediationM, mediationY);
@@ -3351,8 +3530,13 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
   const runModeration = async () => {
     if (!moderationX || !moderationM || !moderationY || !rows.length) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeModeration(rows, moderationY, moderationX, moderationM);
-      setModerationResult(res ?? null);
+      setSemLoading("moderation");
+      try {
+        const res = await quantisApi.analyzeModeration(rows, moderationY, moderationX, moderationM);
+        setModerationResult(res ?? null);
+      } finally {
+        setSemLoading(null);
+      }
       return;
     }
     const res = computeModeration(rows, moderationY, moderationX, moderationM);
@@ -3446,7 +3630,9 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
               <option value="">Y (phụ thuộc)</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button type="button" onClick={runMediation} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Mediation</button>
+            <button type="button" onClick={runMediation} disabled={semLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {semLoading === "mediation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Mediation"}
+            </button>
           </div>
           {mediationResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm mt-3">
@@ -3477,7 +3663,9 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
               <option value="">Y (phụ thuộc)</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button type="button" onClick={runModeration} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Moderation</button>
+            <button type="button" onClick={runModeration} disabled={semLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {semLoading === "moderation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Moderation"}
+            </button>
           </div>
           {moderationResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
@@ -3688,6 +3876,7 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
   const [K, setK] = useState(3);
   const [kmeansResult, setKmeansResult] = useState<KMeansResult | null>(null);
+  const [kmeansLoading, setKmeansLoading] = useState(false);
   const [classTargetCol, setClassTargetCol] = useState("");
   const [classFeatureCols, setClassFeatureCols] = useState<string[]>([]);
   const [multiclassResult, setMulticlassResult] = useState<MulticlassLogisticResult | null>(null);
@@ -3698,8 +3887,13 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
   const runKMeans = async () => {
     if (selectedCols.length < 2 || K < 2) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeKMeans(rows, selectedCols, K);
-      setKmeansResult(res ?? null);
+      setKmeansLoading(true);
+      try {
+        const res = await quantisApi.analyzeKMeans(rows, selectedCols, K);
+        setKmeansResult(res ?? null);
+      } finally {
+        setKmeansLoading(false);
+      }
       return;
     }
     const res = computeKMeans(rows, selectedCols, K);
@@ -3775,7 +3969,9 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                   <label className="block text-sm font-medium mb-1">Số cụm (K)</label>
                   <input type="number" min={2} max={20} value={K} onChange={(e) => { setK(Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 2))); setKmeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
-                <button type="button" onClick={runKMeans} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy K-means</button>
+                <button type="button" onClick={runKMeans} disabled={kmeansLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+                  {kmeansLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy K-means"}
+                </button>
               </div>
               {kmeansResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -4019,10 +4215,16 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showTo
   const [priorAlpha, setPriorAlpha] = useState(1);
   const [priorBeta, setPriorBeta] = useState(1);
   const [result, setResult] = useState<BetaPosteriorResult | null>(null);
+  const [bayesianLoading, setBayesianLoading] = useState(false);
   const runBeta = async () => {
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeBetaPosterior(successes, n, priorAlpha, priorBeta);
-      setResult(res ?? null);
+      setBayesianLoading(true);
+      try {
+        const res = await quantisApi.analyzeBetaPosterior(successes, n, priorAlpha, priorBeta);
+        setResult(res ?? null);
+      } finally {
+        setBayesianLoading(false);
+      }
       return;
     }
     const res = computeBetaPosterior(successes, n, priorAlpha, priorBeta);
@@ -4058,7 +4260,9 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showTo
             <label className="block text-sm font-medium mb-1">Prior ? (Beta)</label>
             <input type="number" min={0.01} step={0.5} value={priorBeta} onChange={(e) => { setPriorBeta(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
           </div>
-          <button type="button" onClick={runBeta} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Từnh posterior</button>
+          <button type="button" onClick={runBeta} disabled={bayesianLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            {bayesianLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính posterior"}
+          </button>
         </div>
         {result && (
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm mt-2">
@@ -4155,6 +4359,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const [regressionRule, setRegressionRule] = useState<"10" | "20">("10");
   const [sampleSizeExtra, setSampleSizeExtra] = useState<SampleSizeProportionResult | SampleSizeChiSquareResult | SampleSizeAnovaResult | SampleSizeRegressionResult | null>(null);
   const [pairwisePosthocBackendResult, setPairwisePosthocBackendResult] = useState<Array<{ group1: string; group2: string; meanDiff: number; t: number; df: number; p: number; pBonferroni: number }> | null>(null);
+  const [hypothesisLoading, setHypothesisLoading] = useState<string | null>(null);
   const cols = selectedDataset.columnNames || [];
   const groupValues = groupCol ? getUniqueValues(rows, groupCol) : [];
   const numericCols = rows.length >= 2 ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
@@ -4213,12 +4418,17 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const runTTest = async () => {
     if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeTTest(rows, groupCol, groupVal1, groupVal2, numCol, ttestEqualVar);
-      setTResult(res ?? null);
-      setChiResult(null);
-      setAnovaResult(null);
-      if (res) onHypothesisResult?.({ type: "ttest", payload: res, meta: { groupCol, groupVal1, groupVal2, numCol } });
-      else onHypothesisResult?.(null);
+      setHypothesisLoading("ttest");
+      try {
+        const res = await quantisApi.analyzeTTest(rows, groupCol, groupVal1, groupVal2, numCol, ttestEqualVar);
+        setTResult(res ?? null);
+        setChiResult(null);
+        setAnovaResult(null);
+        if (res) onHypothesisResult?.({ type: "ttest", payload: res, meta: { groupCol, groupVal1, groupVal2, numCol } });
+        else onHypothesisResult?.(null);
+      } finally {
+        setHypothesisLoading(null);
+      }
       return;
     }
     const res = computeTTest(rows, groupCol, groupVal1, groupVal2, numCol);
@@ -4231,12 +4441,17 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const runChiSquare = async () => {
     if (!chiCol1 || !chiCol2) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeChiSquare(rows, chiCol1, chiCol2);
-      setChiResult(res ?? null);
-      setTResult(null);
-      setAnovaResult(null);
-      if (res) onHypothesisResult?.({ type: "chisquare", payload: res, meta: { chiCol1, chiCol2 } });
-      else onHypothesisResult?.(null);
+      setHypothesisLoading("chi2");
+      try {
+        const res = await quantisApi.analyzeChiSquare(rows, chiCol1, chiCol2);
+        setChiResult(res ?? null);
+        setTResult(null);
+        setAnovaResult(null);
+        if (res) onHypothesisResult?.({ type: "chisquare", payload: res, meta: { chiCol1, chiCol2 } });
+        else onHypothesisResult?.(null);
+      } finally {
+        setHypothesisLoading(null);
+      }
       return;
     }
     const res = computeChiSquare(rows, chiCol1, chiCol2);
@@ -4249,13 +4464,18 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const runANOVA = async () => {
     if (!anovaFactorCol || !anovaValueCol) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeAnova(rows, anovaFactorCol, anovaValueCol);
-      setAnovaResult(res ?? null);
-      setKruskalResult(null);
-      setTResult(null);
-      setChiResult(null);
-      if (res) onHypothesisResult?.({ type: "anova", payload: res, meta: { factorCol: anovaFactorCol, valueCol: anovaValueCol } });
-      else onHypothesisResult?.(null);
+      setHypothesisLoading("anova");
+      try {
+        const res = await quantisApi.analyzeAnova(rows, anovaFactorCol, anovaValueCol);
+        setAnovaResult(res ?? null);
+        setKruskalResult(null);
+        setTResult(null);
+        setChiResult(null);
+        if (res) onHypothesisResult?.({ type: "anova", payload: res, meta: { factorCol: anovaFactorCol, valueCol: anovaValueCol } });
+        else onHypothesisResult?.(null);
+      } finally {
+        setHypothesisLoading(null);
+      }
       return;
     }
     const res = computeOneWayANOVA(rows, anovaFactorCol, anovaValueCol);
@@ -4269,9 +4489,14 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const runKruskalWallis = async () => {
     if (!anovaFactorCol || !anovaValueCol) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeKruskalWallis(rows, anovaFactorCol, anovaValueCol);
-      setKruskalResult(res ?? null);
-      setAnovaResult(null);
+      setHypothesisLoading("kruskal");
+      try {
+        const res = await quantisApi.analyzeKruskalWallis(rows, anovaFactorCol, anovaValueCol);
+        setKruskalResult(res ?? null);
+        setAnovaResult(null);
+      } finally {
+        setHypothesisLoading(null);
+      }
       return;
     }
     const res = computeKruskalWallis(rows, anovaFactorCol, anovaValueCol);
@@ -4287,8 +4512,13 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       showToast(BACKEND_PYTHON_REQUIRED_MSG);
       return;
     }
-    const res = await quantisApi.analyzeAncova(rows, ancovaFactorCol, ancovaValueCol, ancovaCovariateCols);
-    setAncovaResult(res ?? null);
+    setHypothesisLoading("ancova");
+    try {
+      const res = await quantisApi.analyzeAncova(rows, ancovaFactorCol, ancovaValueCol, ancovaCovariateCols);
+      setAncovaResult(res ?? null);
+    } finally {
+      setHypothesisLoading(null);
+    }
   };
   const runManova = async () => {
     if (!manovaFactorCol || manovaValueCols.length < 2) {
@@ -4299,8 +4529,13 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       showToast(BACKEND_PYTHON_REQUIRED_MSG);
       return;
     }
-    const res = await quantisApi.analyzeManova(rows, manovaFactorCol, manovaValueCols);
-    setManovaResult(res ?? null);
+    setHypothesisLoading("manova");
+    try {
+      const res = await quantisApi.analyzeManova(rows, manovaFactorCol, manovaValueCols);
+      setManovaResult(res ?? null);
+    } finally {
+      setHypothesisLoading(null);
+    }
   };
   const runMancova = async () => {
     if (!mancovaFactorCol || mancovaValueCols.length < 2 || mancovaCovariateCols.length === 0) {
@@ -4311,16 +4546,26 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       showToast(BACKEND_PYTHON_REQUIRED_MSG);
       return;
     }
-    const res = await quantisApi.analyzeMancova(rows, mancovaFactorCol, mancovaValueCols, mancovaCovariateCols);
-    setMancovaResult(res ?? null);
+    setHypothesisLoading("mancova");
+    try {
+      const res = await quantisApi.analyzeMancova(rows, mancovaFactorCol, mancovaValueCols, mancovaCovariateCols);
+      setMancovaResult(res ?? null);
+    } finally {
+      setHypothesisLoading(null);
+    }
   };
     const runMannWhitney = async () => {
     if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeMannWhitney(rows, groupCol, groupVal1, groupVal2, numCol);
-      setMannWhitneyResult(res ?? null);
-      if (res) onHypothesisResult?.({ type: "mannwhitney", payload: res, meta: { groupCol, groupVal1, groupVal2, numCol } });
-      else onHypothesisResult?.(null);
+      setHypothesisLoading("mannwhitney");
+      try {
+        const res = await quantisApi.analyzeMannWhitney(rows, groupCol, groupVal1, groupVal2, numCol);
+        setMannWhitneyResult(res ?? null);
+        if (res) onHypothesisResult?.({ type: "mannwhitney", payload: res, meta: { groupCol, groupVal1, groupVal2, numCol } });
+        else onHypothesisResult?.(null);
+      } finally {
+        setHypothesisLoading(null);
+      }
       return;
     }
     const res = computeMannWhitneyU(rows, groupCol, groupVal1, groupVal2, numCol);
@@ -4334,8 +4579,13 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
     const ci = rows[0].indexOf(normalityCol);
     const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
     if (analysisBackendAvailable) {
-      const res = await quantisApi.analyzeShapiro(vals);
-      setShapiroResult(res ?? null);
+      setHypothesisLoading("shapiro");
+      try {
+        const res = await quantisApi.analyzeShapiro(vals);
+        setShapiroResult(res ?? null);
+      } finally {
+        setHypothesisLoading(null);
+      }
       return;
     }
     const res = computeShapiroWilk(vals);
@@ -4344,9 +4594,14 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   const runPowerAnalysis = async () => {
     if (sampleSizeKind === "ttest") {
       if (analysisBackendAvailable) {
-        const res = await quantisApi.analyzePowerTTest(effectSizeD);
-        setPowerResult(res ?? null);
-        setSampleSizeExtra(null);
+        setHypothesisLoading("power");
+        try {
+          const res = await quantisApi.analyzePowerTTest(effectSizeD);
+          setPowerResult(res ?? null);
+          setSampleSizeExtra(null);
+        } finally {
+          setHypothesisLoading(null);
+        }
         return;
       }
       const res = computePowerTTest(effectSizeD);
@@ -4354,9 +4609,14 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       setSampleSizeExtra(null);
     } else if (sampleSizeKind === "proportion") {
       if (analysisBackendAvailable) {
-        const res = await quantisApi.analyzeSampleSizeProportion(proportionP0, proportionP1);
-        setSampleSizeExtra(res ?? null);
-        setPowerResult(null);
+        setHypothesisLoading("power");
+        try {
+          const res = await quantisApi.analyzeSampleSizeProportion(proportionP0, proportionP1);
+          setSampleSizeExtra(res ?? null);
+          setPowerResult(null);
+        } finally {
+          setHypothesisLoading(null);
+        }
         return;
       }
       const res = computeSampleSizeProportion(proportionP0, proportionP1);
@@ -4364,9 +4624,14 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       setPowerResult(null);
     } else if (sampleSizeKind === "chisquare") {
       if (analysisBackendAvailable) {
-        const res = await quantisApi.analyzeSampleSizeChisquare(chiEffectW, chiDf);
-        setSampleSizeExtra(res ?? null);
-        setPowerResult(null);
+        setHypothesisLoading("power");
+        try {
+          const res = await quantisApi.analyzeSampleSizeChisquare(chiEffectW, chiDf);
+          setSampleSizeExtra(res ?? null);
+          setPowerResult(null);
+        } finally {
+          setHypothesisLoading(null);
+        }
         return;
       }
       const res = computeSampleSizeChiSquare(chiEffectW, chiDf);
@@ -4374,9 +4639,14 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       setPowerResult(null);
     } else if (sampleSizeKind === "anova") {
       if (analysisBackendAvailable) {
-        const res = await quantisApi.analyzeSampleSizeAnova(anovaK, anovaF);
-        setSampleSizeExtra(res ?? null);
-        setPowerResult(null);
+        setHypothesisLoading("power");
+        try {
+          const res = await quantisApi.analyzeSampleSizeAnova(anovaK, anovaF);
+          setSampleSizeExtra(res ?? null);
+          setPowerResult(null);
+        } finally {
+          setHypothesisLoading(null);
+        }
         return;
       }
       const res = computeSampleSizeAnova(anovaK, anovaF);
@@ -4384,9 +4654,14 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       setPowerResult(null);
     } else {
       if (analysisBackendAvailable) {
-        const res = await quantisApi.analyzeSampleSizeRegression(regressionP, regressionRule);
-        setSampleSizeExtra(res ?? null);
-        setPowerResult(null);
+        setHypothesisLoading("power");
+        try {
+          const res = await quantisApi.analyzeSampleSizeRegression(regressionP, regressionRule);
+          setSampleSizeExtra(res ?? null);
+          setPowerResult(null);
+        } finally {
+          setHypothesisLoading(null);
+        }
         return;
       }
       const res = computeSampleSizeRegression(regressionP, regressionRule);
@@ -4491,7 +4766,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
           <input type="checkbox" checked={ttestEqualVar} onChange={(e) => { setTtestEqualVar(e.target.checked); setTResult(null); }} className="rounded border-neutral-300" />
           <span className="text-sm">Giả định phương sai bằng nhau (Equal variance)</span>
         </label>
-        <button type="button" onClick={runTTest} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy t-test</button>
+        <button type="button" onClick={runTTest} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+          {hypothesisLoading === "ttest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy t-test"}
+        </button>
       </div>
       {tResult && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -4523,7 +4800,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runANOVA} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy ANOVA</button>
+            <button type="button" onClick={runANOVA} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "anova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy ANOVA"}
+            </button>
           </div>
           {anovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
@@ -4590,7 +4869,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               </select>
               <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột</p>
             </div>
-            <button type="button" onClick={runAncova} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy ANCOVA</button>
+            <button type="button" onClick={runAncova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "ancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy ANCOVA"}
+            </button>
           </div>
           {ancovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
@@ -4627,7 +4908,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               </select>
               <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột (tối thiểu 2)</p>
             </div>
-            <button type="button" onClick={runManova} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy MANOVA</button>
+            <button type="button" onClick={runManova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "manova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy MANOVA"}
+            </button>
           </div>
           {manovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
@@ -4669,7 +4952,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               </select>
               <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột</p>
             </div>
-            <button type="button" onClick={runMancova} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy MANCOVA</button>
+            <button type="button" onClick={runMancova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "mancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy MANCOVA"}
+            </button>
           </div>
           {mancovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
@@ -4699,7 +4984,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runKruskalWallis} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Kruskal-Wallis</button>
+            <button type="button" onClick={runKruskalWallis} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "kruskal" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Kruskal-Wallis"}
+            </button>
           </div>
           {kruskalResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
@@ -4732,7 +5019,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runChiSquare} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Chi-square</button>
+            <button type="button" onClick={runChiSquare} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "chi2" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Chi-square"}
+            </button>
           </div>
           {chiResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -4778,7 +5067,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runMannWhitney} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Mann-Whitney U</button>
+            <button type="button" onClick={runMannWhitney} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "mannwhitney" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Mann-Whitney U"}
+            </button>
           </div>
           {mannWhitneyResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -4807,16 +5098,28 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={async () => {
-              if (!pairedCol1 || !pairedCol2) return;
-              if (analysisBackendAvailable) {
-                const res = await quantisApi.analyzeTTestPaired(rows, pairedCol1, pairedCol2);
-                setPairedResult(res ? { t: res.t, df: res.df, pValue: res.pValue, cohenD: res.cohenD, meanDiff: res.meanDiff, stdDiff: res.stdDiff, n: res.n, mean1: res.mean1, mean2: res.mean2 } : null);
-                return;
-              }
-              const res = computePairedTTest(rows, pairedCol1, pairedCol2);
-              setPairedResult(res ?? null);
-            }} disabled={!pairedCol1 || !pairedCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy t-test cặp</button>
+            <button
+              type="button"
+              disabled={!pairedCol1 || !pairedCol2 || hypothesisLoading !== null}
+              onClick={async () => {
+                if (!pairedCol1 || !pairedCol2) return;
+                if (analysisBackendAvailable) {
+                  setHypothesisLoading("paired");
+                  try {
+                    const res = await quantisApi.analyzeTTestPaired(rows, pairedCol1, pairedCol2);
+                    setPairedResult(res ? { t: res.t, df: res.df, pValue: res.pValue, cohenD: res.cohenD, meanDiff: res.meanDiff, stdDiff: res.stdDiff, n: res.n, mean1: res.mean1, mean2: res.mean2 } : null);
+                  } finally {
+                    setHypothesisLoading(null);
+                  }
+                  return;
+                }
+                const res = computePairedTTest(rows, pairedCol1, pairedCol2);
+                setPairedResult(res ?? null);
+              }}
+              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {hypothesisLoading === "paired" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy t-test cặp"}
+            </button>
           </div>
           {pairedResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -5135,7 +5438,27 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } try { const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol); setFtestResult(res ?? null); } catch (e) { showToast(e instanceof Error ? e.message : "F-test lỗi"); setFtestResult(null); }}} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy F-test</button>
+            <button
+              type="button"
+              disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol || hypothesisLoading !== null}
+              onClick={async () => {
+                if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
+                if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+                setHypothesisLoading("ftest");
+                try {
+                  const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol);
+                  setFtestResult(res ?? null);
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : "F-test lỗi");
+                  setFtestResult(null);
+                } finally {
+                  setHypothesisLoading(null);
+                }
+              }}
+              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {hypothesisLoading === "ftest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy F-test"}
+            </button>
           </div>
           {ftestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -5186,7 +5509,27 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               <label className="block text-sm font-medium mb-1">Phương sai tổng thể nhóm 2 (σ²₂)</label>
               <input type="number" step="any" min="0" value={ztestKnownVar2} onChange={(e) => { setZtestKnownVar2(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 9" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
-            <button type="button" onClick={async () => { if (!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2) return; const v1 = parseFloat(ztestKnownVar1); const v2 = parseFloat(ztestKnownVar2); if (Number.isNaN(v1) || Number.isNaN(v2) || v1 <= 0 || v2 <= 0) return; if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; } const res = await quantisApi.analyzeZTestTwoMeans(rows, groupCol, groupVal1, groupVal2, numCol, v1, v2); setZtestMeansResult(res ?? null); }} disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy z-Test</button>
+            <button
+              type="button"
+              disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2 || hypothesisLoading !== null}
+              onClick={async () => {
+                if (!groupCol || !groupVal1 || !groupVal2 || !numCol || !ztestKnownVar1 || !ztestKnownVar2) return;
+                const v1 = parseFloat(ztestKnownVar1);
+                const v2 = parseFloat(ztestKnownVar2);
+                if (Number.isNaN(v1) || Number.isNaN(v2) || v1 <= 0 || v2 <= 0) return;
+                if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
+                setHypothesisLoading("ztest");
+                try {
+                  const res = await quantisApi.analyzeZTestTwoMeans(rows, groupCol, groupVal1, groupVal2, numCol, v1, v2);
+                  setZtestMeansResult(res ?? null);
+                } finally {
+                  setHypothesisLoading(null);
+                }
+              }}
+              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              {hypothesisLoading === "ztest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy z-Test"}
+            </button>
           </div>
           {ztestMeansResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -5208,7 +5551,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runShapiroWilk} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Chạy Shapiro-Wilk</button>
+            <button type="button" onClick={runShapiroWilk} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "shapiro" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Shapiro-Wilk"}
+            </button>
           </div>
           {shapiroResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -5286,7 +5631,9 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 </div>
               </>
             )}
-            <button type="button" onClick={runPowerAnalysis} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Tính cỡ mẫu</button>
+            <button type="button" onClick={runPowerAnalysis} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+              {hypothesisLoading === "power" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính cỡ mẫu"}
+            </button>
           </div>
           {powerResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">

@@ -73,3 +73,5 @@ Khi đó mọi request tới `http://localhost:3001/api/quantis/analyze/*` sẽ 
 ## Giới hạn
 
 - Số dòng tối đa mặc định: 100000 (override bằng `QUANTIS_ANALYSIS_MAX_ROWS`).
+
+**Import file:** Endpoint `POST /parse-file` (gọi qua Node: `POST /api/quantis/parse-file`) nhận file multipart `file`, hỗ trợ: Excel (.xlsx, .xls), ODS (.ods), SPSS (.sav), Stata (.dta), SAS (.sas7bdat), R (.rds, .RData). Trả về `{ rows: string[][], format: string }`.

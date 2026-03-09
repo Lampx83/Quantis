@@ -108,6 +108,31 @@ export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> 
   }
 }
 
+/** Gửi file lên backend để parse (Excel, ODS, SPSS, Stata, SAS, R). Cần backend Node + Python. */
+export async function parseFileViaBackend(file: File): Promise<{ rows: string[][]; format: string }> {
+  const base = getBase();
+  if (!base) throw new Error("Backend chưa cấu hình. Cần cấu hình URL backend Quantis để import file ODS, SPSS, Stata, SAS, R.");
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const res = await fetch(`${base}/api/quantis/parse-file`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  const errBody = await res.json().catch(() => ({ error: res.statusText }));
+  if (!res.ok) {
+    const msg = errBody.detail ?? errBody.error ?? `Parse file failed: ${res.status}`;
+    if (typeof msg === "string") {
+      console.error("[Quantis parse-file]", res.status, msg);
+      throw new Error(msg);
+    }
+    console.error("[Quantis parse-file]", res.status, errBody);
+    throw new Error(JSON.stringify(msg));
+  }
+  if (!Array.isArray(errBody.rows)) throw new Error("Invalid response: missing rows");
+  return { rows: errBody.rows, format: errBody.format ?? "unknown" };
+}
+
 /** Kiểm tra backend phân tích Python (qua proxy Node) có sẵn không. */
 export async function checkAnalysisBackendAvailable(baseUrl?: string): Promise<boolean> {
   const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
@@ -1234,6 +1259,7 @@ export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workf
 
 /** Ghi đè toàn bộ datasets + workflows lên server (cần đăng nhập). Trả về true nếu thành công. */
 export async function saveData(payload: { datasets: Dataset[]; workflows: Workflow[] }): Promise<boolean> {
+  const base = getBase();
   if (!base || String(base).trim() === "") return false;
   try {
     const res = await fetch(`${getAPI_BASE()}/data`, {

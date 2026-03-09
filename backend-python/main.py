@@ -4,10 +4,11 @@ Phân tích thống kê bằng scipy/statsmodels/pandas — chuẩn, ổn địn
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from routes_analyze import router
+from parse_file import parse_file as parse_file_impl
 
 
 @asynccontextmanager
@@ -30,6 +31,35 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api/quantis/analyze", tags=["analyze"])
+
+
+async def _parse_file_impl(file: UploadFile):
+    """Shared logic: read file and return rows + format."""
+    try:
+        content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        rows, format_name = parse_file_impl(content, file.filename or "data")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Parse error: {e}")
+    return {"rows": rows, "format": format_name}
+
+
+@app.post("/parse-file")
+async def parse_file_upload(file: UploadFile = File(..., description="File: .xlsx, .xls, .ods, .sav, .dta, .sas7bdat, .rds, .RData")):
+    """Parse file upload thành bảng rows (string[][]) + format. Dùng khi Quantis import dữ liệu từ Excel, ODS, SPSS, Stata, SAS, R."""
+    return await _parse_file_impl(file)
+
+
+# Khi Python được expose qua proxy với prefix /api/quantis/backend-python (vd. AI Portal), Node gọi .../api/quantis/backend-python/parse-file
+@app.post("/api/quantis/backend-python/parse-file")
+async def parse_file_upload_prefixed(file: UploadFile = File(..., description="File: .xlsx, .xls, .ods, .sav, .dta, .sas7bdat, .rds, .RData")):
+    return await _parse_file_impl(file)
 
 
 @app.get("/health")

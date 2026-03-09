@@ -89,13 +89,45 @@ export function parseJSONToRows(text: string): string[][] {
 }
 
 /** Đoán định dạng từ tên file. */
-export function getFormatFromFilename(filename: string): "csv" | "tsv" | "json" | "txt" {
+export type DataFileFormat =
+  | "csv"
+  | "tsv"
+  | "json"
+  | "txt"
+  | "xlsx"
+  | "xls"
+  | "ods"
+  | "sav"
+  | "dta"
+  | "sas7bdat"
+  | "rds"
+  | "rdata";
+
+export function getFormatFromFilename(filename: string): DataFileFormat | "csv" {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".json")) return "json";
   if (lower.endsWith(".tsv")) return "tsv";
   if (lower.endsWith(".csv")) return "csv";
   if (lower.endsWith(".txt")) return "txt";
+  if (lower.endsWith(".xlsx")) return "xlsx";
+  if (lower.endsWith(".xls")) return "xls";
+  if (lower.endsWith(".ods")) return "ods";
+  if (lower.endsWith(".sav")) return "sav";
+  if (lower.endsWith(".dta")) return "dta";
+  if (lower.endsWith(".sas7bdat")) return "sas7bdat";
+  if (lower.endsWith(".rds")) return "rds";
+  if (lower.endsWith(".rdata")) return "rdata";
   return "csv";
+}
+
+/** Có phải định dạng cần đọc dưới dạng text (CSV, TSV, JSON, TXT) không. */
+export function isTextFormat(format: string): boolean {
+  return format === "csv" || format === "tsv" || format === "json" || format === "txt";
+}
+
+/** Có phải định dạng cần gửi lên backend để parse (Excel, ODS, SPSS, Stata, SAS, R) không. */
+export function isBackendParseFormat(format: string): boolean {
+  return ["xlsx", "xls", "ods", "sav", "dta", "sas7bdat", "rds", "rdata"].includes(format);
 }
 
 /** Parse nội dung file theo định dạng, trả về rows và format. */
