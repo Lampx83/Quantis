@@ -11,7 +11,7 @@
     "pack": "npm run build && node scripts/pack.mjs",
     "pack:build": "npm run build:pack && PACK_SOURCE=dist/build node scripts/pack.mjs",
     "pack:basepath": "npm run build:basepath && PACK_BASEPATH=1 node scripts/pack.mjs",
-    "install:all": "npm install && cd backend && npm install",
+    "install:all": "npm install && cd backend && npm install && npm run build",
     "start": "concurrently -n fe,be \"npm run dev\" \"npm run dev --prefix backend\""
   },
   "dependencies": {
@@ -19,7 +19,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
-    "recharts": "^2.13.3"
+    "recharts": "^2.13.3",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

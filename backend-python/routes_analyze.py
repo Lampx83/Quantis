@@ -161,8 +161,9 @@ class VIFBody(BaseModel):
 class MediationBody(BaseModel):
     rows: list[list[str]]
     xCol: str
-    mCol: str
     yCol: str
+    mCols: list[str] | None = None
+    mCol: str | None = None  # tương thích cũ: một M
 
 
 class ModerationBody(BaseModel):
@@ -637,10 +638,27 @@ async def analyze_vif(body: VIFBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _mediation_m_cols(body: MediationBody) -> list[str]:
+    out: list[str] = []
+    if body.mCols:
+        for c in body.mCols:
+            if c is not None and str(c).strip():
+                out.append(str(c).strip())
+    if not out and body.mCol and str(body.mCol).strip():
+        out = [str(body.mCol).strip()]
+    return out
+
+
 @router.post("/mediation")
 async def analyze_mediation(body: MediationBody):
     try:
-        result = run_mediation(body.rows, body.xCol, body.mCol, body.yCol)
+        m_cols = _mediation_m_cols(body)
+        if not m_cols:
+            raise HTTPException(
+                status_code=400,
+                detail="Cần ít nhất một biến trung gian (mCols hoặc mCol).",
+            )
+        result = run_mediation(body.rows, body.xCol, m_cols, body.yCol)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
         return {"result": result}

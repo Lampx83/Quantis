@@ -1,6 +1,6 @@
 /**
- * Backend Quantis (riêng): API lưu datasets/workflows vào file JSON.
- * Chạy độc lập, không cần PostgreSQL. Frontend trỏ VITE_QUANTIS_API_URL tới đây.
+ * Backend Quantis (riêng): API lưu datasets/workflows vào file JSON + proxy Archive/Ollama/Python.
+ * PostgreSQL + Portal: `npm run build && npm start` trong cùng thư mục backend — xem docs/QUANTIS-DATABASE.md.
  * Proxy Archive NEU: /api/quantis/archive/* -> archive.neu.edu.vn/api/v1/* (tránh CORS và route 422).
  */
 const path = require("path");
@@ -10,18 +10,48 @@ const cors = require("cors");
 const fs = require("fs");
 const multer = require("multer");
 const FormData = require("form-data");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
+const cookieSession = require("cookie-session");
 
 const PORT = Number(process.env.PORT) || 4001;
 const ARCHIVE_NEU_URL = (process.env.ARCHIVE_NEU_URL || "https://archive.neu.edu.vn").replace(/\/+$/, "");
-const OLLAMA_URL = (process.env.OLLAMA_URL || "https://research.neu.edu.vn/ollama").replace(/\/+$/, "");
+/** Chỉ khi đặt env; không mặc định URL ngoài. Ưu tiên ollamaUpstreamUrl trong settings.json (lưu từ Cấu hình kết nối). */
+const OLLAMA_URL = String(process.env.OLLAMA_URL ?? "")
+  .trim()
+  .replace(/\/+$/, "");
 const ARCHIVE_NEU_TOKEN = process.env.ARCHIVE_NEU_TOKEN || "";
 const DATA_DIR = path.join(__dirname, "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+const USERS_FILE = path.join(DATA_DIR, "users.json");
+const USER_STORES_DIR = path.join(DATA_DIR, "user-stores");
+
+const QUANTIS_AUTH_ENABLED = process.env.QUANTIS_AUTH_ENABLED === "1" || process.env.QUANTIS_AUTH_ENABLED === "true";
+const QUANTIS_AUTH_REQUIRED = process.env.QUANTIS_AUTH_REQUIRED === "1" || process.env.QUANTIS_AUTH_REQUIRED === "true";
+const QUANTIS_SSO_LABEL = process.env.QUANTIS_SSO_LABEL || "Đăng nhập SSO";
+const QUANTIS_SSO_REDIRECT_URL = (process.env.QUANTIS_SSO_REDIRECT_URL || "").trim();
+const SESSION_SECRET = process.env.SESSION_SECRET || "quantis-dev-secret-change-in-production";
+const ADMIN_EMAILS = new Set(
+  (process.env.QUANTIS_ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "50mb" }));
+app.use(
+  cookieSession({
+    name: "quantis_session",
+    keys: [SESSION_SECRET],
+    maxAge: 7 * 24 * 3600 * 1000,
+    sameSite: "lax",
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE === "1" || process.env.COOKIE_SECURE === "true",
+  })
+);
 
 // Trang thông tin backend khi truy cập root
 const INFO_HTML = `<!DOCTYPE html>
@@ -56,7 +86,7 @@ const INFO_HTML = `<!DOCTYPE html>
     <ul>
       <li><strong>Lưu trữ dữ liệu:</strong> Lưu datasets và workflows của Quantis vào file JSON (<code>backend/data/store.json</code>), đồng bộ với frontend qua API.</li>
       <li><strong>Proxy Archive NEU:</strong> Chuyển tiếp các request tới Archive NEU (<code>/api/quantis/archive/*</code>) để tìm và tải dataset, tránh CORS.</li>
-      <li><strong>Proxy Ollama (AI):</strong> Chuyển tiếp <code>/api/quantis/ollama/*</code> tới Ollama (<code>OLLAMA_URL</code>), tránh CORS khi frontend gọi từ trình duyệt.</li>
+      <li><strong>Proxy Ollama (AI):</strong> Chuyển tiếp <code>/api/quantis/ollama/*</code> tới Ollama theo <code>settings.json → ollamaUpstreamUrl</code> (Cấu hình kết nối) hoặc <code>OLLAMA_URL</code> nếu có, tránh CORS.</li>
       <li><strong>Proxy phân tích (tùy chọn):</strong> Khi cấu hình <code>ANALYZE_PYTHON_URL</code>, chuyển tiếp <code>/api/quantis/analyze/*</code> tới backend Python (R/stats).</li>
     </ul>
   </section>
@@ -69,7 +99,7 @@ const INFO_HTML = `<!DOCTYPE html>
       <li><span class="method post">POST</span> <code>/api/quantis/data</code> — Lưu datasets và workflows. Body: <code>{ "datasets": [...], "workflows": [...] }</code>.</li>
       <li><span class="method post">POST</span> <code>/api/quantis/parse-file</code> — Parse file (Excel, ODS, SPSS, Stata, SAS, R) thành bảng. Gửi multipart <code>file</code>. Cần Python backend (<code>ANALYZE_PYTHON_URL</code>).</li>
       <li><span class="method any">*</span> <code>/api/quantis/archive/*</code> — Proxy tới Archive NEU (<code>api/v1/*</code>). Dùng để tìm kiếm và tải dataset vào Quantis.</li>
-      <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới Ollama (cấu hình <code>OLLAMA_URL</code>). Tránh CORS khi dùng AI từ trình duyệt.</li>
+      <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới Ollama (ưu tiên cấu hình admin / <code>settings.json</code>, sau đó <code>OLLAMA_URL</code>).</li>
       <li><span class="method any">*</span> <code>/api/quantis/analyze/*</code> — Proxy tới backend phân tích Python (nếu đã cấu hình <code>ANALYZE_PYTHON_URL</code>).</li>
     </ul>
   </section>
@@ -83,7 +113,7 @@ const INFO_HTML = `<!DOCTYPE html>
     </ul>
   </section>
 
-  <p style="color: #94a3b8; font-size: 0.85rem;">Quantis backend — chạy độc lập, không cần PostgreSQL. Frontend cấu hình <code>VITE_QUANTIS_API_URL</code> trỏ tới URL này.</p>
+  <p style="color: #94a3b8; font-size: 0.85rem;">Chế độ JSON (json-server.cjs) — không cần PostgreSQL. Production: cùng package <code>backend/</code> chạy <code>npm run build && npm start</code> với Postgres. Frontend: <code>VITE_QUANTIS_API_URL</code>.</p>
 </body>
 </html>
 `;
@@ -104,8 +134,14 @@ app.get("/api/quantis", (req, res) => {
       { method: "POST", path: "/api/quantis/parse-file", description: "Parse file (Excel, ODS, SPSS, Stata, SAS, R) — multipart file, cần ANALYZE_PYTHON_URL" },
       { method: "GET", path: "/api/quantis/settings", description: "Cấu hình dùng chung (Archive, AI, …)" },
       { method: "PUT", path: "/api/quantis/settings", description: "Lưu cấu hình dùng chung", body: { archiveUrl: "...", archiveFileUrl: "...", aiApiUrl: "...", defaultAiModel: "..." } },
+      { method: "GET", path: "/api/quantis/auth/config", description: "Cấu hình đăng nhập (khi QUANTIS_AUTH_ENABLED)" },
+      { method: "GET", path: "/api/quantis/auth/me", description: "User hiện tại (session cookie)" },
+      { method: "POST", path: "/api/quantis/auth/register", description: "Đăng ký email/mật khẩu" },
+      { method: "POST", path: "/api/quantis/auth/login", description: "Đăng nhập" },
+      { method: "POST", path: "/api/quantis/auth/logout", description: "Đăng xuất" },
+      { method: "GET", path: "/api/quantis/auth/sso", description: "Redirect SSO (khi QUANTIS_SSO_REDIRECT_URL)" },
       { method: "*", path: "/api/quantis/archive/*", description: "Proxy Archive NEU" },
-      { method: "*", path: "/api/quantis/ollama/*", description: "Proxy Ollama AI (OLLAMA_URL)" },
+      { method: "*", path: "/api/quantis/ollama/*", description: "Proxy Ollama (settings ollamaUpstreamUrl || OLLAMA_URL)" },
       { method: "*", path: "/api/quantis/analyze/*", description: "Proxy backend phân tích (khi cấu hình ANALYZE_PYTHON_URL)" },
     ],
     docs: "Truy cập GET / để xem trang thông tin đầy đủ.",
@@ -160,7 +196,6 @@ function readSettings() {
       backendApiUrl: `${base}/api/quantis/backend`,
       archiveUrl: `${base}/api/archive`,
       archiveFileUrl: `${base}/api/archive-file`,
-      aiApiUrl: `${base}/ollama/v1`,
       defaultAiModel: "qwen3:8b",
     };
   }
@@ -177,48 +212,281 @@ function writeSettings(settings) {
   }
 }
 
-// GET /api/quantis/health
-app.get("/api/quantis/health", (req, res) => {
-  res.json({ status: "ok", service: "quantis" });
-});
+/** Hai prefix: dev trực tiếp và khi frontend base = .../api/quantis/backend */
+const API_ROOTS = ["/api/quantis", "/api/quantis/backend/api/quantis"];
 
-// GET /api/quantis/data
-app.get("/api/quantis/data", (req, res) => {
+function dual(method, pathSuffix, ...handlers) {
+  const m = String(method).toLowerCase();
+  for (const root of API_ROOTS) {
+    app[m](root + pathSuffix, ...handlers);
+  }
+}
+
+function safeUserId(id) {
+  if (!id || typeof id !== "string") return null;
+  const s = id.trim();
+  if (!/^[a-f0-9-]{36}$/i.test(s)) return null;
+  return s;
+}
+
+function readUsersFile() {
   try {
+    if (fs.existsSync(USERS_FILE)) {
+      const raw = fs.readFileSync(USERS_FILE, "utf8");
+      const data = JSON.parse(raw);
+      return Array.isArray(data.users) ? data.users : [];
+    }
+  } catch (e) {
+    console.warn("readUsersFile:", e.message);
+  }
+  return [];
+}
+
+function writeUsersFile(users) {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(USERS_FILE, JSON.stringify({ users }, null, 2), "utf8");
+}
+
+function readUserStore(userId) {
+  const id = safeUserId(userId);
+  if (!id) return { datasets: [], workflows: [] };
+  const f = path.join(USER_STORES_DIR, `${id}.json`);
+  try {
+    if (fs.existsSync(f)) {
+      const raw = fs.readFileSync(f, "utf8");
+      const data = JSON.parse(raw);
+      return {
+        datasets: Array.isArray(data.datasets) ? data.datasets : [],
+        workflows: Array.isArray(data.workflows) ? data.workflows : [],
+      };
+    }
+  } catch (e) {
+    console.warn("readUserStore:", e.message);
+  }
+  return { datasets: [], workflows: [] };
+}
+
+function writeUserStore(userId, datasets, workflows) {
+  const id = safeUserId(userId);
+  if (!id) throw new Error("Invalid user id");
+  if (!fs.existsSync(USER_STORES_DIR)) fs.mkdirSync(USER_STORES_DIR, { recursive: true });
+  const f = path.join(USER_STORES_DIR, `${id}.json`);
+  fs.writeFileSync(f, JSON.stringify({ datasets, workflows }, null, 2), "utf8");
+}
+
+function isAdminEmail(email) {
+  const e = String(email || "").trim().toLowerCase();
+  return ADMIN_EMAILS.size > 0 && ADMIN_EMAILS.has(e);
+}
+
+function authActive() {
+  return QUANTIS_AUTH_ENABLED;
+}
+
+function registerAuthRoutes(root) {
+  const r = `${root}/auth`;
+
+  app.get(`${r}/config`, (_req, res) => {
+    if (!authActive()) {
+      res.json({ authEnabled: false, ssoEnabled: false, ssoLabel: "", authRequired: false });
+      return;
+    }
+    res.json({
+      authEnabled: true,
+      ssoEnabled: Boolean(QUANTIS_SSO_REDIRECT_URL),
+      ssoLabel: QUANTIS_SSO_LABEL,
+      authRequired: QUANTIS_AUTH_REQUIRED,
+    });
+  });
+
+  app.get(`${r}/me`, (req, res) => {
+    if (!authActive()) {
+      res.status(401).json({ error: "Auth not enabled" });
+      return;
+    }
+    const userId = safeUserId(req.session?.userId);
+    if (!userId) {
+      res.status(401).json({ error: "Not logged in" });
+      return;
+    }
+    const users = readUsersFile();
+    const u = users.find((x) => x.id === userId);
+    if (!u) {
+      req.session = null;
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
+    res.json({
+      user: {
+        id: u.id,
+        email: u.email,
+        name: u.name || undefined,
+        isAdmin: isAdminEmail(u.email),
+      },
+    });
+  });
+
+  app.post(`${r}/register`, async (req, res) => {
+    if (!authActive()) {
+      res.status(400).json({ error: "Auth not enabled" });
+      return;
+    }
+    try {
+      const email = (req.body?.email && String(req.body.email).trim().toLowerCase()) || "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      const name = (req.body?.name && String(req.body.name).trim()) || "";
+
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.status(400).json({ error: "Email không hợp lệ" });
+        return;
+      }
+      if (password.length < 6) {
+        res.status(400).json({ error: "Mật khẩu tối thiểu 6 ký tự" });
+        return;
+      }
+      const users = readUsersFile();
+      if (users.some((x) => x.email === email)) {
+        res.status(409).json({ error: "Email đã được đăng ký" });
+        return;
+      }
+      const id = crypto.randomUUID();
+      const hash = await bcrypt.hash(password, 10);
+      users.push({ id, email, passwordHash: hash, name: name || null });
+      writeUsersFile(users);
+      req.session.userId = id;
+      res.json({
+        user: {
+          id,
+          email,
+          name: name || undefined,
+          isAdmin: isAdminEmail(email),
+        },
+      });
+    } catch (e) {
+      console.error("[quantis-auth] register:", e);
+      res.status(500).json({ error: "Lỗi đăng ký" });
+    }
+  });
+
+  app.post(`${r}/login`, async (req, res) => {
+    if (!authActive()) {
+      res.status(400).json({ error: "Auth not enabled" });
+      return;
+    }
+    try {
+      const email = (req.body?.email && String(req.body.email).trim().toLowerCase()) || "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      if (!email || !password) {
+        res.status(400).json({ error: "Email và mật khẩu không được để trống" });
+        return;
+      }
+      const users = readUsersFile();
+      const u = users.find((x) => x.email === email);
+      if (!u || !u.passwordHash) {
+        res.status(401).json({ error: "Email hoặc mật khẩu không đúng" });
+        return;
+      }
+      const ok = await bcrypt.compare(password, u.passwordHash);
+      if (!ok) {
+        res.status(401).json({ error: "Email hoặc mật khẩu không đúng" });
+        return;
+      }
+      req.session.userId = u.id;
+      res.json({
+        user: {
+          id: u.id,
+          email: u.email,
+          name: u.name || undefined,
+          isAdmin: isAdminEmail(u.email),
+        },
+      });
+    } catch (e) {
+      console.error("[quantis-auth] login:", e);
+      res.status(500).json({ error: "Lỗi đăng nhập" });
+    }
+  });
+
+  app.post(`${r}/logout`, (req, res) => {
+    req.session = null;
+    res.json({ ok: true });
+  });
+
+  app.get(`${r}/sso`, (req, res) => {
+    if (!authActive()) {
+      res.status(400).json({ error: "Auth not enabled" });
+      return;
+    }
+    if (!QUANTIS_SSO_REDIRECT_URL) {
+      res.status(503).json({ error: "SSO chưa được cấu hình" });
+      return;
+    }
+    res.redirect(302, QUANTIS_SSO_REDIRECT_URL);
+  });
+}
+
+for (const root of API_ROOTS) {
+  registerAuthRoutes(root);
+}
+
+function resolveDataForRequest(req) {
+  if (authActive() && safeUserId(req.session?.userId)) {
+    return { mode: "user", userId: safeUserId(req.session.userId) };
+  }
+  return { mode: "global" };
+}
+
+function handleGetData(req, res) {
+  try {
+    if (authActive() && QUANTIS_AUTH_REQUIRED && !safeUserId(req.session?.userId)) {
+      res.status(401).json({ error: "Cần đăng nhập" });
+      return;
+    }
+    const ctx = resolveDataForRequest(req);
+    if (ctx.mode === "user") {
+      const store = readUserStore(ctx.userId);
+      res.json({ datasets: store.datasets, workflows: store.workflows });
+      return;
+    }
     const store = readStore();
     res.json({ datasets: store.datasets, workflows: store.workflows });
   } catch (e) {
-    console.error("GET /api/quantis/data:", e);
+    console.error("GET data:", e);
     res.status(500).json({ error: e.message });
   }
-});
+}
 
-// POST /api/quantis/data
-app.post("/api/quantis/data", (req, res) => {
+function handlePostData(req, res) {
   try {
+    if (authActive() && QUANTIS_AUTH_REQUIRED && !safeUserId(req.session?.userId)) {
+      res.status(401).json({ error: "Cần đăng nhập" });
+      return;
+    }
     const datasets = Array.isArray(req.body?.datasets) ? req.body.datasets : [];
     const workflows = Array.isArray(req.body?.workflows) ? req.body.workflows : [];
-    writeStore(datasets, workflows);
+    const ctx = resolveDataForRequest(req);
+    if (ctx.mode === "user") {
+      writeUserStore(ctx.userId, datasets, workflows);
+    } else {
+      writeStore(datasets, workflows);
+    }
     res.json({ status: "ok" });
   } catch (e) {
-    console.error("POST /api/quantis/data:", e);
+    console.error("POST data:", e);
     res.status(500).json({ error: e.message });
   }
-});
+}
 
-// GET /api/quantis/settings — Cấu hình dùng chung cho tất cả tài khoản (lưu trong data/settings.json; có thể thay bằng DB)
-app.get("/api/quantis/settings", (req, res) => {
+function handleGetSettings(req, res) {
   try {
     const settings = readSettings();
     res.json(settings);
   } catch (e) {
-    console.error("GET /api/quantis/settings:", e);
+    console.error("GET settings:", e);
     res.status(500).json({ error: e.message });
   }
-});
+}
 
-// PUT /api/quantis/settings — Lưu cấu hình dùng chung
-app.put("/api/quantis/settings", (req, res) => {
+function handlePutSettings(req, res) {
   try {
     const body = req.body || {};
     const current = readSettings();
@@ -227,15 +495,25 @@ app.put("/api/quantis/settings", (req, res) => {
       archiveUrl: body.archiveUrl !== undefined ? (body.archiveUrl || null) : current.archiveUrl,
       archiveFileUrl: body.archiveFileUrl !== undefined ? (body.archiveFileUrl || null) : current.archiveFileUrl,
       aiApiUrl: body.aiApiUrl !== undefined ? (body.aiApiUrl || null) : current.aiApiUrl,
+      ollamaUpstreamUrl: body.ollamaUpstreamUrl !== undefined ? (body.ollamaUpstreamUrl || null) : current.ollamaUpstreamUrl,
       defaultAiModel: body.defaultAiModel !== undefined ? (body.defaultAiModel || null) : current.defaultAiModel,
     };
     writeSettings(settings);
     res.json({ status: "ok", settings });
   } catch (e) {
-    console.error("PUT /api/quantis/settings:", e);
+    console.error("PUT settings:", e);
     res.status(500).json({ error: e.message });
   }
+}
+
+dual("get", "/health", (req, res) => {
+  res.json({ status: "ok", service: "quantis" });
 });
+
+dual("get", "/data", handleGetData);
+dual("post", "/data", handlePostData);
+dual("get", "/settings", handleGetSettings);
+dual("put", "/settings", handlePutSettings);
 
 const ANALYZE_PYTHON_URL = (process.env.ANALYZE_PYTHON_URL || "").replace(/\/+$/, "");
 
@@ -317,42 +595,71 @@ app.use("/api/quantis/analyze", async (req, res) => {
   }
 });
 
-// Proxy Ollama: /api/quantis/ollama/* -> OLLAMA_URL/* (tránh CORS khi frontend gọi từ browser)
-app.use("/api/quantis/ollama", async (req, res) => {
-  const pathAndQuery = req.url.startsWith("/") ? req.url : "/" + req.url;
-  const targetUrl = `${OLLAMA_URL}${pathAndQuery}`;
-  const headers = { ...req.headers, host: new URL(OLLAMA_URL).host };
-  delete headers["origin"];
-  delete headers["referer"];
+function effectiveOllamaUpstream() {
   try {
-    const opt = { method: req.method, headers, redirect: "follow" };
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      if (req.body != null && typeof req.body === "object" && !Array.isArray(req.body) && !Buffer.isBuffer(req.body)) {
-        opt.body = JSON.stringify(req.body);
-        if (!headers["content-type"]) headers["content-type"] = "application/json";
-      } else if (Buffer.isBuffer(req.body) || (typeof req.body === "object" && req.body?.length)) {
-        opt.body = req.body;
-      }
-    }
-    const proxyRes = await fetch(targetUrl, opt);
-    const contentType = proxyRes.headers.get("content-type") || "";
-    res.status(proxyRes.status);
-    proxyRes.headers.forEach((v, k) => {
-      const lower = k.toLowerCase();
-      if (lower === "transfer-encoding" || lower === "connection") return;
-      if (lower.startsWith("access-control-")) return;
-      res.setHeader(k, v);
-    });
-    if (contentType.includes("application/json")) {
-      return res.json(await proxyRes.json());
-    }
-    const buf = Buffer.from(await proxyRes.arrayBuffer());
-    res.send(buf);
-  } catch (e) {
-    console.error("Ollama proxy error:", e.message);
-    res.status(502).json({ error: "Ollama proxy failed", detail: e.message });
+    const s = readSettings();
+    const u = s.ollamaUpstreamUrl != null ? String(s.ollamaUpstreamUrl).trim() : "";
+    if (u) return u.replace(/\/+$/, "").replace(/\/v1$/i, "");
+  } catch (_) {
+    /* ignore */
   }
-});
+  return OLLAMA_URL.replace(/\/+$/, "").replace(/\/v1$/i, "");
+}
+
+function createOllamaProxyHandler() {
+  return async (req, res) => {
+    const upstream = effectiveOllamaUpstream();
+    if (!upstream || !String(upstream).trim()) {
+      return res.status(503).json({
+        error: "Ollama upstream not configured",
+        detail: "Set ollamaUpstreamUrl in Quantis admin (Cấu hình kết nối) or OLLAMA_URL env.",
+      });
+    }
+    const pathAndQuery = req.url.startsWith("/") ? req.url : "/" + req.url;
+    const targetUrl = `${upstream}${pathAndQuery}`;
+    let host;
+    try {
+      host = new URL(upstream).host;
+    } catch (e) {
+      return res.status(500).json({ error: "Invalid ollamaUpstreamUrl in settings", detail: String(e.message || e) });
+    }
+    const headers = { ...req.headers, host };
+    delete headers["origin"];
+    delete headers["referer"];
+    try {
+      const opt = { method: req.method, headers, redirect: "follow" };
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        if (req.body != null && typeof req.body === "object" && !Array.isArray(req.body) && !Buffer.isBuffer(req.body)) {
+          opt.body = JSON.stringify(req.body);
+          if (!headers["content-type"]) headers["content-type"] = "application/json";
+        } else if (Buffer.isBuffer(req.body) || (typeof req.body === "object" && req.body?.length)) {
+          opt.body = req.body;
+        }
+      }
+      const proxyRes = await fetch(targetUrl, opt);
+      const contentType = proxyRes.headers.get("content-type") || "";
+      res.status(proxyRes.status);
+      proxyRes.headers.forEach((v, k) => {
+        const lower = k.toLowerCase();
+        if (lower === "transfer-encoding" || lower === "connection") return;
+        if (lower.startsWith("access-control-")) return;
+        res.setHeader(k, v);
+      });
+      if (contentType.includes("application/json")) {
+        return res.json(await proxyRes.json());
+      }
+      const buf = Buffer.from(await proxyRes.arrayBuffer());
+      res.send(buf);
+    } catch (e) {
+      console.error("Ollama proxy error:", e.message);
+      res.status(502).json({ error: "Ollama proxy failed", detail: e.message });
+    }
+  };
+}
+
+// Proxy Ollama: frontend chỉ gọi backend; upstream từ settings.ollamaUpstreamUrl hoặc OLLAMA_URL
+app.use("/api/quantis/ollama", createOllamaProxyHandler());
+app.use("/api/quantis/backend/api/quantis/ollama", createOllamaProxyHandler());
 
 // Proxy Archive NEU: /api/quantis/archive/* -> archive.neu.edu.vn/api/v1/*
 // Tránh CORS và lỗi 422 do route API gốc (path request_id nhầm "search").
@@ -410,6 +717,11 @@ app.listen(PORT, () => {
     console.log(`  [research.neu.edu.vn] Mặc định: khi chưa có settings.json, GET /api/quantis/settings trả về cấu hình research (người dùng không cần cấu hình).`);
   }
   if (ANALYZE_PYTHON_URL) console.log(`  *    /api/quantis/analyze/* -> ${ANALYZE_PYTHON_URL}/api/quantis/analyze/*`);
-  console.log(`  *    /api/quantis/ollama/* -> ${OLLAMA_URL}/*`);
+  console.log(`  *    /api/quantis/ollama/* -> (settings.ollamaUpstreamUrl || OLLAMA_URL)/*`);
+  console.log(`  *    /api/quantis/backend/api/quantis/ollama/* -> (tương tự)`);
   console.log(`  *    /api/quantis/archive/* -> ${ARCHIVE_NEU_URL}/api/v1/*`);
+  if (QUANTIS_AUTH_ENABLED) {
+    console.log(`  [auth] QUANTIS_AUTH_ENABLED — đăng ký/đăng nhập, lưu workspace theo user (data/user-stores/).`);
+    if (QUANTIS_AUTH_REQUIRED) console.log(`  [auth] QUANTIS_AUTH_REQUIRED — GET/POST /data bắt buộc đăng nhập.`);
+  }
 });

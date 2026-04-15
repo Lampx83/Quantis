@@ -19,7 +19,7 @@ import {
   Sigma,
   LineChart as LineChartIcon,
   FileText,
-  CircleHelp,
+  BookOpen,
   ChevronRight,
   CheckCircle2,
   Trash2,
@@ -59,24 +59,31 @@ import {
   GripVertical,
   Save,
   ImagePlus,
+  User,
+  LogOut,
+  Server,
 } from "lucide-react";
 import { getPortalTheme, applyPortalTheme } from "./portal-theme";
-import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceStorage, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadAiApiUrl, saveAiApiUrl, saveAiFeedback, saveAppFeedback, setServerSettings } from "./store";
+import { QUANTIS_EMBED_CONFIG_EVENT } from "./embed-config";
+import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceLocalData, clearQuantisLocalAppData, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadOllamaUpstreamFromServer, saveAiFeedback, saveAppFeedback, setServerSettings, getServerSettings } from "./store";
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
+import type { AuthConfig, AuthUser } from "./api";
+import { QuantAuthGate, QuantLoginModal } from "./auth-ui";
 import { AI_MAX_PROMPT_CHARS } from "./api";
-import ReactMarkdown from "react-markdown";
+import { AiMarkdown } from "./ai-markdown";
 import { parseCSV, parseFileContent, getFormatFromFilename, isTextFormat, isBackendParseFormat, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, kernelDensityEstimate, binNumericForPie, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
 import * as archiveApi from "./archive-api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "./archive-api";
 import { SAMPLE_DATASETS } from "./sampleDatasets";
 import { getSampleWorkflowStandalone, getDefaultStandardWorkflow, getDemoWorkflowTemplates } from "./sample-data";
+import { OpenScienceProtocolPanel } from "./OpenScienceProtocolPanel";
 import type { DescriptiveRow, TTestResult, ChiSquareResult, ANOVAResult, BoxGroupStats, MannWhitneyResult, OLSResult, BetaPosteriorResult, KMeansResult, LogisticResult, EFAResult, MediationResult, ShapiroWilkResult, MulticlassLogisticResult, SampleSizeProportionResult, SampleSizeChiSquareResult, SampleSizeAnovaResult, SampleSizeRegressionResult, PairedTTestResult, WilcoxonSignedRankResult, FriedmanResult, LeveneResult, McNemarResult, FisherExactResult, OneSampleTTestResult, BinomialTestResult, TwoProportionZTestResult, SignTestResult } from "./utils/stats";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, CartesianGrid, PieChart, Pie, LineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend, ComposedChart, ReferenceArea, ReferenceLine } from "recharts";
 
 type DataTab = "import" | "profiling" | "transform" | "preview" | "descriptive";
 type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian";
-type ReproducibilityTab = "workflows" | "versioning";
+type ReproducibilityTab = "workflows" | "versioning" | "openscience";
 type PresentationTab = "visualization";
 
 type MainSection = "data" | "analysis" | "reproducibility" | "presentation" | "ai" | "workflow";
@@ -114,9 +121,21 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAppFeedbackModal, setShowAppFeedbackModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  /** Desktop: sidebar trong layout; mobile (max-md): sidebar trượt + overlay — mặc định đóng để main rộng. */
+  const [isMobileLayout, setIsMobileLayout] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches,
+  );
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [useBackend, setUseBackend] = useState(false);
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginModalInitialTab, setLoginModalInitialTab] = useState<"login" | "register">("login");
+  const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [analysisBackendAvailable, setAnalysisBackendAvailable] = useState(false);
   const [descriptiveBackendResult, setDescriptiveBackendResult] = useState<DescriptiveRow[] | null>(null);
   const [correlationBackendResult, setCorrelationBackendResult] = useState<{ matrix: number[][]; columnNames: string[] } | null>(null);
@@ -155,6 +174,16 @@ export default function App() {
   const [archiveDownloadingFileId, setArchiveDownloadingFileId] = useState<string | null>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const hasReadUrlRef = useRef(false);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : true));
+  /** Đã kéo workspace từ server ít nhất một lần trong phiên canSync hiện tại (tránh GET lại khi vừa mất mạng rồi có — giữ chỉnh sửa offline). */
+  const didPullServerWorkspaceRef = useRef(false);
+  const prevCanSyncRef = useRef(false);
+  /** Tăng khi embed-config.json load — nhận diện Portal / basePath muộn sau mount. */
+  const [embedConfigGeneration, setEmbedConfigGeneration] = useState(0);
+  /** Đang GET workspace từ server (tác vụ có thể lâu trên Portal). */
+  const [workspacePullLoading, setWorkspacePullLoading] = useState(false);
+  /** Import Excel/SPSS/… qua backend — hiện overlay để không tưởng app treo. */
+  const [sidebarImportBusy, setSidebarImportBusy] = useState(false);
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
@@ -186,9 +215,13 @@ export default function App() {
     };
 
     if (isBackendParseFormat(format)) {
-      quantisApi.parseFileViaBackend(file).then(({ rows, format: fmt }) => applyRows(rows, fmt)).catch((err) => {
-        showToast?.(err?.message ?? "Không thể đọc file. Cần bật backend Quantis + Python để import Excel, ODS, SPSS, Stata, SAS, R.");
-      });
+      setSidebarImportBusy(true);
+      quantisApi.parseFileViaBackend(file)
+        .then(({ rows, format: fmt }) => applyRows(rows, fmt))
+        .catch((err) => {
+          showToast?.(err?.message ?? "Không thể đọc file. Cần bật backend Quantis + Python để import Excel, ODS, SPSS, Stata, SAS, R.");
+        })
+        .finally(() => setSidebarImportBusy(false));
       e.target.value = "";
       return;
     }
@@ -205,15 +238,8 @@ export default function App() {
   }, [selectedWorkflowId]);
 
   const addSampleDatasetFromSidebar = useCallback((def: (typeof SAMPLE_DATASETS)[0]) => {
-    const sourceKey = `sample:${def.id}`;
-    const visibleList = selectedWorkflowId && selectedWorkflow
-      ? datasets.filter((d) => (selectedWorkflow.datasetIds ?? []).includes(d.id))
-      : datasets;
-    if (visibleList.some((d) => d.sourceKey === sourceKey)) {
-      showToast?.("Dataset mẫu này đã có trong danh sách hiện tại.");
-      setShowSampleModal(false);
-      return;
-    }
+    /** Mỗi lần thêm = một dataset mới (cho phép thêm lại cùng mẫu). */
+    const sourceKey = `sample:${def.id}:${generateId()}`;
     const id = generateId();
     const now = new Date().toISOString();
     const fullData = def.getData();
@@ -229,7 +255,7 @@ export default function App() {
       setWorkflows((prev) => prev.map((w) => (w.id !== selectedWorkflowId ? w : { ...w, datasetIds: [...(w.datasetIds ?? []), id].filter((x, i, a) => a.indexOf(x) === i), updatedAt: now })));
     }
     setShowSampleModal(false);
-  }, [selectedWorkflowId, selectedWorkflow, datasets]);
+  }, [selectedWorkflowId, selectedWorkflow]);
 
   /** Workflow chuẩn dùng để hiển thị bên trái khi chưa chọn workflow nào */
   const defaultWorkflowForDisplay = useMemo(() => getDefaultStandardWorkflow(), []);
@@ -292,10 +318,10 @@ export default function App() {
 
   /** 4 nhóm tab chính trên header */
   const MAIN_TABS = [
-    { id: "data" as const, label: "Khám phá & biến đổi dữ liệu", icon: Database, section: "data" as const },
-    { id: "analysis" as const, label: "Phân tích thống kê", icon: BarChart3, section: "analysis" as const },
-    { id: "presentation" as const, label: "Trực quan", icon: LineChartIcon, section: "presentation" as const },
-    { id: "ai" as const, label: "AI hướng dẫn", icon: Sparkles, section: "ai" as const },
+    { id: "data" as const, label: "Khám phá & biến đổi dữ liệu", shortLabel: "Dữ liệu", icon: Database, section: "data" as const },
+    { id: "analysis" as const, label: "Phân tích thống kê", shortLabel: "Phân tích", icon: BarChart3, section: "analysis" as const },
+    { id: "presentation" as const, label: "Trực quan", shortLabel: "Trực quan", icon: LineChartIcon, section: "presentation" as const },
+    { id: "ai" as const, label: "AI hướng dẫn", shortLabel: "AI", icon: Sparkles, section: "ai" as const },
   ] as const;
 
   const getFirstStepInGroup = useCallback((group: "data" | "presentation" | "analysis") => {
@@ -329,11 +355,27 @@ export default function App() {
 
 
   useEffect(() => {
-    saveDatasets(datasets);
-  }, [datasets]);
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+
   useEffect(() => {
-    saveWorkflows(workflows);
-  }, [workflows]);
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onViewport = () => {
+      const narrow = mq.matches;
+      setIsMobileLayout(narrow);
+      if (narrow) setSidebarOpen(false);
+    };
+    mq.addEventListener("change", onViewport);
+    return () => mq.removeEventListener("change", onViewport);
+  }, []);
+
   useEffect(() => {
     if (workflows.length > 0 && !selectedWorkflowId) setSelectedWorkflowId(workflows[0].id);
   }, [workflows, selectedWorkflowId]);
@@ -379,7 +421,7 @@ export default function App() {
     if (dt && dataTabs.includes(dt)) setDataTab(dt === "import" ? "preview" : dt);
     const analysisTabs: AnalysisTab[] = ["descriptive", "hypothesis", "regression", "sem", "correlation", "reliability", "factor", "ml", "bayesian"];
     if (at && analysisTabs.includes(at)) setAnalysisTab(at);
-    const reproTabs: ReproducibilityTab[] = ["workflows", "versioning"];
+    const reproTabs: ReproducibilityTab[] = ["workflows", "versioning", "openscience"];
     if (rt && reproTabs.includes(rt)) setReproTab(rt);
     const presentationTabs: PresentationTab[] = ["visualization"];
     if (pt && presentationTabs.includes(pt)) setPresentationTab(pt);
@@ -450,26 +492,157 @@ export default function App() {
     }).catch(() => setCorrelationLoading(false));
   }, [mainSection, analysisTab, analysisBackendAvailable, selectedDataset?.id, correlationMethod]);
 
-  // Khi có backend: tải datasets + workflows từ server (nếu đã đăng nhập)
+  /**
+   * Standalone + bật auth Quantis: cần phiên đăng nhập.
+   * Embed + backend PostgreSQL: `/auth/config` trả authEnabled=false — luôn sync khi có backend.
+   * Embed + JSON backend bật auth: vẫn cần authUser (Portal inject / postMessage).
+   */
+  const canSyncToServer = useMemo(
+    () => useBackend && (!authConfig?.authEnabled || !!authUser),
+    [useBackend, authConfig?.authEnabled, authUser]
+  );
+
+  /** Chỉ ghi localStorage khi không đồng bộ server được HOẶC đang offline — khi online + canSync, bản chính là database qua backend. */
+  const persistWorkspaceLocally = !canSyncToServer || !isOnline;
+
   useEffect(() => {
-    if (!useBackend) return;
-    quantisApi.getData().then((data) => {
-      if (data) {
+    if (!persistWorkspaceLocally) return;
+    saveDatasets(datasets);
+  }, [datasets, persistWorkspaceLocally]);
+  useEffect(() => {
+    if (!persistWorkspaceLocally) return;
+    saveWorkflows(workflows);
+  }, [workflows, persistWorkspaceLocally]);
+
+  // Auth: cấu hình + phiên khi có backend; Portal embed: __PORTAL_USER__ hoặc postMessage
+  useEffect(() => {
+    if (!useBackend) {
+      setAuthLoading(false);
+      return;
+    }
+    const portalUser = quantisApi.isPortalEmbed() ? quantisApi.getPortalUserFromWindow() : null;
+    if (portalUser) {
+      setAuthUser(portalUser);
+      quantisApi.getAuthConfig().then((c) => setAuthConfig(c ?? null)).finally(() => setAuthLoading(false));
+      return;
+    }
+    let cancelled = false;
+    Promise.all([quantisApi.getAuthConfig(), quantisApi.getAuthMe()])
+      .then(([config, user]) => {
+        if (cancelled) return;
+        setAuthConfig(config ?? null);
+        if (quantisApi.isPortalEmbed()) {
+          const fromWindow = quantisApi.getPortalUserFromWindow();
+          const realUser = user && (user.email !== "guest@local" || user.name !== "Guest") ? user : null;
+          const u = fromWindow ?? realUser;
+          if (u) setAuthUser(u);
+        } else {
+          setAuthUser(user ?? null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAuthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useBackend, embedConfigGeneration]);
+
+  /** Iframe (AI Portal): xin user và nhận PORTAL_USER — không phụ thuộc isPortalEmbed() lúc mount (global có thể set muộn). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const win = window;
+    if (win.parent === win) return;
+    const requestUser = () => {
+      win.parent.postMessage({ type: "QUANTIS_NEED_PORTAL_USER" }, "*");
+      win.parent.postMessage({ type: "SURVEYLAB_NEED_PORTAL_USER" }, "*");
+    };
+    requestUser();
+    const t0 = setTimeout(requestUser, 400);
+    const t1 = setTimeout(requestUser, 1000);
+    const t2 = setTimeout(requestUser, 2500);
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; user?: { id?: string; email?: string; name?: string } } | null;
+      if (d?.type !== "PORTAL_USER" || !d?.user || typeof d.user.id !== "string") return;
+      setAuthUser({
+        id: d.user.id.trim(),
+        email: typeof d.user.email === "string" ? d.user.email : "",
+        name: typeof d.user.name === "string" ? d.user.name : (d.user.email ?? ""),
+      });
+    };
+    win.addEventListener("message", onMessage);
+    return () => {
+      clearTimeout(t0);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      win.removeEventListener("message", onMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (quantisApi.isPortalEmbed() || !authConfig?.authEnabled || !authUser) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        quantisApi.getAuthMe().then((user) => {
+          if (!user) setAuthUser(null);
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [authConfig?.authEnabled, authUser]);
+
+  /**
+   * Kéo workspace từ server: lần đầu khi vừa có thể đồng bộ, hoặc vừa đăng nhập / vừa có mạng sau khi chưa pull.
+   * Không GET lại mỗi lần online/offline để không ghi đè chỉnh sửa offline đang giữ trong state.
+   */
+  useEffect(() => {
+    if (!canSyncToServer) {
+      didPullServerWorkspaceRef.current = false;
+      prevCanSyncRef.current = false;
+      setWorkspacePullLoading(false);
+      return;
+    }
+    if (!isOnline) return;
+
+    const becameSyncable = !prevCanSyncRef.current && canSyncToServer;
+    prevCanSyncRef.current = canSyncToServer;
+    const shouldPull = becameSyncable || !didPullServerWorkspaceRef.current;
+    if (!shouldPull) return;
+
+    let cancelled = false;
+    setWorkspacePullLoading(true);
+    quantisApi
+      .getData()
+      .then((data) => {
+        if (cancelled) return;
+        didPullServerWorkspaceRef.current = true;
+        if (!data) return;
         setDatasets(data.datasets);
         setWorkflows(data.workflows);
-      }
-    });
-  }, [useBackend]);
+        clearWorkspaceLocalData();
+      })
+      .catch(() => {
+        /* im lặng — offline/proxy lỗi; user vẫn dùng local */
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspacePullLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      setWorkspacePullLoading(false);
+    };
+  }, [canSyncToServer, isOnline]);
 
-  // Khi có backend và state thay đổi: đồng bộ lên server (debounce 1.5s). Nếu save 404/lỗi thì tắt useBackend.
+  /** Ghi lên server khi online; offline chỉ giữ trong RAM + localStorage (persistWorkspaceLocally). */
   useEffect(() => {
-    if (!useBackend) return;
+    if (!canSyncToServer || !isOnline) return;
     const t = setTimeout(async () => {
       const ok = await quantisApi.saveData({ datasets, workflows });
       if (!ok) setUseBackend(false);
     }, 1500);
     return () => clearTimeout(t);
-  }, [useBackend, datasets, workflows]);
+  }, [canSyncToServer, isOnline, datasets, workflows]);
 
   // Tải cấu hình dùng chung từ server (áp dụng cho mọi tài khoản)
   useEffect(() => {
@@ -514,13 +687,16 @@ export default function App() {
     applyPortalTheme(next);
   };
 
-  const handleResetWorkspace = () => {
-    setHeaderMenuOpen(false);
+  /** Mở xác nhận đặt lại toàn bộ (từ Cài đặt): local + cố gắng ghi rỗng lên server nếu đang đồng bộ. */
+  const handleRequestFactoryReset = () => {
+    setShowSettings(false);
     setConfirmDialog({
-      message: "Reset toàn bộ workspace? Xóa hết dữ liệu và workflow đã lưu.",
+      message:
+        "Đặt lại ứng dụng về trạng thái như mới cài? Mọi dataset, workflow, biểu đồ báo cáo, cấu hình URL lưu trên trình duyệt (backend, Archive), góp ý và pre-reg/Writium sẽ bị xóa. Cấu hình Ollama upstream trên server không đổi. Nếu đang đăng nhập và đồng bộ server, workspace trên tài khoản cũng sẽ được ghi đè rỗng.",
       onConfirm: () => {
         setConfirmDialog(null);
-        clearWorkspaceStorage();
+        clearQuantisLocalAppData();
+        setServerSettings(null);
         setDatasets([]);
         setWorkflows([]);
         setSelectedDatasetId(null);
@@ -529,7 +705,20 @@ export default function App() {
         setDescriptiveBackendResult(null);
         setCorrelationBackendResult(null);
         setLastHypothesisResult(null);
-        showToast("Đã reset workspace.");
+        didPullServerWorkspaceRef.current = true;
+        void (async () => {
+          const hasBackend = Boolean(quantisApi.getApiBase()?.trim());
+          const online = typeof navigator !== "undefined" && navigator.onLine;
+          if (hasBackend && online) {
+            const ok = await quantisApi.saveData({ datasets: [], workflows: [] });
+            if (!ok) showToast("Đã xóa dữ liệu cục bộ. Không ghi được workspace rỗng lên server — kiểm tra đăng nhập / mạng.");
+            else showToast("Đã đặt lại ứng dụng (cục bộ và trên server nếu có).");
+          } else {
+            showToast("Đã đặt lại ứng dụng trên trình duyệt.");
+          }
+          quantisApi.checkBackendAvailable().then(setUseBackend);
+          quantisApi.checkAnalysisBackendAvailable().then(setAnalysisBackendAvailable);
+        })();
       },
     });
   };
@@ -559,26 +748,46 @@ export default function App() {
     }
   };
 
+  if (useBackend && authLoading) {
+    return (
+      <div className="min-h-dvh bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center justify-center gap-3 text-neutral-600 dark:text-neutral-400 px-4">
+        <Loader2 className="w-10 h-10 animate-spin text-brand" />
+        <p className="text-sm">Đang kết nối…</p>
+      </div>
+    );
+  }
+
+  /** Chặn toàn màn hình khi bật auth và không gửi authRequired: false. Mặc định coi như bắt buộc nếu backend không gửi trường. */
+  if (!quantisApi.isPortalEmbed() && authConfig && authConfig.authEnabled && authConfig.authRequired !== false && authUser === null && !authLoading) {
+    return (
+      <QuantAuthGate
+        config={authConfig}
+        onSuccess={setAuthUser}
+        ssoUrl={quantisApi.getSsoLoginUrl()}
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
+    <div className="flex flex-col h-dvh min-h-0 max-h-dvh overflow-hidden bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
       {/* Header */}
-      <header className="flex-shrink-0 h-14 px-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center">
+      <header className="flex-shrink-0 min-h-14 pt-[env(safe-area-inset-top,0px)] px-2 sm:px-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center gap-1">
         <button
           type="button"
           onClick={() => { setMainSection("workflow"); setSelectedWorkflowId(null); setSelectedWorkflowStepId(null); }}
-          className="flex items-center gap-2 min-w-0 rounded-lg hover:opacity-90 transition-opacity text-left flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+          className="flex items-center gap-1.5 sm:gap-2 min-w-0 rounded-lg hover:opacity-90 transition-opacity text-left flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           title="Về Workflow nghiên cứu"
         >
           <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
             <Sigma className="w-4 h-4 text-white" />
           </div>
           <div className="min-w-0">
-            <h1 className="font-semibold text-base truncate">Quantis</h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">Phân tích định lượng &amp; thống kê</p>
+            <h1 className="font-semibold text-sm sm:text-base truncate leading-tight">Quantis</h1>
+            <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 truncate hidden sm:block">Phân tích định lượng &amp; thống kê</p>
           </div>
         </button>
-        <div className="flex-1 flex items-center justify-center min-w-0 overflow-x-auto">
-          <div className="flex items-center h-full gap-0.5">
+        <div className="flex-1 flex items-center justify-center min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] snap-x snap-mandatory">
+          <div className="flex items-center h-full gap-0.5 px-0.5">
             {MAIN_TABS.map((tab) => {
               const isActive = mainSection === tab.section;
               return (
@@ -586,7 +795,7 @@ export default function App() {
                   key={tab.id}
                   type="button"
                   onClick={() => handleMainTabClick(tab)}
-                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 md:px-4 py-2.5 min-h-[44px] text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors shrink-0 snap-start focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
                     isActive
                       ? "border-brand text-brand bg-brand/5 dark:bg-brand/10"
                       : "border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700/50"
@@ -594,7 +803,8 @@ export default function App() {
                   title={tab.label}
                 >
                   <tab.icon className="w-4 h-4 shrink-0" />
-                  <span>{tab.label}</span>
+                  <span className="max-md:inline md:hidden">{tab.shortLabel}</span>
+                  <span className="hidden md:inline">{tab.label}</span>
                 </button>
               );
             })}
@@ -610,58 +820,138 @@ export default function App() {
           >
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
+          {authConfig?.authEnabled && !quantisApi.isPortalEmbed() && !authUser && (
+            <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginModalInitialTab("login");
+                  setShowLoginModal(true);
+                }}
+                className="flex min-h-[40px] items-center justify-center gap-1 rounded-lg px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                title="Đăng nhập"
+                aria-label="Đăng nhập"
+              >
+                <User className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Đăng nhập</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginModalInitialTab("register");
+                  setShowLoginModal(true);
+                }}
+                className="flex min-h-[40px] items-center justify-center rounded-lg px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-semibold text-brand hover:bg-brand/10 dark:hover:bg-brand/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                title="Đăng ký tài khoản"
+                aria-label="Đăng ký"
+              >
+                Đăng ký
+              </button>
+            </div>
+          )}
           <div className="relative">
             <button
               type="button"
               onClick={() => setHeaderMenuOpen((v) => !v)}
               className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-              title="Menu"
-              aria-label="Menu"
+              title="Menu — trợ giúp, cấu hình, workflow mẫu"
+              aria-label="Mở menu: trợ giúp, cấu hình và khác"
               aria-expanded={headerMenuOpen}
+              aria-haspopup="menu"
             >
               <MoreVertical className="w-5 h-5" />
             </button>
             {headerMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 py-1 min-w-[180px] rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-lg z-50">
+              <div
+                role="menu"
+                aria-label="Menu ứng dụng"
+                className="absolute right-0 top-full mt-1 py-1 min-w-[min(100vw-2rem,16rem)] max-w-[calc(100vw-1rem)] max-h-[min(75vh,28rem)] overflow-y-auto overscroll-contain rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-lg z-50"
+              >
+                {authUser && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowAccountDialog(true);
+                      setHeaderMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
+                  >
+                    <User className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 min-w-0 truncate" title={authUser.name || authUser.email || "Tài khoản"}>
+                      {authUser.name || authUser.email || "Tài khoản"}
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
+                  role="menuitem"
+                  onClick={() => { setGuideOpen(true); setHeaderMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
+                >
+                  <BookOpen className="w-4 h-4 shrink-0 text-brand" />
+                  <span className="flex flex-col min-w-0">
+                    <span className="font-semibold text-neutral-800 dark:text-neutral-100">Hướng dẫn &amp; trợ giúp</span>
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400 font-normal leading-snug">Giao diện, import, phân tích, đồng bộ, AI Portal</span>
+                  </span>
+                </button>
+                <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-600 mx-2" role="separator" />
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => { setShowDemoGallery(true); setHeaderMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4 shrink-0" />
                   Tải workflow mẫu
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setGuideOpen(true); setHeaderMenuOpen(false); }}
+                  role="menuitem"
+                  onClick={() => {
+                    setMainSection("reproducibility");
+                    setReproTab("workflows");
+                    setHeaderMenuOpen(false);
+                  }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
-                  <CircleHelp className="w-4 h-4" />
-                  Hướng dẫn
+                  <GitBranch className="w-4 h-4 shrink-0" />
+                  Workflows &amp; tái lập
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMainSection("reproducibility");
+                    setReproTab("openscience");
+                    setHeaderMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  Pre-reg &amp; mở khoa học
+                </button>
+                <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-600 mx-2" role="separator" />
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={() => { setShowSettings(true); setHeaderMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
+                  className="w-full flex items-start gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
-                  <Settings className="w-4 h-4" />
-                  Cài đặt
+                  <Server className="w-4 h-4 shrink-0 mt-0.5 text-brand" />
+                  <span className="min-w-0">
+                    <span className="block font-medium">Cấu hình kết nối</span>
+                    <span className="block text-xs text-neutral-500 dark:text-neutral-400 font-normal">Backend, Ollama, Archive; đặt lại ứng dụng</span>
+                  </span>
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => { setShowAppFeedbackModal(true); setHeaderMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
-                  <FileText className="w-4 h-4" />
+                  <ThumbsUp className="w-4 h-4 shrink-0" />
                   Góp ý ứng dụng
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetWorkspace}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Reset workspace
                 </button>
               </div>
             )}
@@ -669,9 +959,129 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex flex-1 min-h-0">
-      {/* Sidebar trái ở quản lý workflow + bộ dữ liệu + import */}
-      <aside className={`${sidebarOpen ? "w-64" : "w-0"} flex-shrink-0 border-r border-neutral-200/80 dark:border-neutral-700/80 bg-white dark:bg-neutral-800 flex flex-col overflow-hidden transition-[width] duration-200`}>
+      {workspacePullLoading && (
+        <div
+          className="flex-shrink-0 flex items-center gap-2 px-3 py-2 text-xs sm:text-sm border-b border-brand/25 bg-brand/10 text-brand dark:bg-brand/15 dark:text-brand-200"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="w-4 h-4 shrink-0 animate-spin" aria-hidden />
+          <span>Đang tải workspace từ máy chủ…</span>
+        </div>
+      )}
+
+      {sidebarImportBusy && (
+        <div
+          className="fixed inset-0 z-[260] flex items-center justify-center bg-black/35 backdrop-blur-[2px] p-4"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-5 py-4 shadow-xl max-w-sm">
+            <Loader2 className="w-8 h-8 shrink-0 animate-spin text-brand" aria-hidden />
+            <div>
+              <p className="font-medium text-neutral-900 dark:text-neutral-100">Đang đọc file trên máy chủ</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">Excel, SPSS, Stata… có thể mất vài giây.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isMobileLayout && sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Đóng panel bên trái"
+          className="fixed inset-x-0 top-14 bottom-8 z-30 bg-black/45 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {showLoginModal && authConfig && !quantisApi.isPortalEmbed() && (
+        <QuantLoginModal
+          config={authConfig}
+          ssoUrl={quantisApi.getSsoLoginUrl()}
+          initialTab={loginModalInitialTab}
+          onSuccess={setAuthUser}
+          onClose={() => setShowLoginModal(false)}
+        />
+      )}
+
+      {showAccountDialog && authUser && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setShowAccountDialog(false)}
+        >
+          <div
+            className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 w-full max-w-md shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
+              <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-brand">
+                  <User className="h-5 w-5" />
+                </span>
+                Tài khoản
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowAccountDialog(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                aria-label="Đóng"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Họ tên</p>
+                <p className="text-sm text-neutral-800 dark:text-neutral-100">{authUser.name || "—"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Email</p>
+                <p className="text-sm text-neutral-800 dark:text-neutral-100 break-all">{authUser.email}</p>
+              </div>
+              <div className="flex flex-col gap-2 pt-2 border-t border-neutral-200 dark:border-neutral-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAccountDialog(false);
+                    setShowSettings(true);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg"
+                >
+                  <Settings className="h-4 w-4 shrink-0" />
+                  Cấu hình kết nối (Backend &amp; Ollama)
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await quantisApi.authLogout();
+                    setAuthUser(null);
+                    setShowAccountDialog(false);
+                    setDatasets(loadDatasets());
+                    setWorkflows(loadWorkflows());
+                    showToast("Đã đăng xuất.");
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0 min-w-0">
+      {/* Sidebar: desktop chỉnh width; mobile fixed overlay + trượt */}
+      <aside
+        className={`flex flex-col overflow-hidden border-neutral-200/80 dark:border-neutral-700/80 bg-white dark:bg-neutral-800 transition-[transform,width] duration-200 ease-out
+          max-md:fixed max-md:top-14 max-md:bottom-8 max-md:left-0 max-md:z-40 max-md:w-[min(18rem,calc(100vw-0.75rem))] max-md:shadow-2xl max-md:border-r
+          ${sidebarOpen ? "max-md:translate-x-0 max-md:border-r" : "max-md:-translate-x-full max-md:pointer-events-none max-md:border-transparent max-md:shadow-none"}
+          md:relative md:translate-x-0 md:pointer-events-auto md:flex-shrink-0
+          ${sidebarOpen ? "md:w-64 md:border-r" : "md:w-0 md:border-transparent md:overflow-hidden"}`}
+      >
         {sidebarOpen && (
           <div className="flex flex-col h-full min-h-0">
             <div className="p-3 flex flex-col gap-3 flex-shrink-0">
@@ -767,8 +1177,11 @@ export default function App() {
                           <li key={d.id} className="group flex items-stretch gap-0.5 rounded-lg overflow-hidden border border-transparent hover:border-neutral-200 dark:hover:border-neutral-600">
                             <button
                               type="button"
-                              onClick={() => setSelectedDatasetId(d.id)}
-                              className={`flex-1 min-w-0 text-left px-2.5 py-2 rounded-l-lg text-sm truncate border transition-colors ${
+                              onClick={() => {
+                                setSelectedDatasetId(d.id);
+                                if (isMobileLayout) setSidebarOpen(false);
+                              }}
+                              className={`flex-1 min-w-0 text-left px-2.5 py-2 min-h-[44px] rounded-l-lg text-sm truncate border transition-colors ${
                                 selectedDatasetId === d.id
                                   ? "bg-brand/15 dark:bg-brand/25 border-brand/40 text-brand dark:text-brand"
                                   : "border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700/50 text-neutral-700 dark:text-neutral-300"
@@ -827,7 +1240,7 @@ export default function App() {
       <div className="flex-1 min-h-0 min-w-0 flex flex-col w-full">
         {/* Toolbar ngang khi tab Khám phá & biến đổi — ẩn khi đang xem chi tiết workflow */}
         {mainSection === "data" && !(selectedWorkflowId && selectedWorkflow && !selectedStep) && (
-          <div className="flex-shrink-0 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
+          <div className="flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
             <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> Xem dữ liệu</button>
             <button type="button" onClick={() => setDataTab("profiling")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "profiling" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><ScanSearch className="w-4 h-4 shrink-0" /> Sơ bộ</button>
             <button type="button" onClick={() => setDataTab("descriptive")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "descriptive" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> Mô tả</button>
@@ -836,7 +1249,7 @@ export default function App() {
         )}
         {/* Toolbar ở Analysis: Kiểm định / Hồi quy / SEM / ... */}
         {mainSection === "analysis" && (!selectedWorkflowId || selectedStep) && (
-          <div role="toolbar" aria-label="Tab phân tích" className="toolbar flex-shrink-0 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
+          <div role="toolbar" aria-label="Tab phân tích" className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
             <button type="button" onClick={() => setAnalysisTab("correlation")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "correlation" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> Tương quan</button>
             <button type="button" onClick={() => setAnalysisTab("hypothesis")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "hypothesis" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TestTube className="w-4 h-4 shrink-0" /> Kiểm định</button>
             <button type="button" onClick={() => setAnalysisTab("reliability")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "reliability" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><CheckCircle2 className="w-4 h-4 shrink-0" /> Độ tin cậy</button>
@@ -849,7 +1262,7 @@ export default function App() {
         )}
         {/* Trực quan: toolbar loại biểu đồ (cùng vị trí với tab Data / Analysis) */}
         {mainSection === "presentation" && (!selectedWorkflowId || selectedStep) && (
-          <div role="toolbar" aria-label="Loại biểu đồ" className="toolbar flex-shrink-0 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
+          <div role="toolbar" aria-label="Loại biểu đồ" className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
             {/* Thứ tự: hay dùng trong báo cáo nghiên cứu lên trước */}
             <button type="button" onClick={() => setPresentationChartType("bar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "bar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột"><BarChart3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột</span></button>
             <button type="button" onClick={() => setPresentationChartType("line")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "line" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Đường"><LineChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Đường</span></button>
@@ -868,7 +1281,7 @@ export default function App() {
         )}
         {/* Toolbar ở theo bước workflow (khi đang xem Các bước, chọn 1 bước) — không hiện khi đang ở tab AI hướng dẫn */}
         {selectedStep && mainSection !== "data" && mainSection !== "presentation" && mainSection !== "analysis" && mainSection !== "ai" && (
-          <div role="toolbar" aria-label="Tab theo bước" className="toolbar flex-shrink-0 px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
+          <div role="toolbar" aria-label="Tab theo bước" className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
             {selectedStep.type === "import" && (
               <>
                 <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> Xem dữ liệu</button>
@@ -899,7 +1312,7 @@ export default function App() {
             )}
           </div>
         )}
-        <main className="flex-1 overflow-y-auto p-6 min-h-0 w-full max-w-full">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 min-h-0 w-full max-w-full">
         {!selectedWorkflowId && (
           <div className="w-full max-w-full py-12">
             <h2 className="text-xl font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Workflow phân tích</h2>
@@ -1260,34 +1673,80 @@ export default function App() {
           <PresentationView tab={presentationTab} onTabChange={setPresentationTab} selectedDataset={selectedDataset} lastHypothesisResult={lastHypothesisResult} analysisBackendAvailable={analysisBackendAvailable} chartType={presentationChartType} setChartType={setPresentationChartType} showToast={showToast} />
         )}
         {mainSection === "reproducibility" && (
-          <ReproducibilityView tab={reproTab} workflows={workflows} setWorkflows={setWorkflows} selectedWorkflowId={selectedWorkflowId} onSelectWorkflow={setSelectedWorkflowId} showToast={showToast} />
+          <ReproducibilityView tab={reproTab} onTabChange={setReproTab} workflows={workflows} setWorkflows={setWorkflows} selectedWorkflowId={selectedWorkflowId} onSelectWorkflow={setSelectedWorkflowId} showToast={showToast} />
         )}
         {mainSection === "ai" && (
-          <div className="w-full max-w-full">
-            <AIAssistView selectedDataset={selectedDataset} compact={false} />
+          <div className="w-full max-w-full min-h-0 flex justify-center">
+            <AIAssistView selectedDataset={selectedDataset} compact={isMobileLayout} />
           </div>
         )}
       </main>
       </div>
       </div>
-      {/* Status Bar luôn pin dưới cùng */}
-      <footer className="h-8 shrink-0 flex items-center gap-3 px-3 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800/80 text-xs text-neutral-600 dark:text-neutral-400">
+      {/* Status bar: trái = sidebar + dataset; phải = tài khoản (Portal/đã đăng nhập) hoặc Đăng nhập/Đăng ký (standalone, auth tùy chọn) */}
+      <footer className="sticky bottom-0 z-40 mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-neutral-200 bg-neutral-100 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/90 dark:text-neutral-300 sm:px-3 sm:text-xs pb-[max(0.375rem,env(safe-area-inset-bottom,0px))]">
         <button
           type="button"
           onClick={() => setSidebarOpen((o) => !o)}
-          className="p-1.5 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+          className="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded-md p-1.5 text-neutral-600 hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 touch-manipulation sm:min-h-0 sm:min-w-0 sm:p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
           title={sidebarOpen ? "Thu gọn sidebar" : "Mở sidebar"}
           aria-label={sidebarOpen ? "Thu gọn sidebar" : "Mở sidebar"}
         >
           {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
         </button>
-        <span className="truncate flex-1 min-w-0" title={selectedDataset ? `${selectedDataset.name} (${selectedDataset.rows}×${selectedDataset.columns})` : "Chọn hoặc import bộ dữ liệu"}>
+        <span className="min-w-0 flex-1 truncate text-left" title={selectedDataset ? `${selectedDataset.name} (${selectedDataset.rows}×${selectedDataset.columns})` : "Chọn hoặc import bộ dữ liệu"}>
           {selectedDataset ? (
             <>Dataset: <strong className="font-medium text-neutral-700 dark:text-neutral-300">{selectedDataset.name}</strong> ({selectedDataset.rows}×{selectedDataset.columns}){selectedWorkflow ? <> · Workflow: {selectedWorkflow.name}{selectedStep ? ` · ${selectedStep.label}` : ""}</> : ""} · {datasets.length} bộ</>
           ) : (
             <>Chưa chọn dataset{selectedWorkflow ? ` · Workflow: ${selectedWorkflow.name}${selectedStep ? ` · ${selectedStep.label}` : ""}` : ""} · {datasets.length} bộ</>
           )}
         </span>
+        <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1.5 border-l border-neutral-200 pl-2 dark:border-neutral-600 sm:gap-2">
+          {quantisApi.isPortalEmbed() && authLoading && !authUser && (
+            <span className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap truncate">Đang tải…</span>
+          )}
+          {authUser && (
+            <button
+              type="button"
+              onClick={() => setShowAccountDialog(true)}
+              className="flex items-center gap-1.5 min-h-[36px] max-w-full rounded-md px-2 py-1 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+              title={authUser.name || authUser.email || "Tài khoản"}
+              aria-label={`Tài khoản: ${authUser.name || authUser.email || ""}`}
+            >
+              <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-brand" />
+              <span className="truncate font-medium text-[10px] sm:text-xs">
+                {authUser.name || authUser.email || "Tài khoản"}
+              </span>
+            </button>
+          )}
+          {!quantisApi.isPortalEmbed() && authConfig?.authEnabled && authConfig.authRequired === false && !authUser && useBackend && (
+            <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginModalInitialTab("login");
+                  setShowLoginModal(true);
+                }}
+                className="rounded px-1.5 py-1 text-[10px] sm:text-xs font-medium text-brand hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                Đăng nhập
+              </button>
+              <span className="text-neutral-400" aria-hidden>
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginModalInitialTab("register");
+                  setShowLoginModal(true);
+                }}
+                className="rounded px-1.5 py-1 text-[10px] sm:text-xs font-medium text-brand hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                Đăng ký
+              </button>
+            </div>
+          )}
+        </div>
       </footer>
 
       {confirmDialog && (
@@ -1458,11 +1917,8 @@ export default function App() {
                                 const text = await archiveApi.fetchArchiveFileAsText(f.id, selectedArchiveRequestId);
                                 const { rows, format } = parseFileContent(text, f.file_name || "data.csv");
                                 if (rows.length < 2) { setArchiveSearchError("File không có đủ dòng dữ liệu."); return; }
-                                const archiveSourceKey = `archive:${selectedArchiveRequestId}:${f.id}`;
-                                if (datasets.some((d) => d.sourceKey === archiveSourceKey)) {
-                                  setArchiveSearchError("Dataset này đã được thêm.");
-                                  return;
-                                }
+                                /** Cho phép tải lại cùng file — mỗi lần một dataset mới. */
+                                const archiveSourceKey = `archive:${selectedArchiveRequestId}:${f.id}:${generateId()}`;
                                 const headers = rows[0];
                                 const kept = rows.slice(1, MAX_ROWS_STORED + 1);
                                 const id = generateId();
@@ -1497,10 +1953,44 @@ export default function App() {
       )}
 
       {guideOpen && (
-        <GuideModal onClose={() => setGuideOpen(false)} />
+        <GuideModal
+          onClose={() => setGuideOpen(false)}
+          onOpenSettings={() => {
+            setGuideOpen(false);
+            setShowSettings(true);
+          }}
+          onGoRepro={(sub) => {
+            setGuideOpen(false);
+            setMainSection("reproducibility");
+            setReproTab(sub ?? "workflows");
+          }}
+        />
       )}
       {showSettings && (
         <SettingsModal
+          ollamaUpstreamServer={getServerSettings()?.ollamaUpstreamUrl}
+          onFactoryResetRequest={handleRequestFactoryReset}
+          accountAuthHint={
+            useBackend && authLoading
+              ? { state: "loading" }
+              : quantisApi.isPortalEmbed()
+                ? { state: "portal" }
+                : !useBackend
+                  ? { state: "no-backend" }
+                  : !authConfig
+                    ? { state: "config-unavailable" }
+                    : !authConfig.authEnabled
+                      ? { state: "disabled" }
+                      : authConfig.authRequired === false
+                        ? { state: "optional" }
+                        : { state: "required" }
+          }
+          authUser={authUser}
+          onRequestLogin={() => {
+            setShowSettings(false);
+            setLoginModalInitialTab("login");
+            setShowLoginModal(true);
+          }}
           onClose={() => {
             setShowSettings(false);
             quantisApi.checkBackendAvailable().then(setUseBackend);
@@ -1512,7 +2002,7 @@ export default function App() {
         <AppFeedbackModal onClose={() => setShowAppFeedbackModal(false)} />
       )}
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-neutral-800 dark:bg-neutral-200 text-white dark:text-neutral-900 px-4 py-2 shadow-lg text-sm flex items-center gap-2">
+        <div className="fixed z-50 rounded-lg bg-neutral-800 dark:bg-neutral-200 text-white dark:text-neutral-900 px-3 sm:px-4 py-2 shadow-lg text-sm flex items-center gap-2 max-w-[calc(100vw-1.5rem)] left-3 right-3 sm:left-auto sm:right-4 bottom-[max(1rem,env(safe-area-inset-bottom,0px))] sm:bottom-4 sm:max-w-md">
           <Copy className="w-4 h-4" />
           {toast}
         </div>
@@ -2718,7 +3208,7 @@ function AnalysisView({
     descriptive: { title: "Thống kê mô tả", desc: "Thống kê mô tả, phân bố, effect size. AI diễn giải." },
     hypothesis: { title: "Kiểm định giả thuyết", desc: "t-test, ANOVA, Chi-square, Mann-Whitney, Shapiro-Wilk, phân tích lực mẫu." },
     regression: { title: "Hồi quy", desc: "OLS (Y liên tục), Logistic (Y nhị phân). VIF, kiểm tra đa cộng tuyến." },
-    sem: { title: "SEM", desc: "Mediation (X→M→Y), Moderation (tương tác X×M). Mô hình cấu trúc." },
+    sem: { title: "SEM", desc: "Mediation (X→M→Y, nhiều M), Moderation (tương tác X×M). Mô hình cấu trúc." },
     correlation: { title: "Ma trận tương quan", desc: "Pearson hoặc Spearman giữa các cột số." },
     reliability: { title: "Độ tin cậy Cronbach", desc: "Hệ số Cronbach's alpha cho thang đo (ví dụ Likert), đánh giá độ tin cậy nội tại." },
     factor: { title: "Phân tích nhân tố (EFA)", desc: "Trích nhân tố PCA, xoay varimax. Kiểm tra cấu trúc thang đo." },
@@ -3490,7 +3980,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
   const rows = selectedDataset ? getDataRows(selectedDataset) : [];
   const numericCols = rows.length >= 2 ? (selectedDataset?.columnNames ?? []).filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
   const [mediationX, setMediationX] = useState("");
-  const [mediationM, setMediationM] = useState("");
+  const [mediationMs, setMediationMs] = useState<string[]>([]);
   const [mediationY, setMediationY] = useState("");
   const [mediationResult, setMediationResult] = useState<MediationResult | null>(null);
   const [moderationX, setModerationX] = useState("");
@@ -3513,18 +4003,18 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
   const [semLoading, setSemLoading] = useState<string | null>(null);
 
   const runMediation = async () => {
-    if (!mediationX || !mediationM || !mediationY || !rows.length) return;
+    if (!mediationX || mediationMs.length === 0 || !mediationY || !rows.length) return;
     if (analysisBackendAvailable) {
       setSemLoading("mediation");
       try {
-        const res = await quantisApi.analyzeMediation(rows, mediationX, mediationM, mediationY);
+        const res = await quantisApi.analyzeMediation(rows, mediationX, mediationMs, mediationY);
         setMediationResult(res ?? null);
       } finally {
         setSemLoading(null);
       }
       return;
     }
-    const res = computeMediation(rows, mediationX, mediationM, mediationY);
+    const res = computeMediation(rows, mediationX, mediationMs, mediationY);
     setMediationResult(res ?? null);
   };
   const runModeration = async () => {
@@ -3596,7 +4086,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">SEM — Mô hình cấu trúc (AMOS / SmartPLS)</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
-        Mediation, Moderation, Path analysis (biến quan sát), CFA (Confirmatory Factor Analysis), PLS-SEM (mô hình phương trình cấu trúc theo phương pháp bình phương tối thiểu từng phần).
+        Mediation (một hoặc nhiều M song song), Moderation, Path analysis (biến quan sát), CFA (Confirmatory Factor Analysis), PLS-SEM (mô hình phương trình cấu trúc theo phương pháp bình phương tối thiểu từng phần).
       </p>
       {analysisBackendAvailable && (
         <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-1">
@@ -3606,7 +4096,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}.` : undefined}
-          context="SEM: Mediation (X → M → Y — M là trung gian) và Moderation (tương tác X×M ảnh hưởng lên Y). Chọn X, M, Y rồi Chạy từng phân tích."
+          context="SEM: Mediation (X → M → Y; có thể nhiều M song song) và Moderation (tương tác X×M ảnh hưởng lên Y). Chọn X, một hoặc nhiều M, Y rồi chạy phân tích."
           quickPrompts={[{ label: "Giải thích Mediation vs Moderation", systemHint: "Bạn là chuyên gia SEM. So sánh Mediation (M nằm giữa X và Y) và Moderation (M điều tiết ảnh hưởng của X lên Y). Trả lời ngắn gọn bằng tiếng Việt." }]}
           title="Hỏi AI về SEM"
         />
@@ -3614,34 +4104,81 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
 
       {selectedDataset && numericCols.length >= 3 && (
         <section className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/30 dark:bg-sky-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Phân tích trung gian (Mediation: X → M → Y)</h3>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">Phân tích trung gian (Mediation: X → M → Y)</h3>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">Nhiều M: mô hình trung gian song song (parallel); Y ~ X + M₁ + …; hiệu ứng gián tiếp tổng = Σ aᵢbᵢ. Không hỗ trợ chuỗi M₁→M₂→Y trong ô này — dùng Path analysis.</p>
           <div className="flex flex-wrap gap-4 items-end mb-3">
-            <select value={mediationX} onChange={(e) => { setMediationX(e.target.value); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={mediationX} onChange={(e) => { const v = e.target.value; setMediationX(v); setMediationMs((ms) => ms.filter((m) => m !== v)); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">X (độc lập)</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <span className="text-neutral-500" aria-hidden="true">→</span>
-            <select value={mediationM} onChange={(e) => { setMediationM(e.target.value); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">M (trung gian)</option>
-              {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <span className="text-neutral-500" aria-hidden="true">→</span>
-            <select value={mediationY} onChange={(e) => { setMediationY(e.target.value); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <span className="text-neutral-500 self-center" aria-hidden="true">→</span>
+            <select value={mediationY} onChange={(e) => { const v = e.target.value; setMediationY(v); setMediationMs((ms) => ms.filter((m) => m !== v)); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">Y (phụ thuộc)</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <button type="button" onClick={runMediation} disabled={semLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runMediation} disabled={semLoading !== null || mediationMs.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {semLoading === "mediation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Mediation"}
             </button>
+          </div>
+          <div className="mb-3">
+            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">M (trung gian) — chọn một hoặc nhiều cột</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 max-h-40 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white/80 dark:bg-neutral-800/80 p-2">
+              {numericCols.filter((c) => c !== mediationX && c !== mediationY).length === 0 ? (
+                <span className="text-sm text-neutral-500">Chọn X và Y (khác nhau) để chọn các cột trung gian.</span>
+              ) : (
+                numericCols.filter((c) => c !== mediationX && c !== mediationY).map((c) => (
+                  <label key={c} className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="rounded border-neutral-400"
+                      checked={mediationMs.includes(c)}
+                      onChange={() => {
+                        setMediationMs((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+                        setMediationResult(null);
+                      }}
+                    />
+                    <span>{c}</span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
           {mediationResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm mt-3">
               <AIAssistPanel
-                context={`Mediation Baron-Kenny: a=${mediationResult.a.toFixed(3)} (p ${mediationResult.aP < 0.001 ? "<.001" : mediationResult.aP.toFixed(3)}), b=${mediationResult.b.toFixed(3)} (p ${mediationResult.bP < 0.001 ? "<.001" : mediationResult.bP.toFixed(3)}), c=${mediationResult.c.toFixed(3)}, c'=${mediationResult.cPrime.toFixed(3)}, gián tiếp=${mediationResult.indirectEffect.toFixed(3)}, % trung gian=${mediationResult.pctMediated.toFixed(1)}%.`}
-                quickPrompts={[{ label: "Diễn giải mediation", systemHint: "Bạn là chuyên gia phân tích trung gian (mediation). Giải thích đường a (X→M), b (M→Y), c (tổng X→Y), c' (trực tiếp); hiệu ứng gián tiếp và % trung gian. Nêu ý nghĩa M làm trung gian mối quan hệ X–Y. Trả lời ngắn gọn bằng tiếng Việt." }]}
+                context={`Mediation (Baron–Kenny, ${mediationResult.paths.length} M song song). ${mediationResult.paths.map((p) => `${p.mCol}: a=${p.a.toFixed(3)} (p ${p.aP < 0.001 ? "<.001" : p.aP.toFixed(3)}), b=${p.b.toFixed(3)} (p ${p.bP < 0.001 ? "<.001" : p.bP.toFixed(3)}), gián tiếp riêng=${p.indirect.toFixed(3)}`).join(" | ")}. c=${mediationResult.c.toFixed(3)}, c'=${mediationResult.cPrime.toFixed(3)}, gián tiếp tổng=${mediationResult.indirectEffect.toFixed(3)}, % trung gian=${mediationResult.pctMediated.toFixed(1)}%, n=${mediationResult.n}.`}
+                quickPrompts={[{ label: "Diễn giải mediation", systemHint: "Bạn là chuyên gia phân tích trung gian (mediation). Giải thích đường a (X→M), b (M→Y trong mô hình đa M), c (tổng X→Y), c' (trực tiếp); hiệu ứng gián tiếp từng M và tổng; % trung gian. Trả lời ngắn gọn bằng tiếng Việt." }]}
                 title="Hỏi AI về mediation"
               />
-              <p className="font-medium mb-2">Baron-Kenny: a (X→M) = {mediationResult.a.toFixed(4)} (p={mediationResult.aP < 0.001 ? "<.001" : mediationResult.aP.toFixed(3)}), b (M→Y) = {mediationResult.b.toFixed(4)} (p={mediationResult.bP < 0.001 ? "<.001" : mediationResult.bP.toFixed(3)}), c (X→Y tổng) = {mediationResult.c.toFixed(4)}, c&apos; (trực tiếp) = {mediationResult.cPrime.toFixed(4)}. Hiệu ứng gián tiếp = {mediationResult.indirectEffect.toFixed(4)}, % trung gian = {mediationResult.pctMediated.toFixed(1)}%.</p>
+              <p className="font-medium mb-2">
+                Tổng quan: c (X→Y tổng) = {mediationResult.c.toFixed(4)} (p={mediationResult.cP < 0.001 ? "<.001" : mediationResult.cP.toFixed(3)}), c&apos; (trực tiếp) = {mediationResult.cPrime.toFixed(4)} (p={mediationResult.cPrimeP < 0.001 ? "<.001" : mediationResult.cPrimeP.toFixed(3)}). Hiệu ứng gián tiếp tổng = {mediationResult.indirectEffect.toFixed(4)}, % trung gian = {mediationResult.pctMediated.toFixed(1)}%, <span className="whitespace-nowrap">n = {mediationResult.n}</span>.
+              </p>
+              {mediationResult.paths.length > 0 && (
+                <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600 mt-2">
+                  <thead>
+                    <tr className="bg-neutral-100 dark:bg-neutral-900">
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-left">M</th>
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">a (X→M)</th>
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">p(a)</th>
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">b (M→Y|X,M khác)</th>
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">p(b)</th>
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">a×b</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mediationResult.paths.map((p) => (
+                      <tr key={p.mCol}>
+                        <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 font-medium">{p.mCol}</td>
+                        <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{p.a.toFixed(4)}</td>
+                        <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{p.aP < 0.001 ? "<.001" : p.aP.toFixed(3)}</td>
+                        <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{p.b.toFixed(4)}</td>
+                        <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{p.bP < 0.001 ? "<.001" : p.bP.toFixed(3)}</td>
+                        <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{p.indirect.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
         </section>
@@ -5722,6 +6259,7 @@ function ReliabilityTab({ selectedDataset, rows, numericCols, analysisBackendAva
 
 function ReproducibilityView({
   tab,
+  onTabChange,
   workflows,
   setWorkflows,
   selectedWorkflowId,
@@ -5729,6 +6267,7 @@ function ReproducibilityView({
   showToast,
 }: {
   tab: ReproducibilityTab;
+  onTabChange: (t: ReproducibilityTab) => void;
   workflows: Workflow[];
   setWorkflows: React.Dispatch<React.SetStateAction<Workflow[]>>;
   selectedWorkflowId: string | null;
@@ -5741,6 +6280,37 @@ function ReproducibilityView({
   const [newStepLabel, setNewStepLabel] = useState("");
   const [showNewWorkflowDialog, setShowNewWorkflowDialog] = useState(false);
   const [newWorkflowName, setNewWorkflowName] = useState("");
+
+  const reproSubTabs = (
+    <div className="flex flex-wrap gap-2 mb-4">
+      {([
+        { id: "workflows" as const, label: "Workflows" },
+        { id: "versioning" as const, label: "Versioning & audit" },
+        { id: "openscience" as const, label: "Pre-reg & tái lập" },
+      ]).map((x) => (
+        <button
+          key={x.id}
+          type="button"
+          onClick={() => onTabChange(x.id)}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+            tab === x.id ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+          }`}
+        >
+          {x.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tab === "openscience") {
+    return (
+      <div className="w-full max-w-full">
+        {reproSubTabs}
+        <OpenScienceProtocolPanel showToast={showToast} />
+      </div>
+    );
+  }
+
   if (tab === "workflows") {
     const addWorkflow = (name: string) => {
       const id = generateId();
@@ -5756,6 +6326,7 @@ function ReproducibilityView({
     };
     return (
       <div className="w-full max-w-full">
+        {reproSubTabs}
         <h2 className="text-xl font-semibold mb-2">Workflows</h2>
         <p className="text-neutral-600 dark:text-neutral-400 mb-4">Lưu workflow phân tích, sinh script từ R, versioning dataset &amp; model.</p>
         <button type="button" onClick={() => { setShowNewWorkflowDialog(true); setNewWorkflowName(`Workflow ${workflows.length + 1}`); }} className="rounded-lg bg-brand text-white px-4 py-2 flex items-center gap-2 hover:opacity-90">
@@ -5864,6 +6435,7 @@ function ReproducibilityView({
   }
   return (
     <div className="w-full max-w-full">
+      {reproSubTabs}
       <h2 className="text-xl font-semibold mb-2">Versioning &amp; audit</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">Version dataset và model, audit trail cho nghiên cứu.</p>
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm text-neutral-500">
@@ -6954,7 +7526,7 @@ function AIAssistPanel({
   metadata,
   process,
   quickPrompts,
-  defaultSystemHint = "Bạn là chuyên gia thống kê và nghiên cứu định lượng. Viết đoạn diễn giải phù hợp với ngữ cảnh. Trả lời ngắn gọn bằng tiếng Việt.",
+  defaultSystemHint = "Bạn là chuyên gia thống kê và nghiên cứu định lượng. Viết đoạn diễn giải phù hợp với ngữ cảnh. Trả lời ngắn gọn bằng tiếng Việt. Có thể dùng Markdown (tiêu đề, danh sách). Nếu có bảng: mỗi hàng một dòng riêng, cột tách bằng dấu |, sau dòng tiêu đề cột thêm dòng phân cách kiểu | --- | --- | (GitHub-flavored Markdown); không chèn ký tự & giữa các ô.",
   disabled = false,
   title = "Hỏi AI về nội dung này",
   includeStandardResultPrompts = true,
@@ -7083,7 +7655,7 @@ function AIAssistPanel({
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Lỗi kết nối AI";
       const hint = /fetch|network|failed|refused|404|500/i.test(msg)
-        ? " Kiểm tra Ollama đã chạy hoặc Cài đặt → chọn model."
+        ? " Kiểm tra Ollama đã chạy hoặc menu ⋮ → Cấu hình kết nối → chọn model."
         : /abort|timeout/i.test(msg)
           ? " Yêu cầu quá lâu (timeout). Thử lại hoặc chọn model nhỏ hơn."
           : "";
@@ -7183,7 +7755,7 @@ function AIAssistPanel({
           </div>
           <div className="flex flex-col min-h-0 flex-1 overflow-y-auto p-3">
           {!modelToUse && (
-            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30">Chọn model trong <strong>Cài đặt</strong> để dùng AI. Hiện đang dùng model mặc định của máy chủ.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30">Chọn model trong <strong>Cấu hình kết nối</strong> (menu ⋮) để dùng AI. Hiện đang dùng model mặc định của máy chủ.</p>
           )}
           {fullContext.length > AI_MAX_PROMPT_CHARS && (
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Ngữ cảnh dài sẽ được rút gọn tự động khi gửi.</p>
@@ -7226,26 +7798,15 @@ function AIAssistPanel({
             <div className="mt-2 p-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
               <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-0.5">Lỗi kết nối AI</p>
               <p className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap">{error}</p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Gợi ý: Mở <strong>Cài đặt</strong> → chọn model; kiểm tra Ollama đã chạy (ollama serve) và đã kéo model (ollama pull tên).</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Gợi ý: Menu ⋮ → <strong>Cấu hình kết nối</strong> → kiểm tra URL backend Node, cấu hình <strong>Ollama upstream</strong> (server) hoặc <code className="text-[10px]">OLLAMA_URL</code>, bấm <strong>Kiểm tra Ollama</strong>; trên máy chủ cần <code className="text-[10px]">ollama serve</code> và model đã kéo.</p>
             </div>
           )}
           {result !== null && (
             <>
               <div ref={resultBoxRef} className="mt-2 p-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20">
                 <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">Kết quả:</p>
-                <div className="text-sm text-neutral-700 dark:text-neutral-300 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:my-1.5 [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:my-1.5 [&_li]:my-0.5 [&_strong]:font-semibold [&_code]:bg-neutral-200 dark:[&_code]:bg-neutral-600 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs max-h-80 overflow-y-auto overflow-x-hidden">
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc ml-4 my-1.5">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal ml-4 my-1.5">{children}</ol>,
-                      li: ({ children }) => <li className="my-0.5">{children}</li>,
-                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                      code: ({ children }) => <code className="bg-neutral-200 dark:bg-neutral-600 px-1 rounded text-xs">{children}</code>,
-                    }}
-                  >
-                    {result || "Máy chủ trả về rỗng."}
-                  </ReactMarkdown>
+                <div className="text-sm text-neutral-700 dark:text-neutral-300 max-h-80 overflow-y-auto overflow-x-auto">
+                  <AiMarkdown content={result || "Máy chủ trả về rỗng."} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
                   <button type="button" onClick={() => { navigator.clipboard.writeText(result || ""); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-amber-300 dark:border-amber-600 bg-amber-100/80 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200"><Copy className="w-3 h-3" /> Sao chép</button>
@@ -7352,6 +7913,35 @@ function AIAssistPanel({
   );
 }
 
+/** Chọn ngẫu nhiên n phần tử (partial Fisher–Yates), không đổi mảng gốc. */
+function pickRandomN<T>(items: readonly T[], n: number): T[] {
+  if (n <= 0 || items.length === 0) return [];
+  const copy = [...items];
+  const take = Math.min(n, copy.length);
+  for (let i = 0; i < take; i++) {
+    const j = i + Math.floor(Math.random() * (copy.length - i));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, take);
+}
+
+const AI_TAB_SUGGESTED_PROMPTS: { label: string; userMessage: string }[] = [
+  { label: "Quantis dùng để làm gì? Các bước sử dụng cơ bản?", userMessage: "Quantis dùng để làm gì? Các bước sử dụng cơ bản từ import dữ liệu đến phân tích và báo cáo?" },
+  { label: "Làm thế nào để import và xem dữ liệu?", userMessage: "Làm thế nào để import dữ liệu (file CSV/Excel) và xem dữ liệu trong Quantis?" },
+  { label: "Tab Khám phá & Biến đổi dùng để làm gì?", userMessage: "Tab Khám phá & biến đổi dữ liệu gồm những gì? Làm sạch dữ liệu, xử lý missing, chuẩn hóa thế nào?" },
+  { label: "Tab Phân tích thống kê có những công cụ nào?", userMessage: "Tab Phân tích thống kê có những công cụ nào? Kiểm định, hồi quy, tương quan, EFA, SEM dùng khi nào?" },
+  { label: "So sánh hai nhóm: nên dùng t-test hay Mann-Whitney?", userMessage: "So sánh trung bình hai nhóm độc lập: khi nào dùng t-test, khi nào dùng Mann-Whitney? Giả định của từng loại?" },
+  { label: "Nhiều nhóm: ANOVA hay Kruskal-Wallis?", userMessage: "So sánh nhiều nhóm (3 nhóm trở lên): khi nào dùng ANOVA một nhân tố, khi nào dùng Kruskal-Wallis?" },
+  { label: "Hai biến phân loại: kiểm định gì?", userMessage: "Muốn xem mối liên hệ giữa hai biến phân loại (bảng tần số chéo): nên dùng kiểm định Chi-square hay Fisher exact?" },
+  { label: "Hồi quy OLS và Logistic khác nhau thế nào?", userMessage: "Hồi quy OLS và hồi quy Logistic trong Quantis khác nhau thế nào? Khi nào dùng từng loại?" },
+  { label: "Mediation và Moderation khác nhau ra sao?", userMessage: "Phân tích Mediation (trung gian) và Moderation (điều tiết) trong SEM khác nhau thế nào? Cho ví dụ ngắn." },
+  { label: "Cách báo cáo kết quả theo chuẩn APA?", userMessage: "Cách báo cáo kết quả kiểm định thống kê (t-test, ANOVA, Chi-square, hồi quy) theo chuẩn APA? Cho mẫu câu." },
+  { label: "Cỡ mẫu bao nhiêu là đủ? Phân tích lực mẫu?", userMessage: "Cỡ mẫu bao nhiêu là đủ cho t-test, ANOVA, hồi quy? Phân tích lực mẫu (power analysis) và tính cỡ mẫu trong Quantis thế nào?" },
+  { label: "Cronbach alpha và EFA dùng khi nào?", userMessage: "Độ tin cậy Cronbach alpha và phân tích nhân tố EFA trong Quantis dùng khi nào? Cách đọc kết quả?" },
+];
+
+const AI_TAB_QUICK_PROMPTS_COUNT = 3;
+
 function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: Dataset; compact?: boolean }) {
   const api = quantisApi.getAiApiBase();
   const defaultModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
@@ -7361,25 +7951,16 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestionRound, setSuggestionRound] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const dsCtx = selectedDataset
     ? `Bộ dữ liệu hiện tại: ${selectedDataset.name}, ${selectedDataset.rows} hàng, ${selectedDataset.columns} cột. Cột: ${(selectedDataset.columnNames || []).slice(0, 10).join(", ")}${(selectedDataset.columnNames?.length || 0) > 10 ? "…" : ""}.`
     : "Chưa chọn bộ dữ liệu.";
 
-  const suggestedPrompts: { label: string; userMessage: string }[] = [
-    { label: "Quantis dùng để làm gì? Các bước sử dụng cơ bản?", userMessage: "Quantis dùng để làm gì? Các bước sử dụng cơ bản từ import dữ liệu đến phân tích và báo cáo?" },
-    { label: "Làm thế nào để import và xem dữ liệu?", userMessage: "Làm thế nào để import dữ liệu (file CSV/Excel) và xem dữ liệu trong Quantis?" },
-    { label: "Tab Khám phá & Biến đổi dùng để làm gì?", userMessage: "Tab Khám phá & biến đổi dữ liệu gồm những gì? Làm sạch dữ liệu, xử lý missing, chuẩn hóa thế nào?" },
-    { label: "Tab Phân tích thống kê có những công cụ nào?", userMessage: "Tab Phân tích thống kê có những công cụ nào? Kiểm định, hồi quy, tương quan, EFA, SEM dùng khi nào?" },
-    { label: "So sánh hai nhóm: nên dùng t-test hay Mann-Whitney?", userMessage: "So sánh trung bình hai nhóm độc lập: khi nào dùng t-test, khi nào dùng Mann-Whitney? Giả định của từng loại?" },
-    { label: "Nhiều nhóm: ANOVA hay Kruskal-Wallis?", userMessage: "So sánh nhiều nhóm (3 nhóm trở lên): khi nào dùng ANOVA một nhân tố, khi nào dùng Kruskal-Wallis?" },
-    { label: "Hai biến phân loại: kiểm định gì?", userMessage: "Muốn xem mối liên hệ giữa hai biến phân loại (bảng tần số chéo): nên dùng kiểm định Chi-square hay Fisher exact?" },
-    { label: "Hồi quy OLS và Logistic khác nhau thế nào?", userMessage: "Hồi quy OLS và hồi quy Logistic trong Quantis khác nhau thế nào? Khi nào dùng từng loại?" },
-    { label: "Mediation và Moderation khác nhau ra sao?", userMessage: "Phân tích Mediation (trung gian) và Moderation (điều tiết) trong SEM khác nhau thế nào? Cho ví dụ ngắn." },
-    { label: "Cách báo cáo kết quả theo chuẩn APA?", userMessage: "Cách báo cáo kết quả kiểm định thống kê (t-test, ANOVA, Chi-square, hồi quy) theo chuẩn APA? Cho mẫu câu." },
-    { label: "Cỡ mẫu bao nhiêu là đủ? Phân tích lực mẫu?", userMessage: "Cỡ mẫu bao nhiêu là đủ cho t-test, ANOVA, hồi quy? Phân tích lực mẫu (power analysis) và tính cỡ mẫu trong Quantis thế nào?" },
-    { label: "Cronbach alpha và EFA dùng khi nào?", userMessage: "Độ tin cậy Cronbach alpha và phân tích nhân tố EFA trong Quantis dùng khi nào? Cách đọc kết quả?" },
-  ];
+  const suggestedPromptsPick = useMemo(
+    () => pickRandomN(AI_TAB_SUGGESTED_PROMPTS, AI_TAB_QUICK_PROMPTS_COUNT),
+    [suggestionRound],
+  );
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -7400,7 +7981,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Lỗi kết nối AI";
       const hint = /fetch|network|failed|refused|404|500/i.test(msg)
-        ? " Kiểm tra Ollama đã chạy hoặc Cài đặt → chọn model."
+        ? " Kiểm tra Ollama đã chạy hoặc menu ⋮ → Cấu hình kết nối → chọn model."
         : "";
       setError(msg + hint);
       setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${msg}${hint}` }]);
@@ -7420,7 +8001,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
         <p className="text-xs text-neutral-500 mb-2">{dsCtx}</p>
         <AIAssistPanel
           context={dsCtx}
-          quickPrompts={suggestedPrompts.map((p) => ({ label: p.label, systemHint, userMessage: p.userMessage }))}
+          quickPrompts={suggestedPromptsPick.map((p) => ({ label: p.label, systemHint, userMessage: p.userMessage }))}
           defaultSystemHint={systemHint}
           title="AI hướng dẫn"
           includeStandardResultPrompts={false}
@@ -7430,12 +8011,13 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
   }
 
   return (
-    <div className="w-full max-w-full flex flex-col h-[calc(100vh-8rem)] min-h-[420px]">
-      <div className="shrink-0 mb-3">
-        <h2 className="text-xl font-semibold mb-1 flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-amber-500" /> AI hướng dẫn
+    <div className="w-full max-w-2xl flex flex-col min-h-[min(520px,calc(100dvh-10rem))] h-[min(640px,calc(100dvh-10rem))] sm:min-h-[420px] sm:h-[calc(100vh-8rem)]">
+      <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
+      <div className="shrink-0 p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
+        <h2 className="text-lg sm:text-xl font-semibold mb-1 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-amber-500 shrink-0" /> AI hướng dẫn
         </h2>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+        <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400">
           Hướng dẫn sử dụng ứng dụng Quantis và gợi ý phân tích định lượng. Chọn câu hỏi gợi ý bên dưới hoặc nhập câu hỏi của bạn.
         </p>
         {selectedDataset && (
@@ -7443,24 +8025,36 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
         )}
       </div>
 
-      <div className="mb-3">
-        <p className="text-xs font-medium text-neutral-600 dark:text-neutral-500 dark:text-neutral-400 mb-2">Gợi ý câu hỏi — bấm để hỏi:</p>
-        <div className="flex flex-wrap gap-2">
-          {suggestedPrompts.map((p) => (
+      <div className="shrink-0 p-4 sm:px-6 sm:pb-4 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50/80 dark:bg-neutral-800/40">
+        <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2 text-center">
+          Gợi ý câu hỏi — bấm để hỏi (hiển thị {AI_TAB_QUICK_PROMPTS_COUNT} gợi ý ngẫu nhiên):
+        </p>
+        <div className="flex flex-col items-stretch gap-2 w-full max-w-lg mx-auto">
+          {suggestedPromptsPick.map((p, i) => (
             <button
-              key={p.label}
+              key={`${suggestionRound}-${i}-${p.label}`}
               type="button"
               onClick={() => sendMessage(p.userMessage)}
               disabled={loading}
-              className="rounded-lg px-3 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-400 dark:hover:border-amber-600 text-neutral-700 dark:text-neutral-300 disabled:opacity-50"
+              className="rounded-lg px-3 py-2.5 min-h-[44px] text-center text-xs sm:text-sm leading-snug border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-400 dark:hover:border-amber-600 text-neutral-700 dark:text-neutral-300 disabled:opacity-50"
             >
               {p.label}
             </button>
           ))}
         </div>
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => setSuggestionRound((r) => r + 1)}
+            disabled={loading}
+            className="mt-2 text-xs text-amber-700 dark:text-amber-400 hover:underline disabled:opacity-50"
+          >
+            Lấy {AI_TAB_QUICK_PROMPTS_COUNT} gợi ý khác
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50">
+      <div className="flex-1 flex flex-col min-h-0 bg-neutral-50 dark:bg-neutral-800/50">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center py-8">
@@ -7482,8 +8076,8 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
                 {m.role === "user" ? (
                   <p className="whitespace-pre-wrap">{m.content}</p>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <ReactMarkdown>{m.content}</ReactMarkdown>
+                  <div className="text-sm max-w-full break-words overflow-x-auto">
+                    <AiMarkdown content={m.content} />
                   </div>
                 )}
               </div>
@@ -7522,6 +8116,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
             Gửi
           </button>
         </form>
+      </div>
       </div>
     </div>
   );
@@ -7581,8 +8176,35 @@ function AppFeedbackModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function SettingsModal({ onClose }: { onClose: () => void }) {
-  const api = quantisApi.getAiApiBase();
+type SettingsAccountAuthHint =
+  | { state: "loading" }
+  | { state: "portal" }
+  | { state: "no-backend" }
+  | { state: "config-unavailable" }
+  | { state: "disabled" }
+  | { state: "optional" }
+  | { state: "required" };
+
+function SettingsModal({
+  ollamaUpstreamServer,
+  onClose,
+  onFactoryResetRequest,
+  accountAuthHint,
+  authUser = null,
+  onRequestLogin,
+}: {
+  /** Giá trị từ GET /api/quantis/settings (đồng bộ khi tải xong). */
+  ollamaUpstreamServer?: string | null;
+  onClose: () => void;
+  /** Xóa dữ liệu cục bộ + xác nhận đặt lại như mới cài (và đồng bộ rỗng lên server nếu có). */
+  onFactoryResetRequest: () => void;
+  /** Trạng thái đăng nhập / tài khoản so với SurveyLab (giải thích vì sao có hoặc không có gate đăng nhập). */
+  accountAuthHint: SettingsAccountAuthHint;
+  authUser?: AuthUser | null;
+  /** Khi auth tùy chọn và chưa đăng nhập: mở modal đăng nhập. */
+  onRequestLogin?: () => void;
+}) {
+  const aiApiBase = quantisApi.getAiApiBase();
   const envModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -7592,6 +8214,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [backendUrlInput, setBackendUrlInput] = useState(defaultBackendUrl);
   const [backendTestLoading, setBackendTestLoading] = useState(false);
   const [backendTestResult, setBackendTestResult] = useState<{ node: boolean; python: boolean } | null>(null);
+  const [quickTestLoading, setQuickTestLoading] = useState(false);
 
   const defaultArchiveUrl = loadArchiveUrl() || archiveApi.getDefaultArchiveUrl();
   const [archiveUrlInput, setArchiveUrlInput] = useState(defaultArchiveUrl);
@@ -7603,18 +8226,22 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const [archiveFileTestLoading, setArchiveFileTestLoading] = useState(false);
   const [archiveFileTestResult, setArchiveFileTestResult] = useState<boolean | null>(null);
 
-  const defaultAiApiUrl = loadAiApiUrl() || quantisApi.getAiApiBase() || "";
-  const [aiApiUrlInput, setAiApiUrlInput] = useState(defaultAiApiUrl);
+  const [ollamaUpstreamInput, setOllamaUpstreamInput] = useState(() => loadOllamaUpstreamFromServer() || "");
   const [aiTestLoading, setAiTestLoading] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<boolean | null>(null);
-  const [aiApiKey, setAiApiKey] = useState(0);
+  const [aiModelsKey, setAiModelsKey] = useState(0);
 
   useEffect(() => {
     setBackendUrlInput(loadBackendApiUrl() || quantisApi.getApiBase() || "");
     setArchiveUrlInput(loadArchiveUrl() || archiveApi.getDefaultArchiveUrl());
     setArchiveFileUrlInput(loadArchiveFileUrl() || archiveApi.getDefaultArchiveFileUrl());
-    setAiApiUrlInput(loadAiApiUrl() || quantisApi.getAiApiBase() || "");
+    setOllamaUpstreamInput(loadOllamaUpstreamFromServer() || "");
   }, []);
+
+  useEffect(() => {
+    if (ollamaUpstreamServer === undefined) return;
+    setOllamaUpstreamInput(ollamaUpstreamServer ? String(ollamaUpstreamServer).trim() : "");
+  }, [ollamaUpstreamServer]);
 
   useEffect(() => {
     let cancelled = false;
@@ -7622,7 +8249,6 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     const backendBase = quantisApi.getApiBase();
     const tryLoad = async () => {
       if (cancelled) return;
-      const apiForDirect = api;
       if (backendBase) {
         try {
           const list = await quantisApi.getOllamaModelsViaProxy(backendBase);
@@ -7639,10 +8265,15 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             return;
           }
         } catch {
-          /* fallback to direct */
+          /* im lặng */
         }
+        if (!cancelled) {
+          setModels([]);
+          setLoading(false);
+        }
+        return;
       }
-      quantisApi.getOllamaModels(apiForDirect).then((list) => {
+      quantisApi.getOllamaModels(aiApiBase).then((list) => {
         if (cancelled) return;
         setModels(list);
         setLoading(false);
@@ -7655,9 +8286,9 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         }
       }).catch(() => { if (!cancelled) setLoading(false); });
     };
-    tryLoad();
+    void tryLoad();
     return () => { cancelled = true; };
-  }, [api, aiApiKey]);
+  }, [aiApiBase, aiModelsKey, envModel]);
 
   const handleChange = (value: string) => {
     setSelectedModel(value);
@@ -7668,11 +8299,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const saveSettingsToServer = async (overrides?: { defaultAiModel?: string | null }) => {
     const base = backendUrlInput.trim().replace(/\/+$/, "") || quantisApi.getApiBase();
     if (!base) return;
+    const ou = ollamaUpstreamInput.trim().replace(/\/+$/, "").replace(/\/v1$/i, "") || null;
     const settings = {
       backendApiUrl: backendUrlInput.trim().replace(/\/+$/, "") || null,
       archiveUrl: archiveUrlInput.trim().replace(/\/+$/, "") || null,
       archiveFileUrl: archiveFileUrlInput.trim().replace(/\/+$/, "") || null,
-      aiApiUrl: aiApiUrlInput.trim().replace(/\/+$/, "") || null,
+      ollamaUpstreamUrl: ou,
       defaultAiModel: overrides?.defaultAiModel !== undefined ? overrides.defaultAiModel : (selectedModel || null),
     };
     const ok = await quantisApi.putQuantisSettings(settings, base);
@@ -7703,17 +8335,33 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     saveSettingsToServer();
   };
 
-  const handleSaveAiApiUrl = () => {
-    const url = aiApiUrlInput.trim().replace(/\/+$/, "");
-    if (url) saveAiApiUrl(url);
-    else saveAiApiUrl(null);
+  const handleSaveOllamaUpstream = () => {
     setAiTestResult(null);
-    setAiApiKey((k) => k + 1);
-    saveSettingsToServer();
+    setAiModelsKey((k) => k + 1);
+    void saveSettingsToServer();
   };
 
+  const effectiveBackendUrl = (): string =>
+    backendUrlInput.trim().replace(/\/+$/, "") || quantisApi.getApiBase() || "";
+
+  const canTestOllama = Boolean(effectiveBackendUrl().trim());
+
+  const pageIsLocalDev =
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname.toLowerCase());
+  const backendHostIsRemote = (() => {
+    const raw = effectiveBackendUrl().replace(/\/+$/, "");
+    if (!raw) return false;
+    try {
+      const h = new URL(raw).hostname.toLowerCase();
+      return h !== "localhost" && h !== "127.0.0.1" && h !== "[::1]";
+    } catch {
+      return false;
+    }
+  })();
+
   const handleTestBackend = async () => {
-    const url = backendUrlInput.trim().replace(/\/+$/, "") || undefined;
+    const url = effectiveBackendUrl() || undefined;
     if (!url) return;
     setBackendTestLoading(true);
     setBackendTestResult(null);
@@ -7756,23 +8404,45 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     setAiTestLoading(true);
     setAiTestResult(null);
     try {
-      const backendBase = quantisApi.getApiBase();
-      if (backendBase) {
-        try {
-          const list = await quantisApi.getOllamaModelsViaProxy(backendBase);
-          setAiTestResult(true);
-          setAiApiKey((k) => k + 1);
-        } catch {
-          setAiTestResult(false);
-        }
-      } else {
-        const url = aiApiUrlInput.trim().replace(/\/+$/, "") || undefined;
-        const ok = await quantisApi.checkAiApiAvailable(url);
-        setAiTestResult(ok);
-        if (ok) setAiApiKey((k) => k + 1);
+      const proxyBase = effectiveBackendUrl().replace(/\/+$/, "");
+      if (!proxyBase) {
+        setAiTestResult(false);
+        return;
       }
+      const proxyOk = await quantisApi.checkOllamaProxyAvailable(proxyBase);
+      setAiTestResult(proxyOk);
+      if (proxyOk) setAiModelsKey((k) => k + 1);
     } finally {
       setAiTestLoading(false);
+    }
+  };
+
+  /** Một lần bấm: kiểm tra Node + Python (nếu có backend) và Ollama qua proxy backend. */
+  const handleQuickTestConnectivity = async () => {
+    if (!effectiveBackendUrl()) return;
+    setQuickTestLoading(true);
+    setBackendTestResult(null);
+    setAiTestResult(null);
+    try {
+      const b = effectiveBackendUrl();
+      if (b) {
+        const [nodeOk, pythonOk] = await Promise.all([
+          quantisApi.checkBackendAvailable(b),
+          quantisApi.checkAnalysisBackendAvailable(b),
+        ]);
+        setBackendTestResult({ node: nodeOk, python: pythonOk });
+      }
+      setAiTestLoading(true);
+      try {
+        const proxyBase = effectiveBackendUrl().replace(/\/+$/, "");
+        const proxyOk = proxyBase ? await quantisApi.checkOllamaProxyAvailable(proxyBase) : false;
+        setAiTestResult(proxyOk);
+        if (proxyOk) setAiModelsKey((k) => k + 1);
+      } finally {
+        setAiTestLoading(false);
+      }
+    } finally {
+      setQuickTestLoading(false);
     }
   };
 
@@ -7785,26 +8455,105 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   const testBtnClass = "rounded bg-brand text-white px-2 py-1.5 text-xs whitespace-nowrap hover:opacity-90 disabled:opacity-50";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4" role="presentation">
+      <div
+        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full max-h-[min(90vh,85dvh)] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-labelledby="quantis-settings-title"
+        aria-describedby="quantis-settings-desc"
+      >
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-          <h3 className="text-base font-semibold flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
-            <Settings className="w-4 h-4" /> Cài đặt
-          </h3>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+          <div className="min-w-0 pr-2">
+            <h3 id="quantis-settings-title" className="text-base font-semibold flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
+              <Server className="w-4 h-4 shrink-0 text-brand" /> Cấu hình kết nối
+            </h3>
+            <p id="quantis-settings-desc" className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1">
+              Thiết lập URL backend, Ollama upstream (lưu server, dùng chung mọi tài khoản), Archive; <strong>Kiểm tra</strong> Node, Python và proxy Ollama.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label="Đóng">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-4 overflow-y-auto">
-        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">Lưu sẽ ghi lên server (áp dụng cho mọi tài khoản). Nếu không kết nối được backend Quantis thì chỉ lưu trên trình duyệt. Trên <strong>research.neu.edu.vn</strong> mặc định: Backend <code>/api/quantis/backend</code>, Backend Python <code>/api/quantis/backend-python</code>, Ollama <code>/ollama/v1</code>, Archive <code>/api/archive</code>, Archive file <code>/api/archive-file</code>, mô hình qwen3:8b — các ô được điền sẵn nếu chưa chỉnh.</p>
-        <div className="space-y-3 text-sm">
+        <div className="mb-3 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900/50 px-3 py-2.5">
+          <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-2">
+            <User className="w-3.5 h-3.5 shrink-0 text-brand" />
+            Tài khoản &amp; đăng nhập (giống SurveyLab)
+          </p>
+          {accountAuthHint.state === "loading" && (
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1.5">Đang tải cấu hình từ server…</p>
+          )}
+          {accountAuthHint.state === "portal" && (
+            <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
+              Bạn đang dùng Quantis trong <strong>AI Portal</strong>: phiên là tài khoản Portal (không có form đăng ký/đăng nhập Quantis riêng). Dữ liệu workspace gắn với user Portal qua proxy.
+            </p>
+          )}
+          {accountAuthHint.state === "no-backend" && (
+            <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
+              <strong>Chưa kết nối backend Quantis</strong> — ứng dụng chỉ lưu dữ liệu trên trình duyệt. Để có <strong>đăng ký / đăng nhập</strong> và đồng bộ workspace theo tài khoản như SurveyLab: trong <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">backend/</code> chạy <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">npm run build &amp;&amp; npm start</code> (PostgreSQL), đặt <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">VITE_QUANTIS_API_URL</code> trong <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">.env</code> frontend, kiểm tra Node OK bên dưới rồi tải lại trang.
+            </p>
+          )}
+          {accountAuthHint.state === "config-unavailable" && (
+            <p className="text-[11px] text-amber-800 dark:text-amber-200 mt-1.5">
+              Backend phản hồi nhưng <strong>không đọc được</strong> <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">/api/quantis/auth/config</code> (URL sai, CORS, hoặc đang dùng chế độ JSON thay vì PostgreSQL). Đăng nhập Quantis có thể không hoạt động — chỉnh URL backend và thử <strong>Kiểm tra Backend</strong>.
+            </p>
+          )}
+          {accountAuthHint.state === "disabled" && (
+            <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
+              Trên server đang <strong>tắt auth Quantis</strong> (<code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">RUN_MODE=embedded</code> hoặc <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">AUTH_ENABLED=0</code>). Không có đăng ký/đăng nhập tài khoản Quantis trên API này.
+            </p>
+          )}
+          {accountAuthHint.state === "optional" && (
+            <div className="mt-1.5 space-y-1.5">
+              <p className="text-[11px] text-neutral-600 dark:text-neutral-400">
+                Server bật <strong>đăng nhập tùy chọn</strong> (<code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">AUTH_REQUIRED=0</code>): có thể dùng app không đăng nhập; khi đăng nhập, workspace được lưu theo tài khoản trên PostgreSQL.
+              </p>
+              {!authUser && onRequestLogin && (
+                <button type="button" onClick={onRequestLogin} className="text-xs font-medium text-brand hover:underline">
+                  Mở đăng nhập / đăng ký →
+                </button>
+              )}
+              {authUser && (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Đang đăng nhập: {authUser.email || authUser.name || "—"}</p>
+              )}
+            </div>
+          )}
+          {accountAuthHint.state === "required" && (
+            <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
+              Server <strong>bật đăng nhập bắt buộc</strong> (mặc định backend PostgreSQL standalone). Nếu bạn vào được app mà không qua màn hình đăng nhập, hãy tải lại trang hoặc xóa cookie trang này rồi thử lại.
+            </p>
+          )}
+        </div>
+        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">
+          <strong>Lưu</strong> ghi cấu hình lên server (áp dụng mọi tài khoản) và lưu URL backend/Archive trên trình duyệt. Trình duyệt <strong>chỉ</strong> gọi Ollama qua Node: <code className="text-[10px]">…/api/quantis/ollama/v1</code>; địa chỉ Ollama thật do admin nhập mục dưới (hoặc biến <code className="text-[10px]">OLLAMA_URL</code> trên server).
+        </p>
+        <div className="mb-4 flex flex-col gap-2 rounded-lg border border-brand/25 bg-brand/5 dark:bg-brand/10 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">Kiểm tra nhanh</p>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Backend (Node + Python) và Ollama trong một lần bấm</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleQuickTestConnectivity}
+            disabled={quickTestLoading || !effectiveBackendUrl()}
+            className="shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {quickTestLoading ? "Đang kiểm tra…" : "Backend + Ollama"}
+          </button>
+        </div>
+        <div className="space-y-5 text-sm">
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-brand mb-2 flex items-center gap-2">
+              <Cpu className="w-3.5 h-3.5" /> Backend Quantis
+            </h4>
           <div className={rowClass}>
-            <label className={labelClass}>Backend Quantis (Node)</label>
+            <label className={labelClass}>URL backend Node (gốc API)</label>
             <p className={hintClass}>Trên research.neu.edu.vn mặc định: backend Node tại /api/quantis/backend, backend Python tại /api/quantis/backend-python (cấu hình ANALYZE_PYTHON_URL trên server).</p>
             <div className={inputRowClass}>
               <input type="url" value={backendUrlInput} onChange={(e) => { setBackendUrlInput(e.target.value); setBackendTestResult(null); }} onBlur={handleSaveBackendUrl} placeholder="http://localhost:4001" className={inputClass} />
               <button type="button" onClick={handleSaveBackendUrl} className={btnClass}>Lưu</button>
-              <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !backendUrlInput.trim()} className={testBtnClass}>{backendTestLoading ? "…" : "Kiểm tra"}</button>
+              <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !effectiveBackendUrl()} className={testBtnClass}>{backendTestLoading ? "…" : "Kiểm tra Backend"}</button>
             </div>
             {backendTestResult !== null && (
               <p className={backendTestResult.node ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
@@ -7836,15 +8585,44 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
             </div>
             {archiveFileTestResult !== null && <p className={archiveFileTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveFileTestResult ? "✓ OK" : "✗ Lỗi"}</p>}
           </div>
+          </div>
+
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-brand mb-2 flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5" /> Ollama AI
+            </h4>
           <div className={rowClass}>
-            <label className={labelClass}>API AI (Ollama)</label>
-            <p className={hintClass}>Địa chỉ API Ollama. Mặc định từ .env (OLLAMA_URL / VITE_OLLAMA_URL): https://research.neu.edu.vn/ollama/. Để trống = giá trị build hoặc localhost:11434/v1.</p>
+            <label className={labelClass}>Ollama — địa chỉ upstream (máy chủ)</label>
+            <p className={hintClass}>
+              URL mà <strong>backend Node</strong> dùng để gọi Ollama (vd. <code className="text-[10px]">http://127.0.0.1:11434</code> hoặc <code className="text-[10px]">http://ollama:11434</code> trong Docker). Không cần <code className="text-[10px]">/v1</code>. Lưu trên server — áp dụng cho <strong>mọi tài khoản</strong> (cấu hình quản trị). Nếu để trống, backend chỉ dùng biến môi trường <code className="text-[10px]">OLLAMA_URL</code> khi bạn đã đặt trên máy chủ.
+            </p>
             <div className={inputRowClass}>
-              <input type="url" value={aiApiUrlInput} onChange={(e) => setAiApiUrlInput(e.target.value)} onBlur={handleSaveAiApiUrl} placeholder="http://localhost:11434/v1" className={inputClass} />
-              <button type="button" onClick={handleSaveAiApiUrl} className={btnClass}>Lưu</button>
-              <button type="button" onClick={handleTestAiApi} disabled={aiTestLoading || !aiApiUrlInput.trim()} className={testBtnClass}>{aiTestLoading ? "…" : "Kiểm tra"}</button>
+              <input
+                type="url"
+                value={ollamaUpstreamInput}
+                onChange={(e) => setOllamaUpstreamInput(e.target.value)}
+                onBlur={handleSaveOllamaUpstream}
+                placeholder="http://127.0.0.1:11434"
+                className={inputClass}
+              />
+              <button type="button" onClick={handleSaveOllamaUpstream} className={btnClass}>Lưu</button>
+              <button type="button" onClick={handleTestAiApi} disabled={aiTestLoading || !canTestOllama} className={testBtnClass} title={!canTestOllama ? "Cần URL backend Node" : undefined}>{aiTestLoading ? "…" : "Kiểm tra Ollama"}</button>
             </div>
-            {aiTestResult !== null && <p className={aiTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{aiTestResult ? "✓ API OK" : "✗ Không kết nối được"}</p>}
+            {aiTestResult !== null && (
+              <div className="space-y-1">
+                <p className={aiTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
+                  {aiTestResult ? "✓ Proxy Ollama qua backend: OK" : "✗ Không kết nối được — kiểm tra backend Node, upstream Ollama, hoặc OLLAMA_URL"}
+                </p>
+                {!aiTestResult && pageIsLocalDev && backendHostIsRemote ? (
+                  <p className="text-[11px] leading-snug text-amber-800 dark:text-amber-200/95">
+                    Trang đang chạy trên <strong>localhost</strong> nhưng backend Node trỏ tới <strong>máy chủ khác</strong> — kiểm tra Ollama chạy trên server đó;{" "}
+                    <code className="text-[10px]">localhost:11434</code> ở upstream là Ollama trên server, không phải máy bạn. Để dùng Ollama cục bộ: ô <strong>URL backend Node</strong> phía trên ={" "}
+                    <code className="text-[10px]">http://localhost:4001</code> (chạy <code className="text-[10px]">npm start</code> trong thư mục Quantis), <strong>Lưu</strong>, upstream{" "}
+                    <code className="text-[10px]">http://127.0.0.1:11434</code>. Nếu đã sửa <code className="text-[10px]">.env</code> mà vẫn thấy URL research, bấm <strong>Lưu</strong> lại URL backend — trình duyệt có thể đang nhớ giá trị cũ trong localStorage.
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
           <div className={rowClass}>
             <label className={labelClass}>Mô hình AI</label>
@@ -7859,8 +8637,26 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                 {selectedModel && <span className="text-xs text-neutral-500">Đang dùng: {selectedModel}</span>}
               </div>
             ) : (
-              <p className="text-xs text-amber-600 dark:text-amber-400">Chưa lấy được danh sách. Cấu hình địa chỉ API AI ở trên (hoặc OLLAMA_URL / VITE_OLLAMA_URL trong .env) rồi bấm Kiểm tra.</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">Chưa lấy được danh sách. Cấu hình URL backend + upstream Ollama (server) + bấm <strong>Kiểm tra Ollama</strong>. Dev không backend: <code className="text-[10px]">VITE_OLLAMA_URL</code>.</p>
             )}
+          </div>
+          </div>
+
+          <div className="mt-6 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/25 p-3 sm:p-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-red-800 dark:text-red-300 mb-2 flex items-center gap-2">
+              <RotateCcw className="w-3.5 h-3.5 shrink-0" /> Đặt lại ứng dụng
+            </h4>
+            <p className="text-[11px] text-red-900/80 dark:text-red-200/90 mb-3">
+              Xóa sạch dữ liệu trên trình duyệt như <strong>lần đầu mở app</strong>: datasets, workflows, biểu đồ báo cáo, URL backend/Ollama/Archive, model AI, góp ý, và dữ liệu pre-reg đồng bộ Writium.
+              Nếu bạn <strong>đã đăng nhập</strong> và đồng bộ server, workspace trên tài khoản cũng có thể được <strong>ghi đè rỗng</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => onFactoryResetRequest()}
+              className="w-full sm:w-auto rounded-lg border-2 border-red-400 dark:border-red-700 bg-white dark:bg-neutral-900 text-red-800 dark:text-red-200 px-4 py-2.5 text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
+            >
+              Đặt lại về trạng thái ban đầu…
+            </button>
           </div>
         </div>
         </div>
@@ -7872,32 +8668,275 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function GuideModal({ onClose }: { onClose: () => void }) {
+type GuideHelpTab = "overview" | "ui" | "data" | "analysis" | "sync" | "ai" | "portal";
+
+const GUIDE_HELP_TABS: { id: GuideHelpTab; label: string }[] = [
+  { id: "overview", label: "Tổng quan" },
+  { id: "ui", label: "Giao diện" },
+  { id: "data", label: "Dữ liệu" },
+  { id: "analysis", label: "Phân tích" },
+  { id: "sync", label: "Đồng bộ" },
+  { id: "ai", label: "AI & backend" },
+  { id: "portal", label: "AI Portal" },
+];
+
+function GuideModal({
+  onClose,
+  onOpenSettings,
+  onGoRepro,
+}: {
+  onClose: () => void;
+  onOpenSettings: () => void;
+  onGoRepro: (sub?: ReproducibilityTab) => void;
+}) {
+  const [helpTab, setHelpTab] = useState<GuideHelpTab>("overview");
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full mx-4 flex flex-col max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-          <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Quantis ? Hướng dẫn nhanh</h3>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+    <div
+      className="fixed inset-0 z-[220] flex items-center justify-center bg-black/50 p-3 sm:p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[min(90dvh,44rem)] overflow-hidden border border-neutral-200/80 dark:border-neutral-700"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quantis-help-title"
+      >
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0 gap-2">
+          <h3 id="quantis-help-title" className="text-base sm:text-lg font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-2 min-w-0">
+            <BookOpen className="w-5 h-5 text-brand shrink-0" />
+            <span className="truncate">Hướng dẫn — Quantis</span>
+          </h3>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label="Đóng">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6 overflow-y-auto">
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3"><strong>Quantis</strong> là nền tảng phân tích dữ liệu nghiên cứu: import, chuyển đổi, thống kê, ML, xuất báo cáo. Hỗ trợ reproducibility với lưu workflow và audit trail.</p>
-        <ul className="space-y-2 text-sm text-neutral-600 dark:text-neutral-400 mb-4">
-          <li><strong>Workflow nghiên cứu:</strong> Quy trình chuẩn từ import đến lưu workflow.</li>
-          <li><strong>Data Layer:</strong> Import (panel trái), xem dữ liệu, phân tích sơ bộ, biến đổi (missing: mean/median/mode; chuẩn hóa z-score, min-max; lọc, sắp xếp, recode).</li>
-          <li><strong>Analysis Engine:</strong> Thống kê mô tả, kiểm định giả thuyết (t-test độc lập & cặp, ANOVA, Kruskal-Wallis, Chi-square, Mann-Whitney, Wilcoxon cặp, Friedman, Levene), hồi quy, SEM, tương quan (Pearson, Spearman, từng phần), Cronbach, EFA, ML, Bayesian.</li>
-          <li><strong>Reproducibility:</strong> Lưu workflow, versioning, audit trail.</li>
-          <li><strong>Presentation:</strong> Biểu đồ (xuất SVG/PNG), heatmap tương quan, báo cáo học thuật.</li>
-          <li><strong>AI:</strong> Gợi ý phương pháp, diễn giải kết quả, cảnh báo.</li>
-        </ul>
-        <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800/50 p-3 mb-4">
-          <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Phân tích đểnh lượng</p>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-1"><strong>Cơ bản:</strong> Thống kê mô tả (P10, P90, Kurtosis) ? Kiểm định (t-test, t-test cặp, ANOVA, Chi-square, Mann-Whitney, Wilcoxon cặp, Friedman, Levene) ? Tương quan (Pearson, Spearman, từng phần) ? Cronbach. Shapiro-Wilk, Power analysis, Cỡ mẫu trong tab Kiểm định.</p>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400"><strong>Nâng cao:</strong> Hồi quy OLS/Logistic, VIF (đa cộng tuyến), SEM (Mediation, Moderation), EFA, K-means, Bayesian (tỉ lệ). Xuất biểu đồ SVG/PNG, heatmap tương quan (xuất CSV). Tương đương nhiều tính năng SPSS, R, Python.</p>
+
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-2 sm:px-3 py-2 bg-neutral-50/90 dark:bg-neutral-900/50">
+          <div className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] snap-x">
+            {GUIDE_HELP_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setHelpTab(t.id)}
+                className={`snap-start shrink-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-900 ${
+                  helpTab === t.id
+                    ? "bg-brand text-white"
+                    : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <button type="button" onClick={onClose} className="mt-4 rounded-lg bg-neutral-200 dark:bg-neutral-700 px-4 py-2">Đóng</button>
+
+        <div className="p-3 sm:p-5 overflow-y-auto text-sm text-neutral-600 dark:text-neutral-400 space-y-4 min-h-0 flex-1">
+          {helpTab === "overview" && (
+            <>
+              <p>
+                <strong className="text-neutral-800 dark:text-neutral-200">Quantis</strong> hỗ trợ phân tích định lượng trong nghiên cứu: nhập và làm sạch dữ liệu, thống kê mô tả &amp; suy luận, mô hình (hồi quy, SEM, ML…), trực quan hóa, báo cáo và lưu workflow để tái lập.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={onOpenSettings} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 dark:hover:bg-brand/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                  <Server className="w-4 h-4 shrink-0" />
+                  Mở cấu hình kết nối
+                </button>
+                <button type="button" onClick={() => onGoRepro("workflows")} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                  <GitBranch className="w-4 h-4 shrink-0" />
+                  Đến Workflows
+                </button>
+                <button type="button" onClick={() => onGoRepro("openscience")} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                  <FileText className="w-4 h-4 shrink-0" />
+                  Pre-reg &amp; tái lập
+                </button>
+              </div>
+              <section className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50/80 dark:bg-neutral-900/40 p-3 text-xs sm:text-sm">
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Luồng gợi ý</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Bấm logo <strong>Quantis</strong> để xem <strong>Workflow nghiên cứu</strong> — chọn từng bước hoặc dùng tab trên header.</li>
+                  <li>Panel trái: chọn workflow, <strong>Tải file</strong> (CSV/Excel/SPSS…), chọn dataset.</li>
+                  <li>Tab <strong>Dữ liệu</strong> → Xem / Sơ bộ / Mô tả / Biến đổi.</li>
+                  <li>Tab <strong>Phân tích</strong> → tương quan, kiểm định, độ tin cậy, hồi quy, …</li>
+                  <li>Tab <strong>Trực quan</strong> + <strong>AI hướng dẫn</strong> khi cần gợi ý phương pháp.</li>
+                </ol>
+              </section>
+            </>
+          )}
+
+          {helpTab === "ui" && (
+            <>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Thanh trên (header)</p>
+                <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
+                  <li><strong>Logo Quantis</strong> — về màn hình <strong>Workflow nghiên cứu tiêu chuẩn</strong> (các bước từ thu thập dữ liệu đến báo cáo).</li>
+                  <li>
+                    Các tab: <strong>Khám phá &amp; biến đổi dữ liệu</strong> (rút gọn: <em>Dữ liệu</em>), <strong>Phân tích thống kê</strong>, <strong>Trực quan</strong>, <strong>AI hướng dẫn</strong>.
+                    Trên điện thoại nhãn rút gọn; vuốt ngang nếu cần.
+                  </li>
+                  <li>Nút sáng/tối; đăng nhập (standalone); menu <strong>⋮</strong> — hướng dẫn này, workflow mẫu, Pre-reg, cấu hình, góp ý.</li>
+                </ul>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Sidebar trái</p>
+                <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
+                  <li>Dropdown <strong>Workflow</strong> + nút tạo workflow mới.</li>
+                  <li><strong>Bộ dữ liệu (Import)</strong>: Tải file, thêm dataset mẫu / từ kho lưu trữ (nếu cấu hình Archive).</li>
+                  <li>Trên mobile: sidebar trượt; nút ở footer để mở/đóng panel.</li>
+                </ul>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Thanh công cụ phụ (dưới header)</p>
+                <p className="text-xs sm:text-sm">
+                  Khi ở tab <strong>Dữ liệu</strong>, <strong>Phân tích</strong> hoặc <strong>Trực quan</strong>, một hàng nút thứ cấp xuất hiện (vd. Xem dữ liệu / Sơ bộ / Mô tả / Biến đổi, hoặc Tương quan / Kiểm định / …). Cuộn ngang nếu không đủ chỗ.
+                </p>
+              </section>
+            </>
+          )}
+
+          {helpTab === "data" && (
+            <>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Định dạng file</p>
+                <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
+                  <li><strong>CSV, TSV, JSON, TXT</strong> — đọc trực tiếp trong trình duyệt.</li>
+                  <li>
+                    <strong>Excel (.xlsx, .xls), ODS, SPSS (.sav), Stata (.dta), SAS (.sas7bdat), R (.rds, .RData)</strong> — cần <strong>backend Quantis</strong> bật và Python phân tích (parse trên máy chủ).
+                    Khi import, có thể thấy overlay <em>“Đang đọc file trên máy chủ”</em>.
+                  </li>
+                </ul>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Tab Dữ liệu</p>
+                <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
+                  <li><strong>Xem dữ liệu</strong> — bảng, kiểu cột.</li>
+                  <li><strong>Sơ bộ</strong> — missing, outlier IQR, profiling.</li>
+                  <li><strong>Mô tả</strong> — thống kê mô tả, tần số, một số công cụ văn bản / Cohen kappa (qua backend khi bật).</li>
+                  <li><strong>Biến đổi</strong> — xử lý missing, mã hóa, chuẩn hóa.</li>
+                </ul>
+              </section>
+              <section className="rounded-lg border border-sky-200/80 dark:border-sky-900/40 bg-sky-50/50 dark:bg-sky-950/20 p-3 text-xs sm:text-sm">
+                <p className="font-semibold text-sky-900 dark:text-sky-200 mb-1">Đồng bộ workspace</p>
+                <p>Khi đăng nhập và backend lưu PostgreSQL, có thể có dải thông báo <em>“Đang tải workspace từ máy chủ…”</em> lúc kéo dữ liệu lần đầu.</p>
+              </section>
+            </>
+          )}
+
+          {helpTab === "analysis" && (
+            <>
+              <p className="text-xs sm:text-sm">
+                Dưới tab <strong>Phân tích thống kê</strong>, chọn một mục trên thanh công cụ:
+              </p>
+              <ul className="list-disc pl-4 space-y-1.5 text-xs sm:text-sm">
+                <li><strong>Tương quan</strong> — ma trận Pearson / Spearman / Kendall (một phần qua Python nếu bật backend).</li>
+                <li><strong>Kiểm định</strong> — t-test, ANOVA, Chi-square, Mann-Whitney, Wilcoxon, Friedman, Levene, Shapiro-Wilk, cỡ mẫu / công suất, …</li>
+                <li><strong>Độ tin cậy</strong> — Cronbach alpha và liên quan.</li>
+                <li><strong>Hồi quy</strong> — OLS, logistic, Ridge, …</li>
+                <li><strong>Nhân tố</strong> — EFA (PCA, varimax).</li>
+                <li><strong>SEM</strong> — mediation, moderation.</li>
+                <li><strong>Học máy</strong> — K-means, phân loại đa lớp, permutation importance, …</li>
+                <li><strong>Bayesian</strong> — ước lượng posterior đơn giản.</li>
+              </ul>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Nhiều nút hiển thị <em>Đang xử lý…</em> khi tính toán lâu — không đóng tab giữa chừng.
+              </p>
+            </>
+          )}
+
+          {helpTab === "sync" && (
+            <>
+              <section className="rounded-lg border border-brand/20 bg-brand/5 dark:bg-brand/10 p-3 text-xs sm:text-sm">
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">Đăng nhập như SurveyLab?</p>
+                <p>
+                  Quantis <strong>có</strong> đăng ký/đăng nhập session + quản lý tài khoản khi dùng <strong>backend PostgreSQL</strong> (<code className="text-[0.65rem] bg-white/60 dark:bg-neutral-800 px-1 rounded">backend/</code>, <code className="text-[0.65rem] bg-white/60 dark:bg-neutral-800 px-1 rounded">npm run build && npm start</code>) và frontend trỏ đúng API (<code className="text-[0.65rem] bg-white/60 dark:bg-neutral-800 px-1 rounded">VITE_QUANTIS_API_URL</code>). Chỉ chạy frontend → không bắt đăng nhập. Trên <strong>AI Portal</strong> → dùng tài khoản Portal, không form Quantis. Xem khối <strong>Tài khoản &amp; đăng nhập</strong> trong menu ⋮ → Cấu hình kết nối.
+                </p>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Chế độ chỉ trình duyệt</p>
+                <p className="text-xs sm:text-sm">Dữ liệu và workflow có thể lưu trong <strong>localStorage</strong> của trình duyệt (giới hạn dung lượng). Đổi máy / xóa dữ liệu trình duyệt sẽ mất bản cục bộ.</p>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Standalone + PostgreSQL</p>
+                <p className="text-xs sm:text-sm">
+                  Khi bật <strong>backend PostgreSQL</strong> và đăng nhập Quantis, workspace (datasets + workflows) đồng bộ lên server theo tài khoản. Offline có thể chỉnh sửa cục bộ; khi có mạng lại, ứng dụng ghi lên server (có debounce).
+                </p>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">AI Portal (nhúng)</p>
+                <p className="text-xs sm:text-sm">
+                  Không cần form đăng nhập Quantis: phiên lấy từ Portal; API có thể nhận header <strong>X-User-Id</strong>. Chi tiết kỹ thuật: tài liệu <code className="text-xs bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">docs/QUANTIS-DATABASE.md</code>.
+                </p>
+              </section>
+              <button type="button" onClick={onOpenSettings} className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
+                <Settings className="w-4 h-4 shrink-0" />
+                Cấu hình &amp; đặt lại ứng dụng
+              </button>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Trong <strong>Cấu hình kết nối</strong> có mục <strong>Đặt lại ứng dụng</strong> (xóa local và tùy chọn ghi rỗng server) — cần xác nhận.
+              </p>
+            </>
+          )}
+
+          {helpTab === "ai" && (
+            <>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Tab AI hướng dẫn</p>
+                <p className="text-xs sm:text-sm">
+                  Gợi ý phương pháp, diễn giải bước workflow hoặc kết quả — cần backend proxy tới <strong>Ollama</strong> (hoặc tương thích OpenAI) đã cấu hình. Chọn model trong cài đặt nếu có.
+                </p>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Phân tích số (Python)</p>
+                <p className="text-xs sm:text-sm">
+                  Tương quan ma trận lớn, một số kiểm định / mô hình nặng dùng service Python (<code className="text-xs bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">ANALYZE_PYTHON_URL</code> / proxy qua backend). Dùng <strong>Cấu hình kết nối</strong> để kiểm tra trạng thái.
+                </p>
+              </section>
+              <section className="rounded-lg border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs sm:text-sm">
+                <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1">Lỗi timeout / chậm</p>
+                <p>Thử model nhỏ hơn, rút ngắn prompt, hoặc nhờ quản trị Portal tăng timeout proxy. Giảm kích thước bảng dữ liệu trước khi chạy phân tích nặng.</p>
+              </section>
+              <button type="button" onClick={onOpenSettings} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                <Server className="w-4 h-4 shrink-0" />
+                Kiểm tra Backend &amp; Ollama
+              </button>
+            </>
+          )}
+
+          {helpTab === "portal" && (
+            <>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Nhúng trong AI Portal</p>
+                <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
+                  <li>Ứng dụng nhận biết embed qua <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">__PORTAL_USER__</code>, <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">__WRITE_API_BASE__</code>, <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">embed-config.json</code>, URL <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">/embed/quantis</code>, v.v.</li>
+                  <li>Schema PostgreSQL riêng <strong>quantis</strong> — không ghi đè dữ liệu schema Portal.</li>
+                  <li>So sánh triển khai với SurveyLab: <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">docs/QUANTIS-PORTAL-AND-SURVEYLAB.md</code>.</li>
+                </ul>
+              </section>
+              <section>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Quyền riêng tư</p>
+                <p className="text-xs sm:text-sm">Dữ liệu phân tích và workspace thuộc ngữ cảnh bạn đăng nhập (Portal hoặc Quantis). Không chia sẻ mật khẩu API trong ảnh chụp màn hình khi góp ý.</p>
+              </section>
+            </>
+          )}
+        </div>
+
+        <div className="p-3 sm:p-4 border-t border-neutral-200 dark:border-neutral-700 shrink-0 flex flex-wrap items-center justify-between gap-2 bg-neutral-50/50 dark:bg-neutral-900/30">
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            Phím <kbd className="px-1 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-[0.65rem] font-mono">Esc</kbd> để đóng
+          </p>
+          <button type="button" onClick={onClose} className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
+            Đóng
+          </button>
         </div>
       </div>
     </div>

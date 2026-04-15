@@ -8,7 +8,7 @@
 #   4. Branch:            main
 #   5. (Tùy chọn) Environment variables:
 #      DOCKERHUB_USER         = username Docker Hub (mặc định: Lampx83)
-#      OLLAMA_URL = URL Ollama (mặc định: https://research.neu.edu.vn/ollama)
+#      OLLAMA_URL = (tùy chọn) URL Ollama khi chưa có trong Cấu hình kết nối; ưu tiên ollamaUpstreamUrl admin lưu trên server
 #
 
 services:
@@ -21,7 +21,6 @@ services:
     environment:
       PORT: "4001"
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
-      OLLAMA_URL: ${OLLAMA_URL:-https://research.neu.edu.vn/ollama}
       ANALYZE_PYTHON_URL: "http://quantis-python:8000"
     volumes:
       - quantis-data:/app/data

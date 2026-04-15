@@ -8,7 +8,10 @@ export type ServerSettings = {
   backendApiUrl?: string | null;
   archiveUrl?: string | null;
   archiveFileUrl?: string | null;
+  /** @deprecated Trình duyệt chỉ gọi Ollama qua backend /api/quantis/ollama */
   aiApiUrl?: string | null;
+  /** URL Ollama mà Node proxy tới (vd. http://127.0.0.1:11434); lưu server, dùng chung mọi tài khoản */
+  ollamaUpstreamUrl?: string | null;
   defaultAiModel?: string | null;
 };
 
@@ -90,6 +93,39 @@ export function clearWorkspaceStorage(): void {
     localStorage.removeItem(getKey("workflows"));
     localStorage.removeItem(getKey("selectedDatasetId"));
     localStorage.removeItem(getKey(REPORT_CHARTS_KEY));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Xóa mọi khóa `quantis_*` trong localStorage + dữ liệu Writium đồng bộ (pre-reg / checklist).
+ * Giống lần đầu mở app: không còn workspace, URL backend/Ollama/Archive lưu cục bộ, model AI, góp ý, v.v.
+ * Không xóa theme/i18n toàn cục (portal-embed-theme, v.v.).
+ */
+export function clearQuantisLocalAppData(): void {
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) toRemove.push(k);
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+    localStorage.removeItem("writium_research_protocols");
+    localStorage.removeItem("protocolum_protocols");
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Chỉ xóa bản sao datasets/workflows trên localStorage.
+ * Dùng sau khi đã hydrate từ server để tránh nhầm dữ liệu tài khoản khác / bản cũ.
+ */
+export function clearWorkspaceLocalData(): void {
+  try {
+    localStorage.removeItem(getKey("datasets"));
+    localStorage.removeItem(getKey("workflows"));
   } catch {
     /* ignore */
   }
@@ -184,27 +220,11 @@ export function saveArchiveFileUrl(url: string | null): void {
   }
 }
 
-/** Địa chỉ API AI (Ollama). Ưu tiên: server → localStorage → env. */
-export function loadAiApiUrl(): string | null {
-  const fromServer = getServerSettings()?.aiApiUrl;
+/** URL upstream Ollama trên server (cấu hình dùng chung). Chỉ để hiển thị trong Cài đặt. */
+export function loadOllamaUpstreamFromServer(): string | null {
+  const fromServer = getServerSettings()?.ollamaUpstreamUrl;
   if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim().replace(/\/+$/, "");
-  try {
-    return localStorage.getItem(getKey("aiApiUrl"));
-  } catch {
-    return null;
-  }
-}
-
-export function saveAiApiUrl(url: string | null): void {
-  try {
-    if (url != null && String(url).trim() !== "") {
-      localStorage.setItem(getKey("aiApiUrl"), String(url).trim().replace(/\/+$/, ""));
-    } else {
-      localStorage.removeItem(getKey("aiApiUrl"));
-    }
-  } catch {
-    /* ignore */
-  }
+  return null;
 }
 export type AiFeedbackEntry = {
   type: "ai_response";

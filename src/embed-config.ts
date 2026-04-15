@@ -8,6 +8,9 @@ declare global {
   }
 }
 
+/** Khi embed-config.json tải xong (Portal pack), để App re-chạy auth / nhận diện embed. */
+export const QUANTIS_EMBED_CONFIG_EVENT = "quantis-embed-config-loaded";
+
 let cached: { basePath: string; embedPath: string } | null = null;
 
 export function getPortalBasePath(): string {
@@ -36,6 +39,12 @@ export function loadEmbedConfig(): Promise<{ basePath: string; embedPath: string
           basePath: String(config.basePath ?? "").replace(/\/+$/, ""),
           embedPath: config.embedPath ? String(config.embedPath).replace(/\/+$/, "") : "",
         };
+        if (typeof window !== "undefined" && cached.basePath && !window.__PORTAL_BASE_PATH__) {
+          window.__PORTAL_BASE_PATH__ = cached.basePath;
+        }
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(QUANTIS_EMBED_CONFIG_EVENT, { detail: cached }));
+        }
         return cached;
       }
       return null;

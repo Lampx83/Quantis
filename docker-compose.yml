@@ -16,8 +16,8 @@ services:
       # Archive NEU (proxy tìm kiếm / tải dataset)
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
       # ARCHIVE_NEU_TOKEN: ""   # Nếu cần Bearer token
-      # Ollama trên server 232: từ container gọi ra host (port 8002 hoặc 11434 tùy cấu hình Ollama)
-      OLLAMA_URL: "https://research.neu.edu.vn/ollama"
+      # Ollama: đặt trong Quantis → Cấu hình kết nối (lưu settings), hoặc bật dòng dưới (vd. host.docker.internal:11434)
+      # OLLAMA_URL: "http://host.docker.internal:11434"
       # Backend phân tích Python (cùng stack)
       ANALYZE_PYTHON_URL: "http://quantis-python:8000"
     volumes:

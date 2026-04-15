@@ -9,6 +9,8 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -16,6 +18,21 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: rgb(0 97 187 / 12%);
+}
+
+#root {
+  min-height: 100dvh;
+  min-height: 100vh;
+  min-width: 0;
+}
+
+/* Thanh công cụ ngang: cuộn mượt trên iOS */
+.toolbar {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
 }
 
 /* Focus visible cho truy cập bàn phím, không ảnh hưởng click chuột */

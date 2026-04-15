@@ -6,8 +6,27 @@ import type { DataProfile } from "../types";
 
 const MAX_ROWS_STORED = 50000;
 
-/** Parse CSV text (handles quoted fields with commas). */
-export function parseCSV(text: string): string[][] {
+/** Dòng đầu không rỗng (dùng đoán dấu phân cách CSV/TXT). */
+function firstNonEmptyLine(text: string): string {
+  const parts = text.split(/\r?\n/);
+  for (const line of parts) {
+    if (line.trim() !== "") return line;
+  }
+  return "";
+}
+
+/** Đoán `,` vs `;` cho file .csv (Excel/Google Form locale VN/EU hay xuất CSV phân tách bằng `;`). */
+export function detectCsvDelimiter(text: string): "," | ";" {
+  const line = firstNonEmptyLine(text);
+  const semi = (line.match(/;/g) || []).length;
+  const comma = (line.match(/,/g) || []).length;
+  return semi > comma ? ";" : ",";
+}
+
+/**
+ * Parse văn bản phân tách theo một ký tự (`,` hoặc `;`), có hỗ trợ trường bọc ngoặc kép.
+ */
+export function parseDelimited(text: string, delimiter: "," | ";"): string[][] {
   const lines: string[][] = [];
   let current: string[] = [];
   let field = "";
@@ -19,7 +38,7 @@ export function parseCSV(text: string): string[][] {
     } else if (inQuotes) {
       if (c === "\n") field += "\n";
       else field += c;
-    } else if (c === ",") {
+    } else if (c === delimiter) {
       current.push(field.trim());
       field = "";
     } else if (c === "\n" || c === "\r") {
@@ -37,6 +56,11 @@ export function parseCSV(text: string): string[][] {
     if (current.some((s) => s !== "")) lines.push(current);
   }
   return lines;
+}
+
+/** Parse CSV text (dấu phẩy). Với file có thể là `;`, dùng `parseFileContent` hoặc `parseDelimited(text, detectCsvDelimiter(text))`. */
+export function parseCSV(text: string): string[][] {
+  return parseDelimited(text, ",");
 }
 
 /** Parse TSV text (tab-separated). Handles quoted fields. */
@@ -142,13 +166,29 @@ export function parseFileContent(text: string, filename: string): { rows: string
     return { rows, format: "tsv" };
   }
   if (ext === "txt") {
-    const firstLine = text.split(/\r?\n/)[0] || "";
-    const tabCount = (firstLine.match(/\t/g) || []).length;
-    const commaCount = (firstLine.match(/,/g) || []).length;
-    const rows = tabCount >= commaCount ? parseTSV(text) : parseCSV(text);
-    return { rows, format: tabCount >= commaCount ? "tsv" : "csv" };
+    const line = firstNonEmptyLine(text);
+    const tabCount = (line.match(/\t/g) || []).length;
+    const commaCount = (line.match(/,/g) || []).length;
+    const semiCount = (line.match(/;/g) || []).length;
+    const maxDelim = Math.max(tabCount, commaCount, semiCount);
+    let rows: string[][];
+    let format: string;
+    if (maxDelim === 0) {
+      rows = parseDelimited(text, ",");
+      format = "csv";
+    } else if (tabCount === maxDelim) {
+      rows = parseTSV(text);
+      format = "tsv";
+    } else if (semiCount > commaCount) {
+      rows = parseDelimited(text, ";");
+      format = "csv";
+    } else {
+      rows = parseDelimited(text, ",");
+      format = "csv";
+    }
+    return { rows, format };
   }
-  const rows = parseCSV(text);
+  const rows = parseDelimited(text, detectCsvDelimiter(text));
   return { rows, format: "csv" };
 }
 
@@ -1979,32 +2019,88 @@ function varimax(loadings: number[][]): number[][] {
   return L;
 }
 
-// --- Mediation (Baron-Kenny) ---
-export interface MediationResult {
-  a: number; b: number; c: number; cPrime: number;
-  aSE: number; bSE: number; cSE: number; cPrimeSE: number;
-  aP: number; bP: number; cP: number; cPrimeP: number;
-  indirectEffect: number;
-  pctMediated: number;
+// --- Mediation (Baron-Kenny; nhiều M = trung gian song song) ---
+export interface MediationPathRow {
+  mCol: string;
+  a: number;
+  b: number;
+  aSE: number;
+  bSE: number;
+  aP: number;
+  bP: number;
+  /** Hiệu ứng gián tiếp qua M này: a * b (b từ mô hình Y ~ X + M₁ + …) */
+  indirect: number;
 }
 
-/** Simple mediation: X -> M -> Y. Returns path coefficients. */
-export function computeMediation(rows: string[][], xCol: string, mCol: string, yCol: string): MediationResult | null {
-  const pathA = computeOLS(rows, mCol, [xCol]);
+export interface MediationResult {
+  paths: MediationPathRow[];
+  c: number;
+  cPrime: number;
+  cSE: number;
+  cPrimeSE: number;
+  cP: number;
+  cPrimeP: number;
+  /** Tổng hiệu ứng gián tiếp (song song): Σ aᵢ bᵢ */
+  indirectEffect: number;
+  pctMediated: number;
+  n: number;
+}
+
+function uniqueMediationMs(mCols: string[], xCol: string, yCol: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of mCols) {
+    const m = String(raw || "").trim();
+    if (!m || m === xCol || m === yCol || seen.has(m)) continue;
+    seen.add(m);
+    out.push(m);
+  }
+  return out;
+}
+
+/**
+ * Mediation (Baron–Kenny): một hoặc nhiều biến trung gian song song (parallel).
+ * Với nhiều M: Mᵢ ~ X; Y ~ X + M₁ + …; hiệu ứng gián tiếp tổng = Σ (aᵢ bᵢ).
+ */
+export function computeMediation(rows: string[][], xCol: string, mCols: string[], yCol: string): MediationResult | null {
+  const ms = uniqueMediationMs(mCols, xCol, yCol);
+  if (ms.length === 0) return null;
   const pathC = computeOLS(rows, yCol, [xCol]);
-  const pathBC = computeOLS(rows, yCol, [xCol, mCol]);
-  if (!pathA || !pathC || !pathBC) return null;
-  const a = pathA.coefficients[xCol] ?? 0;
+  const pathBC = computeOLS(rows, yCol, [xCol, ...ms]);
+  if (!pathC || !pathBC) return null;
+  const paths: MediationPathRow[] = [];
+  for (const mCol of ms) {
+    const pathA = computeOLS(rows, mCol, [xCol]);
+    if (!pathA) return null;
+    const a = pathA.coefficients[xCol] ?? 0;
+    const b = pathBC.coefficients[mCol] ?? 0;
+    const indirect = a * b;
+    paths.push({
+      mCol,
+      a,
+      b,
+      aSE: pathA.se[xCol] ?? 0,
+      bSE: pathBC.se[mCol] ?? 0,
+      aP: pathA.pValue[xCol] ?? 1,
+      bP: pathBC.pValue[mCol] ?? 1,
+      indirect,
+    });
+  }
   const c = pathC.coefficients[xCol] ?? 0;
-  const b = pathBC.coefficients[mCol] ?? 0;
   const cPrime = pathBC.coefficients[xCol] ?? 0;
-  const indirect = a * b;
-  const pctMed = c !== 0 ? (indirect / c) * 100 : 0;
+  const indirectEffect = paths.reduce((s, p) => s + p.indirect, 0);
+  const pctMediated = c !== 0 ? (indirectEffect / c) * 100 : 0;
   return {
-    a, b, c, cPrime,
-    aSE: pathA.se[xCol] ?? 0, bSE: pathBC.se[mCol] ?? 0, cSE: pathC.se[xCol] ?? 0, cPrimeSE: pathBC.se[xCol] ?? 0,
-    aP: pathA.pValue[xCol] ?? 1, bP: pathBC.pValue[mCol] ?? 1, cP: pathC.pValue[xCol] ?? 1, cPrimeP: pathBC.pValue[xCol] ?? 1,
-    indirectEffect: indirect, pctMediated: pctMed,
+    paths,
+    c,
+    cPrime,
+    cSE: pathC.se[xCol] ?? 0,
+    cPrimeSE: pathBC.se[xCol] ?? 0,
+    cP: pathC.pValue[xCol] ?? 1,
+    cPrimeP: pathBC.pValue[xCol] ?? 1,
+    indirectEffect,
+    pctMediated,
+    n: pathBC.n,
   };
 }
 

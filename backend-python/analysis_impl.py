@@ -627,34 +627,63 @@ def run_vif(rows: list, x_cols: list[str]):
     return vif_out
 
 
-# ---------- Mediation (Baron-Kenny: X -> M -> Y) ----------
-def run_mediation(rows: list, x_col: str, m_col: str, y_col: str):
-    path_a = run_ols(rows, m_col, [x_col])
-    path_c = run_ols(rows, y_col, [x_col])
-    path_bc = run_ols(rows, y_col, [x_col, m_col])
-    if not path_a or not path_c or not path_bc:
+# ---------- Mediation (Baron-Kenny; nhiều M = parallel mediation) ----------
+def run_mediation(rows: list, x_col: str, m_cols: list, y_col: str):
+    """m_cols: danh sách biến trung gian (song song). Mỗi M ~ X; Y ~ X + M1 + …"""
+    if not m_cols:
         return None
-    a = path_a["coefficients"].get(x_col, 0)
+    seen = set()
+    ms = []
+    for m in m_cols:
+        if not m or not str(m).strip():
+            continue
+        m = str(m).strip()
+        if m == x_col or m == y_col or m in seen:
+            continue
+        seen.add(m)
+        ms.append(m)
+    if not ms:
+        return None
+    path_c = run_ols(rows, y_col, [x_col])
+    path_bc = run_ols(rows, y_col, [x_col, *ms])
+    if not path_c or not path_bc:
+        return None
+    paths = []
+    indirect_total = 0.0
+    for m_col in ms:
+        path_a = run_ols(rows, m_col, [x_col])
+        if not path_a:
+            return None
+        a = path_a["coefficients"].get(x_col, 0)
+        b = path_bc["coefficients"].get(m_col, 0)
+        ind = a * b
+        indirect_total += ind
+        paths.append(
+            {
+                "mCol": m_col,
+                "a": float(a),
+                "b": float(b),
+                "aSE": float(path_a["se"].get(x_col, 0)),
+                "bSE": float(path_bc["se"].get(m_col, 0)),
+                "aP": float(path_a["pValue"].get(x_col, 1)),
+                "bP": float(path_bc["pValue"].get(m_col, 1)),
+                "indirect": float(ind),
+            }
+        )
     c = path_c["coefficients"].get(x_col, 0)
-    b = path_bc["coefficients"].get(m_col, 0)
     c_prime = path_bc["coefficients"].get(x_col, 0)
-    indirect = a * b
-    pct_med = (indirect / c * 100) if c != 0 else 0
+    pct_med = (indirect_total / c * 100) if c != 0 else 0.0
     return {
-        "a": a,
-        "b": b,
-        "c": c,
-        "cPrime": c_prime,
-        "aSE": path_a["se"].get(x_col, 0),
-        "bSE": path_bc["se"].get(m_col, 0),
-        "cSE": path_c["se"].get(x_col, 0),
-        "cPrimeSE": path_bc["se"].get(x_col, 0),
-        "aP": path_a["pValue"].get(x_col, 1),
-        "bP": path_bc["pValue"].get(m_col, 1),
-        "cP": path_c["pValue"].get(x_col, 1),
-        "cPrimeP": path_bc["pValue"].get(x_col, 1),
-        "indirectEffect": indirect,
-        "pctMediated": pct_med,
+        "paths": paths,
+        "c": float(c),
+        "cPrime": float(c_prime),
+        "cSE": float(path_c["se"].get(x_col, 0)),
+        "cPrimeSE": float(path_bc["se"].get(x_col, 0)),
+        "cP": float(path_c["pValue"].get(x_col, 1)),
+        "cPrimeP": float(path_bc["pValue"].get(x_col, 1)),
+        "indirectEffect": float(indirect_total),
+        "pctMediated": float(pct_med),
+        "n": int(path_bc.get("n", 0)),
     }
 
 

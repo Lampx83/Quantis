@@ -4,24 +4,44 @@
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
 import type { Dataset, Workflow } from "./types";
-import { loadBackendApiUrl, loadAiApiUrl } from "./store";
+import type { MediationResult } from "./utils/stats";
+import { loadBackendApiUrl } from "./store";
 
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). Mặc định research.neu.edu.vn */
 const RESEARCH_NEU_HOST = "research.neu.edu.vn";
 const RESEARCH_NEU_BACKEND = "https://research.neu.edu.vn/api/quantis/backend";
 const RESEARCH_NEU_BACKEND_PYTHON = "https://research.neu.edu.vn/api/quantis/backend-python";
-const RESEARCH_NEU_OLLAMA = "https://research.neu.edu.vn/ollama";
 const RESEARCH_NEU_DEFAULT_MODEL = "qwen3:8b";
 
 function isResearchNeu(): boolean {
   return typeof window !== "undefined" && window.location.hostname.toLowerCase() === RESEARCH_NEU_HOST;
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  const h = String(hostname || "").toLowerCase();
+  return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+}
+
+/** Không dùng base URL dev (localhost) khi trang đang trên domain thật — tránh POST tới máy người dùng. */
+function shouldDiscardBackendBase(url: string | null | undefined): boolean {
+  if (url == null || String(url).trim() === "") return false;
+  if (typeof window === "undefined") return false;
+  if (isLoopbackHost(window.location.hostname)) return false;
+  try {
+    const s = String(url).trim();
+    const u = new URL(/^(https?:)?\/\//i.test(s) || s.startsWith("http://") || s.startsWith("https://") ? s : `https://${s}`);
+    return isLoopbackHost(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function getBase(): string {
   const stored = loadBackendApiUrl();
   const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_QUANTIS_API_URL?: string } }).env?.VITE_QUANTIS_API_URL) || "";
-  const b = (stored != null && String(stored).trim() !== "") ? stored : env;
-  const base = String(b).replace(/\/+$/, "");
+  let candidate = (stored != null && String(stored).trim() !== "") ? stored : env;
+  if (shouldDiscardBackendBase(candidate)) candidate = "";
+  const base = String(candidate).replace(/\/+$/, "");
   if (base) return base;
   if (isResearchNeu()) return RESEARCH_NEU_BACKEND;
   return "";
@@ -30,6 +50,153 @@ function getBase(): string {
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). */
 export function getApiBase(): string {
   return getBase();
+}
+
+// ——— Auth (giống SurveyLab / Portal): session cookie, lưu workspace theo tài khoản khi backend bật QUANTIS_AUTH_ENABLED ———
+
+export interface AuthConfig {
+  authEnabled: boolean;
+  ssoEnabled: boolean;
+  ssoLabel: string;
+  authRequired: boolean;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  isAdmin?: boolean;
+}
+
+function getAuthPrefix(): string {
+  const b = getBase();
+  if (!b || String(b).trim() === "") return "";
+  return `${String(b).replace(/\/+$/, "")}/api/quantis/auth`;
+}
+
+/** Khi backend tắt auth hoặc không phản hồi: null. */
+export async function getAuthConfig(): Promise<AuthConfig | null> {
+  const prefix = getAuthPrefix();
+  if (!prefix) return null;
+  try {
+    const res = await fetch(`${prefix}/config`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function getAuthMe(): Promise<AuthUser | null> {
+  const prefix = getAuthPrefix();
+  if (!prefix) return null;
+  try {
+    const res = await fetch(`${prefix}/me`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function authRegister(params: {
+  email: string;
+  password: string;
+  name?: string;
+}): Promise<{ user: AuthUser } | { error: string }> {
+  const prefix = getAuthPrefix();
+  if (!prefix) return { error: "Chưa cấu hình backend" };
+  try {
+    const res = await fetch(`${prefix}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data.error || "Đăng ký thất bại" };
+    return { user: data.user };
+  } catch {
+    return { error: "Lỗi kết nối" };
+  }
+}
+
+export async function authLogin(params: { email: string; password: string }): Promise<{ user: AuthUser } | { error: string }> {
+  const prefix = getAuthPrefix();
+  if (!prefix) return { error: "Chưa cấu hình backend" };
+  try {
+    const res = await fetch(`${prefix}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data.error || "Đăng nhập thất bại" };
+    return { user: data.user };
+  } catch {
+    return { error: "Lỗi kết nối" };
+  }
+}
+
+export async function authLogout(): Promise<void> {
+  const prefix = getAuthPrefix();
+  if (!prefix) return;
+  try {
+    await fetch(`${prefix}/logout`, { method: "POST", credentials: "include" });
+  } catch {
+    /* ignore */
+  }
+}
+
+/** URL mở SSO (redirect ngoài) khi backend cấu hình QUANTIS_SSO_REDIRECT_URL. */
+export function getSsoLoginUrl(): string {
+  const prefix = getAuthPrefix();
+  if (!prefix) return "";
+  return `${prefix}/sso`;
+}
+
+type PortalGlobals = Window & {
+  __WRITE_API_BASE__?: string;
+  __PORTAL_USER__?: { id?: string };
+  __QUANTIS_PORTAL_EMBED__?: boolean;
+  __PORTAL_BASE_PATH__?: string;
+};
+
+/**
+ * Đang chạy trong ngữ cảnh AI Portal (embed), không dùng form đăng nhập Quantis standalone.
+ * Nhận diện theo (bất kỳ): Writium `__WRITE_API_BASE__`, user inject `__PORTAL_USER__`, cờ `__QUANTIS_PORTAL_EMBED__`,
+ * iframe + `__PORTAL_BASE_PATH__`, hoặc URL chứa `/embed/quantis` (gói cài Portal).
+ * Portal có thể set `window.__QUANTIS_PORTAL_EMBED__ = true` nếu không dùng các tín hiệu trên.
+ */
+export function isPortalEmbed(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as PortalGlobals;
+  if (w.__QUANTIS_PORTAL_EMBED__ === false) return false;
+  if (w.__QUANTIS_PORTAL_EMBED__ === true) return true;
+  if (w.__WRITE_API_BASE__?.trim()) return true;
+  const pid = w.__PORTAL_USER__?.id;
+  if (pid != null && String(pid).trim() !== "") return true;
+  if (w.parent !== w && w.__PORTAL_BASE_PATH__?.trim()) return true;
+  try {
+    if (/\/embed\/quantis/i.test(w.location.pathname)) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/** User Portal inject (__PORTAL_USER__) khi mở embed. */
+export function getPortalUserFromWindow(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  const u = (window as { __PORTAL_USER__?: { id?: string; email?: string; name?: string } }).__PORTAL_USER__;
+  if (!u || typeof u.id !== "string" || !u.id.trim()) return null;
+  return {
+    id: u.id.trim(),
+    email: typeof u.email === "string" ? u.email : "",
+    name: typeof u.name === "string" ? u.name : u.email,
+  };
 }
 
 /** URL backend Python mặc định khi chạy trên research.neu.edu.vn (phân tích định lượng). */
@@ -50,6 +217,7 @@ export async function getQuantisSettings(baseUrl?: string): Promise<import("./st
       archiveUrl: data.archiveUrl ?? null,
       archiveFileUrl: data.archiveFileUrl ?? null,
       aiApiUrl: data.aiApiUrl ?? null,
+      ollamaUpstreamUrl: data.ollamaUpstreamUrl ?? null,
       defaultAiModel: data.defaultAiModel ?? null,
     };
   } catch {
@@ -502,19 +670,19 @@ export async function analyzeVIF(rows: string[][], xCols: string[]): Promise<Rec
   }
 }
 
-/** Phân tích: Mediation (X→M→Y). */
+/** Phân tích: Mediation (X→M→Y; nhiều M = trung gian song song). */
 export async function analyzeMediation(
   rows: string[][],
   xCol: string,
-  mCol: string,
+  mCols: string[],
   yCol: string
-): Promise<{ a: number; b: number; c: number; cPrime: number; aSE: number; bSE: number; cSE: number; cPrimeSE: number; aP: number; bP: number; cP: number; cPrimeP: number; indirectEffect: number; pctMediated: number } | null> {
+): Promise<MediationResult | null> {
   try {
     const res = await fetch(`${getANALYZE_BASE()}/mediation`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      body: JSON.stringify({ rows, xCol, mCol, yCol }),
+      body: JSON.stringify({ rows, xCol, mCols, yCol }),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -1288,18 +1456,18 @@ function normalizeOllamaApiBase(url: string): string {
   return u.endsWith("/v1") ? u : `${u}/v1`;
 }
 
-/** Base URL API AI (Ollama): Cài đặt → env VITE_OLLAMA_URL → proxy qua backend (nếu có) → research.neu.edu.vn → localhost. */
+/**
+ * Base URL API AI (OpenAI-compatible) mà **trình duyệt** gọi tới — luôn là backend Node (proxy), không gọi thẳng Ollama.
+ * Khi `getBase()` là gốc API đã mount (vd. `https://host/api/quantis/backend`), nối thêm `/api/quantis/ollama` vì
+ * trong app Express route proxy nằm dưới path đó; reverse proxy giữ nguyên path → URL có thể trông lặp `/api/quantis` nhưng đúng với cách deploy.
+ * Ollama thật chỉ do **Node** gọi theo `ollamaUpstreamUrl` / `OLLAMA_URL`.
+ * Không có backend: dev dùng `VITE_OLLAMA_URL` hoặc mặc định localhost:11434.
+ */
 export function getAiApiBase(): string {
-  const stored = loadAiApiUrl();
-  if (stored != null && String(stored).trim() !== "") return normalizeOllamaApiBase(stored);
-  const env = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_OLLAMA_URL?: string } }).env?.VITE_OLLAMA_URL);
-  if (env != null && env !== false && String(env).trim() !== "") return normalizeOllamaApiBase(String(env));
-  if (isResearchNeu()) return RESEARCH_NEU_OLLAMA;
-  const backendBase = loadBackendApiUrl();
-  if (backendBase != null && String(backendBase).trim() !== "") {
-    const b = String(backendBase).trim().replace(/\/+$/, "");
-    return `${b}/api/quantis/ollama/v1`;
-  }
+  const b = getBase().replace(/\/+$/, "");
+  if (b) return normalizeOllamaApiBase(`${b}/api/quantis/ollama`);
+  const envOllama = (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_OLLAMA_URL?: string } }).env?.VITE_OLLAMA_URL);
+  if (envOllama != null && envOllama !== false && String(envOllama).trim() !== "") return normalizeOllamaApiBase(String(envOllama));
   return DEFAULT_OLLAMA;
 }
 
@@ -1352,6 +1520,21 @@ export async function getOllamaModels(apiBase: string): Promise<string[]> {
     return list
   } catch {
     return []
+  }
+}
+
+/** Kiểm tra proxy Ollama trên backend Quantis (`GET .../api/quantis/ollama/api/tags`). */
+export async function checkOllamaProxyAvailable(backendBase: string): Promise<boolean> {
+  const base = (backendBase || "").replace(/\/+$/, "");
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/api/quantis/ollama/api/tags`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
