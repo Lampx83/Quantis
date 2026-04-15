@@ -706,9 +706,9 @@ async def analyze_cfa(body: CFABody):
     try:
         result = run_cfa(body.rows, body.factorSpec)
         if result is None:
-            raise HTTPException(status_code=400, detail="Cấu hình nhân tố không hợp lệ")
+            raise HTTPException(status_code=400, detail="Không chạy được CFA (dữ liệu hoặc mô hình không hợp lệ).")
         if result.get("error"):
-            raise HTTPException(status_code=400, detail=result["error"])
+            raise HTTPException(status_code=400, detail=str(result["error"]))
         return {"result": result}
     except HTTPException:
         raise

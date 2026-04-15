@@ -4058,7 +4058,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
     setCfaResult(null);
     try {
       const res = await quantisApi.analyzeCFA(rows, factorSpec);
-      setCfaResult(res ?? null);
+      setCfaResult(res);
     } finally {
       setCfaRunning(false);
     }

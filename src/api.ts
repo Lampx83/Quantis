@@ -256,6 +256,26 @@ function getHeaders(): HeadersInit {
   return { "Content-Type": "application/json" };
 }
 
+/** Chi tiết lỗi FastAPI / proxy phân tích (detail string hoặc mảng validation). */
+function formatAnalyzeErrorJson(json: unknown, httpStatus: number): string {
+  if (!json || typeof json !== "object") return `Phân tích thất bại (HTTP ${httpStatus}).`;
+  const j = json as { detail?: unknown; error?: unknown };
+  const d = j.detail ?? j.error;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    const parts = d.map((x) => {
+      if (x && typeof x === "object" && "msg" in x) return String((x as { msg: string }).msg);
+      try {
+        return JSON.stringify(x);
+      } catch {
+        return String(x);
+      }
+    });
+    return parts.filter(Boolean).join("; ") || `Phân tích thất bại (HTTP ${httpStatus}).`;
+  }
+  return `Phân tích thất bại (HTTP ${httpStatus}).`;
+}
+
 export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> {
   const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
   if (!base) return false;
@@ -738,7 +758,7 @@ export async function analyzePathAnalysis(
   }
 }
 
-/** Phân tích: CFA — Confirmatory Factor Analysis (AMOS/SmartPLS-style). */
+/** Phân tích: CFA — Confirmatory Factor Analysis (AMOS/SmartPLS-style). Luôn trả về object (có `error` khi lỗi mạng/HTTP/máy chủ). */
 export async function analyzeCFA(
   rows: string[][],
   factorSpec: Record<string, string[]>
@@ -749,19 +769,38 @@ export async function analyzeCFA(
   n?: number;
   model?: string;
   error?: string;
-} | null> {
+}> {
+  const base = getANALYZE_BASE();
+  if (!base) {
+    return { error: "Chưa cấu hình URL backend Quantis — không gọi được phân tích CFA." };
+  }
   try {
-    const res = await fetch(`${getANALYZE_BASE()}/cfa`, {
+    const res = await fetch(`${base}/cfa`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
       body: JSON.stringify({ rows, factorSpec }),
     });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json?.result ?? null;
+    const json: unknown = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { error: formatAnalyzeErrorJson(json, res.status) };
+    }
+    if (json && typeof json === "object" && "result" in json) {
+      const r = (json as { result: unknown }).result;
+      if (r && typeof r === "object") {
+        return r as {
+          loadings?: Array<{ factor: string; indicator: string; estimate: number; se: number; z: number; pValue: number }>;
+          factorCovariances?: Array<{ factor1: string; factor2: string; covariance: number; se: number }>;
+          fitIndices?: Record<string, number | string>;
+          n?: number;
+          model?: string;
+          error?: string;
+        };
+      }
+    }
+    return { error: "Phản hồi CFA không hợp lệ (thiếu result)." };
   } catch {
-    return null;
+    return { error: "Không kết nối được backend phân tích (CFA)." };
   }
 }
 

@@ -22,6 +22,28 @@ def _rows_to_df(rows: list, max_rows: int = None) -> pd.DataFrame:
     return df
 
 
+def _semopy_cell_float(val, default: float = 0.0) -> float:
+    """semopy inspect() dùng '-' cho SE/z/p của chỉ số cố định thang đo — không được float('-')."""
+    if val is None:
+        return default
+    if isinstance(val, (int, float)) and not (isinstance(val, float) and np.isnan(val)):
+        return float(val)
+    s = str(val).strip()
+    if s in ("", "-", "—", ".", "..", "nan", "NaN", "NA", "N/A", "<NA>"):
+        return default
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return default
+
+
+def _semopy_std_err(row) -> float:
+    for k in ("Std. Err", "Std err", "Std. Error", "Std Error", "se", "SE"):
+        if k in row.index and row.get(k) is not None:
+            return _semopy_cell_float(row.get(k), 0.0)
+    return 0.0
+
+
 def run_descriptive(rows: list) -> list:
     df = _rows_to_df(rows)
     out = []
@@ -766,21 +788,21 @@ def run_cfa(rows: list, factor_spec: dict):
     except ImportError:
         return {"error": "Thư viện semopy chưa được cài. Chạy: pip install semopy"}
     if not factor_spec or not isinstance(factor_spec, dict):
-        return None
+        return {"error": "Thiếu hoặc sai định dạng cấu hình nhân tố (factorSpec)."}
     all_indicators = []
     for f, inds in factor_spec.items():
         if not inds or not isinstance(inds, list):
-            return None
+            return {"error": f'Nhân tố "{f}" cần danh sách chỉ báo (ít nhất một cột).'}
         for i in inds:
             if i not in all_indicators:
                 all_indicators.append(i)
     df = _rows_to_df(rows)
     for c in all_indicators:
         if c not in df.columns:
-            return None
+            return {"error": f'Không tìm thấy cột "{c}" trong dữ liệu (kiểm tra tên cột trùng với header).'}
     df = df[all_indicators].apply(pd.to_numeric, errors="coerce").dropna()
     if len(df) < 10:
-        return None
+        return {"error": f"Cần ít nhất 10 quan sát hợp lệ (sau khi loại giá trị thiếu/không số) cho CFA; hiện có {len(df)}."}
     # Build lavaan-like model: F =~ i1 + i2 + i3; F1 ~~ F2
     lines = []
     for f, inds in factor_spec.items():
@@ -795,22 +817,34 @@ def run_cfa(rows: list, factor_spec: dict):
         mod.fit(df)
         # Parameter estimates (loadings, etc.) — semopy inspect() returns DataFrame
         est = mod.inspect()
+        factors_set = set(factor_spec.keys())
+        inds_set = set(all_indicators)
         loadings = []
         for _, row in est.iterrows():
-            op = str(row.get("op", ""))
-            if op == "~" or op == "=~":
-                lval = row.get("lval", "")
-                rval = row.get("rval", "")
-                if pd.isna(lval) or pd.isna(rval):
-                    continue
-                loadings.append({
-                    "factor": str(lval),
-                    "indicator": str(rval),
-                    "estimate": float(row.get("Estimate", row.get("estimate", 0))),
-                    "se": float(row.get("Std err", row.get("se", 0))),
-                    "z": float(row.get("z-value", row.get("z", 0))),
-                    "pValue": float(row.get("p-value", row.get("pvalue", 1))),
-                })
+            op = str(row.get("op", "")).strip()
+            if op not in ("~", "=~"):
+                continue
+            lval = row.get("lval", "")
+            rval = row.get("rval", "")
+            if pd.isna(lval) or pd.isna(rval):
+                continue
+            ls, rs = str(lval).strip(), str(rval).strip()
+            # semopy: thường là chỉ báo ~ nhân tố (lval = indicator, rval = latent)
+            if rs in factors_set and ls in inds_set:
+                fac_name, ind_name = rs, ls
+            elif ls in factors_set and rs in inds_set:
+                fac_name, ind_name = ls, rs
+            else:
+                continue
+            estv = row.get("Estimate", row.get("estimate", 0))
+            loadings.append({
+                "factor": fac_name,
+                "indicator": ind_name,
+                "estimate": _semopy_cell_float(estv, 0.0),
+                "se": _semopy_std_err(row),
+                "z": _semopy_cell_float(row.get("z-value", row.get("z", 0)), 0.0),
+                "pValue": _semopy_cell_float(row.get("p-value", row.get("pvalue", 1)), 1.0),
+            })
         factor_cov = []
         for _, row in est.iterrows():
             op = str(row.get("op", ""))
@@ -820,8 +854,8 @@ def run_cfa(rows: list, factor_spec: dict):
                     factor_cov.append({
                         "factor1": str(lval),
                         "factor2": str(rval),
-                        "covariance": float(row.get("Estimate", row.get("estimate", 0))),
-                        "se": float(row.get("Std err", row.get("se", 0))),
+                        "covariance": _semopy_cell_float(row.get("Estimate", row.get("estimate", 0)), 0.0),
+                        "se": _semopy_std_err(row),
                     })
         # Fit indices: calc_stats returns SEMStatistics or dict-like
         try:
