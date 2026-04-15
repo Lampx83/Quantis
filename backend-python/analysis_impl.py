@@ -44,6 +44,30 @@ def _semopy_std_err(row) -> float:
     return 0.0
 
 
+def _json_safe_cfa_fit_value(v):
+    """FastAPI JSON không chấp nhận nan/inf; chuyển thành None."""
+    if v is None:
+        return None
+    if isinstance(v, (bool, np.bool_)):
+        return bool(v)
+    if isinstance(v, (int, np.integer)):
+        return int(v)
+    if isinstance(v, (float, np.floating)):
+        x = float(v)
+        if np.isnan(x) or np.isinf(x):
+            return None
+        return x
+    if isinstance(v, str):
+        return v
+    try:
+        x = float(v)
+        if np.isnan(x) or np.isinf(x):
+            return None
+        return x
+    except (TypeError, ValueError):
+        return str(v)
+
+
 def run_descriptive(rows: list) -> list:
     df = _rows_to_df(rows)
     out = []
@@ -868,8 +892,8 @@ def run_cfa(rows: list, factor_spec: dict):
                 fit = stats_df.iloc[0].to_dict() if len(stats_df) > 0 else {}
             elif isinstance(stats_df, dict):
                 fit = stats_df
-            # Normalize keys for frontend
-            fit = {str(k): (float(v) if isinstance(v, (int, float)) else v) for k, v in fit.items()}
+            # Chuẩn hóa key + loại nan/inf (tránh 500 khi json.dumps)
+            fit = {str(k): _json_safe_cfa_fit_value(v) for k, v in fit.items()}
         except Exception:
             fit = {}
         return {

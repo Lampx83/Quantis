@@ -4239,6 +4239,18 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
         </section>
       )}
 
+      {!analysisBackendAvailable && selectedDataset && (
+        <section className="rounded-lg border border-dashed border-amber-300/80 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-950/20 p-4 mb-6 text-sm">
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Sao không thấy Path analysis, CFA, PLS-SEM?</h3>
+          <p className="text-neutral-700 dark:text-neutral-300 mb-2">
+            Ba phần này chỉ hiện khi Quantis <strong>đã kết nối backend phân tích Python</strong> (semopy). Mediation và Moderation ở trên vẫn dùng được vì có thể chạy ngay trên trình duyệt.
+          </p>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400">
+            Kiểm tra menu <strong className="text-neutral-800 dark:text-neutral-200">⋮ → Cấu hình kết nối</strong> (mục Backend phân tích / Python). Trên máy chủ, service Node cần <code className="rounded bg-neutral-200/90 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">ANALYZE_PYTHON_URL</code> trỏ tới dịch vụ <code className="rounded bg-neutral-200/90 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">backend-python</code> của Quantis.
+          </p>
+        </section>
+      )}
+
       {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
         <section className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-900/10 p-4 mb-6">
           <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Path analysis (AMOS-style — biến quan sát)</h3>
