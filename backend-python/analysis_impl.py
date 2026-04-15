@@ -912,10 +912,12 @@ def run_pls_sem(rows: list, outer_model: dict, inner_paths: list[dict], n_bootst
     """
     outer_model: { "LV1": ["ind1", "ind2", "ind3"], "LV2": ["ind4", "ind5"] } — reflective.
     inner_paths: [ { "from": "LV1", "to": "LV2" }, ... ] — structural paths.
-    Returns latent scores, path coefficients, R², loadings, bootstrap SE/CI, HTMT (if multiple LVs).
+
+    Ghi chú: ước lượng nội bộ dùng điểm latent = trung bình chỉ báo đã chuẩn hóa và loading = tương quan
+    chỉ báo–composite (xấp xỉ), không phải vòng lặp PLS đầy đủ như SmartPLS — AVE/CR/HTMT/Fornell–Larcker
+    vì thế có thể lệch so với SmartPLS dù cùng dữ liệu; so sánh báo cáo nên dùng một phần mềm nhất quán.
     """
     from sklearn.preprocessing import StandardScaler
-    from sklearn.cross_decomposition import PLSRegression
 
     if not outer_model or not inner_paths:
         return None
@@ -999,11 +1001,73 @@ def run_pls_sem(rows: list, outer_model: dict, inner_paths: list[dict], n_bootst
                 pc["pValue"] = float(2 * (1 - scipy_stats.t.cdf(abs(pc["tStat"]), n - len([x for x in path_coefs if x["to"] == pc["to"]]) - 1)))
             pc["ciLower"] = float(np.percentile(arr, 2.5))
             pc["ciUpper"] = float(np.percentile(arr, 97.5))
-    # Fornell-Larcker: sqrt(AVE) per LV; AVE = mean of squared loadings
+    # AVE, √(AVE), CR (composite reliability — Dillon–Goldstein / ρ_c) theo loading hiện tại
     avg_load = {}
+    ave_out = {}
+    cr_out = {}
     for lv in outer_model:
-        ld = [x["loading"] ** 2 for x in loadings_out if x["latent"] == lv]
-        avg_load[lv] = float(np.sqrt(np.mean(ld))) if ld else 0
+        ld = [x["loading"] for x in loadings_out if x["latent"] == lv]
+        if not ld:
+            avg_load[lv] = 0.0
+            ave_out[lv] = 0.0
+            cr_out[lv] = None
+            continue
+        lam = np.array(ld, dtype=float)
+        ave = float(np.mean(lam**2))
+        ave_out[lv] = ave
+        avg_load[lv] = float(np.sqrt(ave)) if ave >= 0 else 0.0
+        s = float(np.sum(lam))
+        err = float(np.sum(1.0 - lam**2))
+        cr_out[lv] = float((s**2) / (s**2 + err)) if (s**2 + err) > 1e-12 else None
+
+    lv_order = list(outer_model.keys())
+    # Ma trận Fornell–Larcker: đường chéo = √(AVE), ngoài đường chéo = tương quan giữa các điểm composite
+    fl_matrix = []
+    corr_lv = lv_df[lv_order].corr().values if len(lv_order) > 1 else np.array([[1.0]])
+    for i, li in enumerate(lv_order):
+        row = []
+        for j, lj in enumerate(lv_order):
+            if i == j:
+                row.append(avg_load.get(li, 0.0))
+            else:
+                row.append(float(corr_lv[i, j]))
+        fl_matrix.append(row)
+
+    # HTMT (Henseler et al. 2015): chỉ báo đã chuẩn hóa trong df.columns
+    R = np.corrcoef(X.T)
+    col_ix = {c: k for k, c in enumerate(df.columns.tolist())}
+
+    def _monotrait_mean(indices: list[int]) -> float | None:
+        if len(indices) < 2:
+            return None
+        vals = []
+        for a in range(len(indices)):
+            for b in range(a + 1, len(indices)):
+                vals.append(float(R[indices[a], indices[b]]))
+        return float(np.mean(vals)) if vals else None
+
+    block_idx = {lv: [col_ix[c] for c in inds if c in col_ix] for lv, inds in outer_model.items()}
+    htmt_matrix = []
+    for i, li in enumerate(lv_order):
+        row_ht = []
+        for j, lj in enumerate(lv_order):
+            if i == j:
+                row_ht.append(None)
+                continue
+            idx_i, idx_j = block_idx[li], block_idx[lj]
+            if len(idx_i) < 1 or len(idx_j) < 1:
+                row_ht.append(None)
+                continue
+            het = [float(R[gi, gj]) for gi in idx_i for gj in idx_j]
+            het_m = float(np.mean(het)) if het else None
+            m_i = _monotrait_mean(idx_i)
+            m_j = _monotrait_mean(idx_j)
+            if het_m is None or m_i is None or m_j is None or m_i <= 0 or m_j <= 0:
+                row_ht.append(None)
+            else:
+                row_ht.append(float(het_m / np.sqrt(m_i * m_j)))
+        htmt_matrix.append(row_ht)
+
     return {
         "pathCoefficients": path_coefs,
         "loadings": loadings_out,
@@ -1011,6 +1075,13 @@ def run_pls_sem(rows: list, outer_model: dict, inner_paths: list[dict], n_bootst
         "n": n,
         "bootstrapSamples": n_bootstrap,
         "fornellLarcker": avg_load,
+        "ave": ave_out,
+        "compositeReliability": cr_out,
+        "fornellLarckerConstructs": lv_order,
+        "fornellLarckerMatrix": fl_matrix,
+        "htmtConstructs": lv_order,
+        "htmtMatrix": htmt_matrix,
+        "estimationNote": "composite_mean_reflective",
     }
 
 

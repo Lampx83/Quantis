@@ -3998,7 +3998,20 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
   // PLS-SEM
   const [plsOuter, setPlsOuter] = useState<Array<{ lv: string; indicators: string[] }>>([{ lv: "LV1", indicators: [] }]);
   const [plsInner, setPlsInner] = useState<Array<{ from: string; to: string }>>([]);
-  const [plsResult, setPlsResult] = useState<{ pathCoefficients: Array<{ from: string; to: string; coefficient: number; se?: number; tStat?: number; pValue?: number; ciLower?: number; ciUpper?: number }>; loadings: Array<{ latent: string; indicator: string; loading: number }>; r2: Record<string, number>; n: number; fornellLarcker: Record<string, number> } | null>(null);
+  const [plsResult, setPlsResult] = useState<{
+    pathCoefficients: Array<{ from: string; to: string; coefficient: number; se?: number; tStat?: number; pValue?: number; ciLower?: number; ciUpper?: number }>;
+    loadings: Array<{ latent: string; indicator: string; loading: number }>;
+    r2: Record<string, number>;
+    n: number;
+    fornellLarcker: Record<string, number>;
+    ave?: Record<string, number>;
+    compositeReliability?: Record<string, number | null>;
+    fornellLarckerConstructs?: string[];
+    fornellLarckerMatrix?: number[][];
+    htmtConstructs?: string[];
+    htmtMatrix?: (number | null)[][];
+    estimationNote?: string;
+  } | null>(null);
   const [plsRunning, setPlsRunning] = useState(false);
   const [semLoading, setSemLoading] = useState<string | null>(null);
 
@@ -4352,6 +4365,9 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
         <section className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/30 dark:bg-orange-900/10 p-4 mb-6">
           <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">PLS-SEM (SmartPLS-style)</h3>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Mô hình ngoại (construct → chỉ báo), mô hình trong (đường path giữa các construct).</p>
+          <p className="text-xs text-amber-800/90 dark:text-amber-200/90 mb-2 rounded border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/80 dark:bg-amber-950/30 px-2 py-1.5">
+            Quantis ước lượng latent bằng trung bình chỉ báo đã chuẩn hóa và loading = tương quan chỉ báo–composite (không phải vòng lặp PLS đầy đủ như SmartPLS). Vì vậy hệ số path, R², AVE, CR, Fornell–Larcker và HTMT có thể khác SmartPLS dù cùng dữ liệu; nên thống nhất một công cụ khi báo cáo chính thức.
+          </p>
           <p className="text-xs text-neutral-500 mb-2">Ngoại: mỗi construct gắn với các biến chỉ báo. Trong: thêm đường from → to.</p>
           {plsOuter.map((o, idx) => (
             <div key={idx} className="flex flex-wrap gap-2 items-center mb-2">
@@ -4400,7 +4416,94 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                 </tbody>
               </table>
               <p className="p-2 border-t text-neutral-600 dark:text-neutral-400">R²: {Object.entries(plsResult.r2).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>
-              {plsResult.fornellLarcker && Object.keys(plsResult.fornellLarcker).length > 0 && <p className="p-2 text-neutral-600 dark:text-neutral-400">Fornell-Larcker √AVE: {Object.entries(plsResult.fornellLarcker).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>}
+              {plsResult.ave && Object.keys(plsResult.ave).length > 0 && (
+                <div className="p-2 border-t">
+                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">AVE và độ tin cậy tổng hợp (CR, ρ_c)</p>
+                  <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600">
+                    <thead>
+                      <tr className="bg-neutral-100 dark:bg-neutral-900">
+                        <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-left">Construct</th>
+                        <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">AVE</th>
+                        <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">CR</th>
+                        <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">√AVE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.keys(plsResult.ave).map((lv) => (
+                        <tr key={lv}>
+                          <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 font-medium">{lv}</td>
+                          <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{plsResult.ave![lv].toFixed(3)}</td>
+                          <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">
+                            {plsResult.compositeReliability?.[lv] != null ? (plsResult.compositeReliability![lv] as number).toFixed(3) : "—"}
+                          </td>
+                          <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right tabular-nums">{(plsResult.fornellLarcker[lv] ?? 0).toFixed(3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {plsResult.fornellLarckerConstructs && plsResult.fornellLarckerMatrix && plsResult.fornellLarckerConstructs.length > 0 && (
+                <div className="p-2 border-t overflow-x-auto">
+                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">Fornell–Larcker (đường chéo = √AVE; còn lại = tương quan composite)</p>
+                  <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600">
+                    <thead>
+                      <tr className="bg-neutral-100 dark:bg-neutral-900">
+                        <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-left" />
+                        {plsResult.fornellLarckerConstructs.map((c) => (
+                          <th key={c} className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-center">{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plsResult.fornellLarckerConstructs.map((rowLv, i) => (
+                        <tr key={rowLv}>
+                          <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 font-medium">{rowLv}</td>
+                          {plsResult.fornellLarckerConstructs!.map((_, j) => (
+                            <td key={`${i}-${j}`} className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-center tabular-nums">
+                              {j > i ? "" : (plsResult.fornellLarckerMatrix![i][j] != null ? plsResult.fornellLarckerMatrix![i][j].toFixed(3) : "—")}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {plsResult.htmtConstructs && plsResult.htmtMatrix && plsResult.htmtConstructs.length > 1 && (
+                <div className="p-2 border-t overflow-x-auto">
+                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">HTMT (Heterotrait–Monotrait)</p>
+                  <p className="text-neutral-500 text-xs mb-1">Cần ≥2 chỉ báo mỗi construct để đủ cặp monotrait; ô trống = không tính được.</p>
+                  <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600">
+                    <thead>
+                      <tr className="bg-neutral-100 dark:bg-neutral-900">
+                        <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-left" />
+                        {plsResult.htmtConstructs.map((c) => (
+                          <th key={c} className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-center">{c}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plsResult.htmtConstructs.map((rowLv, i) => (
+                        <tr key={rowLv}>
+                          <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 font-medium">{rowLv}</td>
+                          {plsResult.htmtConstructs!.map((_, j) => (
+                            <td key={`h-${i}-${j}`} className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-center tabular-nums">
+                              {j >= i ? "" : (() => {
+                                const v = plsResult.htmtMatrix![i][j];
+                                return v == null ? "—" : v.toFixed(3);
+                              })()}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {plsResult.fornellLarcker && Object.keys(plsResult.fornellLarcker).length > 0 && !plsResult.fornellLarckerMatrix && (
+                <p className="p-2 text-neutral-600 dark:text-neutral-400">Fornell-Larcker √AVE (chỉ đường chéo): {Object.entries(plsResult.fornellLarcker).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>
+              )}
               {plsResult.loadings && plsResult.loadings.length > 0 && <p className="p-2 text-neutral-500 text-xs">Loadings: {plsResult.loadings.slice(0, 8).map((l) => `${l.indicator}→${l.latent}=${l.loading.toFixed(2)}`).join("; ")}{plsResult.loadings.length > 8 ? " ..." : ""}</p>}
             </div>
           )}

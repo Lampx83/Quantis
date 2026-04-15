@@ -817,6 +817,13 @@ export async function analyzePLSSEM(
   n: number;
   bootstrapSamples: number;
   fornellLarcker: Record<string, number>;
+  ave?: Record<string, number>;
+  compositeReliability?: Record<string, number | null>;
+  fornellLarckerConstructs?: string[];
+  fornellLarckerMatrix?: number[][];
+  htmtConstructs?: string[];
+  htmtMatrix?: (number | null)[][];
+  estimationNote?: string;
 } | null> {
   try {
     const res = await fetch(`${getANALYZE_BASE()}/pls-sem`, {
