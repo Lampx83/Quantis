@@ -20,6 +20,8 @@ const ARCHIVE_NEU_URL = (process.env.ARCHIVE_NEU_URL || "https://archive.neu.edu
 const OLLAMA_URL = String(process.env.OLLAMA_URL ?? "")
   .trim()
   .replace(/\/+$/, "");
+/** Khóa bảo mật gateway Ollama (Kong) — gửi kèm header `x-ollama-seckey`. Ưu tiên settings.ollamaSeckey. */
+const OLLAMA_SECKEY = String(process.env.OLLAMA_SECKEY ?? "").trim();
 const ARCHIVE_NEU_TOKEN = process.env.ARCHIVE_NEU_TOKEN || "";
 const DATA_DIR = path.join(__dirname, "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
@@ -196,7 +198,7 @@ function readSettings() {
       backendApiUrl: `${base}/api/quantis/backend`,
       archiveUrl: `${base}/api/archive`,
       archiveFileUrl: `${base}/api/archive-file`,
-      defaultAiModel: "qwen3:8b",
+      defaultAiModel: "qwen2.5:14b-instruct-ctx16k",
     };
   }
   return {};
@@ -478,8 +480,8 @@ function handlePostData(req, res) {
 
 function handleGetSettings(req, res) {
   try {
-    const settings = readSettings();
-    res.json(settings);
+    const { ollamaSeckey, ...safe } = readSettings();
+    res.json({ ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" });
   } catch (e) {
     console.error("GET settings:", e);
     res.status(500).json({ error: e.message });
@@ -496,10 +498,12 @@ function handlePutSettings(req, res) {
       archiveFileUrl: body.archiveFileUrl !== undefined ? (body.archiveFileUrl || null) : current.archiveFileUrl,
       aiApiUrl: body.aiApiUrl !== undefined ? (body.aiApiUrl || null) : current.aiApiUrl,
       ollamaUpstreamUrl: body.ollamaUpstreamUrl !== undefined ? (body.ollamaUpstreamUrl || null) : current.ollamaUpstreamUrl,
+      ollamaSeckey: body.ollamaSeckey !== undefined ? (String(body.ollamaSeckey || "").trim() || null) : (current.ollamaSeckey ?? null),
       defaultAiModel: body.defaultAiModel !== undefined ? (body.defaultAiModel || null) : current.defaultAiModel,
     };
     writeSettings(settings);
-    res.json({ status: "ok", settings });
+    const { ollamaSeckey, ...safe } = settings;
+    res.json({ status: "ok", settings: { ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" } });
   } catch (e) {
     console.error("PUT settings:", e);
     res.status(500).json({ error: e.message });
@@ -606,6 +610,17 @@ function effectiveOllamaUpstream() {
   return OLLAMA_URL.replace(/\/+$/, "").replace(/\/v1$/i, "");
 }
 
+function effectiveOllamaSeckey() {
+  try {
+    const s = readSettings();
+    const k = s.ollamaSeckey != null ? String(s.ollamaSeckey).trim() : "";
+    if (k) return k;
+  } catch (_) {
+    /* ignore */
+  }
+  return OLLAMA_SECKEY;
+}
+
 function createOllamaProxyHandler() {
   return async (req, res) => {
     const upstream = effectiveOllamaUpstream();
@@ -626,6 +641,12 @@ function createOllamaProxyHandler() {
     const headers = { ...req.headers, host };
     delete headers["origin"];
     delete headers["referer"];
+    delete headers["cookie"];
+    // Body được serialize lại bên dưới nên content-length cũ không còn đúng.
+    delete headers["content-length"];
+    delete headers["x-ollama-seckey"];
+    const seckey = effectiveOllamaSeckey();
+    if (seckey) headers["x-ollama-seckey"] = seckey;
     try {
       const opt = { method: req.method, headers, redirect: "follow" };
       if (req.method !== "GET" && req.method !== "HEAD") {

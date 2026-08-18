@@ -11,7 +11,7 @@ import { loadBackendApiUrl } from "./store";
 const RESEARCH_NEU_HOST = "research.neu.edu.vn";
 const RESEARCH_NEU_BACKEND = "https://research.neu.edu.vn/api/quantis/backend";
 const RESEARCH_NEU_BACKEND_PYTHON = "https://research.neu.edu.vn/api/quantis/backend-python";
-const RESEARCH_NEU_DEFAULT_MODEL = "qwen3:8b";
+const RESEARCH_NEU_DEFAULT_MODEL = "qwen2.5:14b-instruct-ctx16k";
 
 function isResearchNeu(): boolean {
   return typeof window !== "undefined" && window.location.hostname.toLowerCase() === RESEARCH_NEU_HOST;

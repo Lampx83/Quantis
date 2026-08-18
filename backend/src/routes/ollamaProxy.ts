@@ -7,6 +7,9 @@ const ENV_OLLAMA = String(process.env.OLLAMA_URL ?? "")
   .trim()
   .replace(/\/+$/, "")
 
+/** Khóa bảo mật của gateway Ollama (Kong) — gửi kèm header `x-ollama-seckey`. */
+const ENV_OLLAMA_SECKEY = String(process.env.OLLAMA_SECKEY ?? "").trim()
+
 function normalizeUpstream(raw: string): string {
   return String(raw || "")
     .trim()
@@ -14,33 +17,41 @@ function normalizeUpstream(raw: string): string {
     .replace(/\/v1$/i, "")
 }
 
-async function resolveOllamaUpstream(): Promise<string> {
+type OllamaUpstreamConfig = { upstream: string; seckey: string }
+
+async function resolveOllamaConfig(): Promise<OllamaUpstreamConfig> {
+  let upstream = ""
+  let seckey = ""
   try {
     const r = await query<{ settings: unknown }>(
       withSchema(`SELECT settings FROM __SCHEMA__.app_settings WHERE id = 1`)
     )
     const row = r.rows[0]
     const s = (row?.settings as Record<string, unknown>) || {}
-    const u = s.ollamaUpstreamUrl != null ? String(s.ollamaUpstreamUrl).trim() : ""
-    if (u) return normalizeUpstream(u)
+    if (s.ollamaUpstreamUrl != null) upstream = String(s.ollamaUpstreamUrl).trim()
+    if (s.ollamaSeckey != null) seckey = String(s.ollamaSeckey).trim()
   } catch {
     /* bảng chưa sẵn sàng hoặc lỗi DB */
   }
-  return normalizeUpstream(ENV_OLLAMA)
+  return {
+    upstream: normalizeUpstream(upstream || ENV_OLLAMA),
+    seckey: seckey || ENV_OLLAMA_SECKEY,
+  }
 }
 
 export function createOllamaProxyRouter(): Router {
   const r = Router({ mergeParams: true })
 
   r.use(async (req: Request, res: Response) => {
-    let upstream: string
+    let cfg: OllamaUpstreamConfig
     try {
-      upstream = await resolveOllamaUpstream()
+      cfg = await resolveOllamaConfig()
     } catch (e) {
       console.error("[quantis-api] ollama upstream:", e)
       res.status(503).json({ error: "Cannot resolve Ollama upstream" })
       return
     }
+    const upstream = cfg.upstream
     if (!upstream) {
       res.status(503).json({
         error: "Ollama upstream not configured",
@@ -62,6 +73,11 @@ export function createOllamaProxyRouter(): Router {
     const headers = { ...req.headers, host } as Record<string, string | string[] | undefined>
     delete headers.origin
     delete headers.referer
+    delete headers.cookie
+    // Body được serialize lại bên dưới nên độ dài cũ không còn đúng.
+    delete headers["content-length"]
+    delete headers["x-ollama-seckey"]
+    if (cfg.seckey) headers["x-ollama-seckey"] = cfg.seckey
 
     try {
       const opt: RequestInit = { method: req.method, headers: headers as HeadersInit, redirect: "follow" }

@@ -9,6 +9,8 @@ type ServerSettings = {
   aiApiUrl?: string | null
   /** URL gốc Ollama mà Node proxy tới (vd. http://127.0.0.1:11434), dùng chung mọi tài khoản */
   ollamaUpstreamUrl?: string | null
+  /** Khóa bảo mật gateway Ollama (header `x-ollama-seckey`). Chỉ ghi, không trả về khi GET. */
+  ollamaSeckey?: string | null
   defaultAiModel?: string | null
 }
 
@@ -25,6 +27,7 @@ export async function getSettings(_req: Request, res: Response): Promise<void> {
       archiveFileUrl: s.archiveFileUrl ?? null,
       aiApiUrl: s.aiApiUrl ?? null,
       ollamaUpstreamUrl: s.ollamaUpstreamUrl ?? null,
+      ollamaSeckeySet: String(s.ollamaSeckey ?? "").trim() !== "",
       defaultAiModel: s.defaultAiModel ?? null,
     })
   } catch (err: unknown) {
@@ -47,6 +50,11 @@ export async function putSettings(req: Request, res: Response): Promise<void> {
       if (body.archiveFileUrl !== undefined) next.archiveFileUrl = body.archiveFileUrl
       if (body.aiApiUrl !== undefined) next.aiApiUrl = body.aiApiUrl
       if (body.ollamaUpstreamUrl !== undefined) next.ollamaUpstreamUrl = body.ollamaUpstreamUrl
+      if (body.ollamaSeckey !== undefined) {
+        const key = body.ollamaSeckey == null ? "" : String(body.ollamaSeckey).trim()
+        if (key) next.ollamaSeckey = key
+        else delete next.ollamaSeckey
+      }
       if (body.defaultAiModel !== undefined) next.defaultAiModel = body.defaultAiModel
     }
     await query(
@@ -57,7 +65,8 @@ export async function putSettings(req: Request, res: Response): Promise<void> {
       ),
       [JSON.stringify(next)]
     )
-    res.json({ status: "ok", settings: next })
+    const { ollamaSeckey, ...safe } = next
+    res.json({ status: "ok", settings: { ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" } })
   } catch (err: unknown) {
     console.error("[quantis-api] putSettings:", err)
     res.status(500).json({ error: (err as Error).message })
