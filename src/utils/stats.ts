@@ -3,6 +3,7 @@
  */
 
 import type { DataProfile } from "../types";
+import { t } from "../i18n";
 
 const MAX_ROWS_STORED = 50000;
 
@@ -2257,7 +2258,7 @@ export interface SampleSizeRegressionResult {
 export function computeSampleSizeRegression(nPredictors: number, rule: "10" | "20" = "10"): SampleSizeRegressionResult {
   const mult = rule === "20" ? 20 : 10;
   const n = Math.max(20, nPredictors * mult + 10);
-  return { nRequired: n, nPredictors, rule: `n ≥ ${mult} × số biến + 10` };
+  return { nRequired: n, nPredictors, rule: `n ≥ ${mult} × ${t("stats.numVariables")} + 10` };
 }
 
 // --- Multiclass classification & explainability ---

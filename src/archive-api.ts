@@ -6,6 +6,7 @@
  */
 
 import { loadArchiveUrl, loadArchiveFileUrl, loadBackendApiUrl } from "./store";
+import { t } from "./i18n";
 
 const _env = typeof import.meta !== "undefined" ? (import.meta as { env?: { VITE_ARCHIVE_NEU_URL?: string; VITE_QUANTIS_API_URL?: string; VITE_RESEARCH_NEU_ARCHIVE?: string; VITE_RESEARCH_NEU_ARCHIVE_FILE?: string } }).env : undefined;
 const explicitBase = _env?.VITE_ARCHIVE_NEU_URL;
@@ -143,7 +144,7 @@ export async function searchDatasets(
       const body = await res.text();
       const target = res.headers.get("X-Archive-Target-URL");
       const method = res.headers.get("X-Archive-Target-Method") || "GET";
-      const reqLine = target ? `Backend gọi Archive: ${method} ${target}` : `Request: GET ${url}`;
+      const reqLine = target ? `${t("archiveApi.backendCalledArchive")}: ${method} ${target}` : `Request: GET ${url}`;
       throw new Error(`Archive search failed: ${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 200)}` : ""}\n${reqLine}`);
     }
     const json = (await res.json()) as { data?: unknown[]; items?: unknown[]; total?: number };
@@ -162,7 +163,7 @@ export async function searchDatasets(
     const body = await res.text();
     const target = res.headers.get("X-Archive-Target-URL");
     const method = res.headers.get("X-Archive-Target-Method") || "GET";
-    const reqLine = target ? `Backend gọi Archive: ${method} ${target}` : `Request: GET ${url}`;
+    const reqLine = target ? `${t("archiveApi.backendCalledArchive")}: ${method} ${target}` : `Request: GET ${url}`;
     throw new Error(`Archive list requests failed: ${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 200)}` : ""}\n${reqLine}`);
   }
   const json = (await res.json()) as { data?: unknown[]; total?: number };
@@ -192,7 +193,7 @@ export async function getRequestDetail(requestId: string): Promise<ArchiveReques
   if (!res.ok) {
     const target = res.headers.get("X-Archive-Target-URL");
     const method = res.headers.get("X-Archive-Target-Method") || "GET";
-    const reqLine = target ? `Backend gọi Archive: ${method} ${target}` : `Request: GET ${url}`;
+    const reqLine = target ? `${t("archiveApi.backendCalledArchive")}: ${method} ${target}` : `Request: GET ${url}`;
     throw new Error(`Archive request detail failed: ${res.status}\n${reqLine}`);
   }
   return res.json();
@@ -213,7 +214,7 @@ export async function getFilesByRequest(requestId: string): Promise<ArchiveFileI
   if (!res.ok) {
     const target = res.headers.get("X-Archive-Target-URL");
     const method = res.headers.get("X-Archive-Target-Method") || "GET";
-    const reqLine = target ? `Backend gọi Archive: ${method} ${target}` : `Request: GET ${url}`;
+    const reqLine = target ? `${t("archiveApi.backendCalledArchive")}: ${method} ${target}` : `Request: GET ${url}`;
     throw new Error(`Archive files list failed: ${res.status}\n${reqLine}`);
   }
   const data = await res.json();
@@ -237,7 +238,7 @@ export async function requestDownload(
   _requestId: string
 ): Promise<{ url?: string; blob?: Blob; text?: string }> {
   const id = String(fileId ?? "").trim();
-  if (!id) throw new Error("File ID trống. Kiểm tra API danh sách file trả về trường id/FileID.");
+  if (!id) throw new Error(t("archiveApi.emptyFileId"));
   const url = `${getEffectiveArchiveApi()}/files/download`;
   const res = await fetch(url, {
     method: "POST",
@@ -248,7 +249,7 @@ export async function requestDownload(
   if (!res.ok) {
     const target = res.headers.get("X-Archive-Target-URL");
     const method = res.headers.get("X-Archive-Target-Method") || "POST";
-    const reqLine = target ? `Backend gọi Archive: ${method} ${target} body: {"file_id":"${fileId}"}` : `Request: POST ${url} body: {"file_id":"${fileId}"}`;
+    const reqLine = target ? `${t("archiveApi.backendCalledArchive")}: ${method} ${target} body: {"file_id":"${fileId}"}` : `Request: POST ${url} body: {"file_id":"${fileId}"}`;
     throw new Error(`Archive download failed: ${res.status} ${res.statusText}\n${reqLine}`);
   }
 

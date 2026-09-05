@@ -3,6 +3,8 @@
  * Mỗi bộ có name, domain, description, tags (từ khóa tìm kiếm / loại phân tích) và getData() trả về [header, ...rows].
  */
 
+import { t } from "./i18n";
+
 export interface SampleDatasetDef {
   id: string;
   name: string;
@@ -24,10 +26,20 @@ function makeRows<T>(n: number, fn: (i: number) => T[]): T[][] {
 export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   {
     id: "edu-scores",
-    name: "Điểm học sinh (A/B)",
-    domain: "Giáo dục",
-    description: "Điểm kiểm tra hai nhóm phương pháp dạy (A/B). Có ô thiếu để demo Biến đổi. Thử: Thống kê mô tả, t-test hai mẫu độc lập, Mann-Whitney, ANOVA (theo lớp), biểu đồ box.",
-    tags: ["t-test", "Mann-Whitney", "ANOVA", "thống kê mô tả", "mô tả", "biến đổi", "missing", "giáo dục", "so sánh nhóm"],
+    name: t("sampleDatasets.eduScores.name"),
+    domain: t("sampleDatasets.eduScores.domain"),
+    description: t("sampleDatasets.eduScores.description"),
+    tags: [
+      t("sampleDatasets.eduScores.tags.0"),
+      t("sampleDatasets.eduScores.tags.1"),
+      t("sampleDatasets.eduScores.tags.2"),
+      t("sampleDatasets.eduScores.tags.3"),
+      t("sampleDatasets.eduScores.tags.4"),
+      t("sampleDatasets.eduScores.tags.5"),
+      t("sampleDatasets.eduScores.tags.6"),
+      t("sampleDatasets.eduScores.tags.7"),
+      t("sampleDatasets.eduScores.tags.8"),
+    ],
     rows: 80,
     columns: 5,
     getData: () => {
@@ -50,10 +62,18 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "sales-branch",
-    name: "Doanh thu theo chi nhánh",
-    domain: "Kinh doanh",
-    description: "Doanh thu, chi phí quảng cáo, lợi nhuận theo tháng/chi nhánh. Thử: Thống kê mô tả, Crosstab, tương quan Pearson/Spearman, hồi quy OLS, ANOVA (theo chi nhánh).",
-    tags: ["tương quan", "hồi quy", "OLS", "ANOVA", "crosstab", "mô tả", "kinh doanh"],
+    name: t("sampleDatasets.salesBranch.name"),
+    domain: t("sampleDatasets.salesBranch.domain"),
+    description: t("sampleDatasets.salesBranch.description"),
+    tags: [
+      t("sampleDatasets.salesBranch.tags.0"),
+      t("sampleDatasets.salesBranch.tags.1"),
+      t("sampleDatasets.salesBranch.tags.2"),
+      t("sampleDatasets.salesBranch.tags.3"),
+      t("sampleDatasets.salesBranch.tags.4"),
+      t("sampleDatasets.salesBranch.tags.5"),
+      t("sampleDatasets.salesBranch.tags.6"),
+    ],
     rows: 60,
     columns: 5,
     getData: () => {
@@ -70,10 +90,19 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "health-bmi",
-    name: "Chiều cao – Cân nặng",
-    domain: "Y tế",
-    description: "Số đo chiều cao, cân nặng theo nhóm tuổi và giới tính. Thử: Tương quan Pearson, hồi quy tuyến tính, ANOVA (theo tuổi_nhóm), Shapiro-Wilk, thống kê mô tả.",
-    tags: ["tương quan", "Pearson", "hồi quy", "OLS", "ANOVA", "Shapiro-Wilk", "mô tả", "y tế"],
+    name: t("sampleDatasets.healthBmi.name"),
+    domain: t("sampleDatasets.healthBmi.domain"),
+    description: t("sampleDatasets.healthBmi.description"),
+    tags: [
+      t("sampleDatasets.healthBmi.tags.0"),
+      t("sampleDatasets.healthBmi.tags.1"),
+      t("sampleDatasets.healthBmi.tags.2"),
+      t("sampleDatasets.healthBmi.tags.3"),
+      t("sampleDatasets.healthBmi.tags.4"),
+      t("sampleDatasets.healthBmi.tags.5"),
+      t("sampleDatasets.healthBmi.tags.6"),
+      t("sampleDatasets.healthBmi.tags.7"),
+    ],
     rows: 70,
     columns: 4,
     getData: () => {
@@ -89,10 +118,18 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "marketing-ab",
-    name: "Tỷ lệ chuyển đổi A/B",
-    domain: "Marketing",
-    description: "Phiên bản giao diện (A/B), chuyển đổi (Có/Không), thời gian xem, nguồn. Thử: Bảng chéo, Chi-square, Fisher exact, so sánh tỷ lệ, hồi quy logistic (chuyển đổi ~ thời_gian).",
-    tags: ["Chi-square", "crosstab", "Fisher", "logistic", "tỷ lệ", "A/B", "marketing"],
+    name: t("sampleDatasets.marketingAb.name"),
+    domain: t("sampleDatasets.marketingAb.domain"),
+    description: t("sampleDatasets.marketingAb.description"),
+    tags: [
+      t("sampleDatasets.marketingAb.tags.0"),
+      t("sampleDatasets.marketingAb.tags.1"),
+      t("sampleDatasets.marketingAb.tags.2"),
+      t("sampleDatasets.marketingAb.tags.3"),
+      t("sampleDatasets.marketingAb.tags.4"),
+      t("sampleDatasets.marketingAb.tags.5"),
+      t("sampleDatasets.marketingAb.tags.6"),
+    ],
     rows: 100,
     columns: 4,
     getData: () => {
@@ -108,10 +145,17 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "hr-salary",
-    name: "Lương theo phòng ban",
-    domain: "Nhân sự",
-    description: "Lương, thâm niên, bằng cấp, hiệu suất theo phòng (Kỹ thuật, Kinh doanh, Hành chính). Thử: ANOVA một nhân tố, Kruskal-Wallis, thống kê mô tả theo nhóm, hồi quy OLS, Levene.",
-    tags: ["ANOVA", "Kruskal-Wallis", "Levene", "hồi quy", "mô tả", "nhân sự"],
+    name: t("sampleDatasets.hrSalary.name"),
+    domain: t("sampleDatasets.hrSalary.domain"),
+    description: t("sampleDatasets.hrSalary.description"),
+    tags: [
+      t("sampleDatasets.hrSalary.tags.0"),
+      t("sampleDatasets.hrSalary.tags.1"),
+      t("sampleDatasets.hrSalary.tags.2"),
+      t("sampleDatasets.hrSalary.tags.3"),
+      t("sampleDatasets.hrSalary.tags.4"),
+      t("sampleDatasets.hrSalary.tags.5"),
+    ],
     rows: 65,
     columns: 5,
     getData: () => {
@@ -133,10 +177,15 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "retail-products",
-    name: "Doanh số theo sản phẩm",
-    domain: "Bán lẻ",
-    description: "Số lượng bán, đơn giá, doanh thu theo danh mục. Thử: Thống kê mô tả, Crosstab (danh_mục × khoảng doanh_thu), tương quan, biểu đồ cột.",
-    tags: ["mô tả", "crosstab", "tương quan", "bán lẻ"],
+    name: t("sampleDatasets.retailProducts.name"),
+    domain: t("sampleDatasets.retailProducts.domain"),
+    description: t("sampleDatasets.retailProducts.description"),
+    tags: [
+      t("sampleDatasets.retailProducts.tags.0"),
+      t("sampleDatasets.retailProducts.tags.1"),
+      t("sampleDatasets.retailProducts.tags.2"),
+      t("sampleDatasets.retailProducts.tags.3"),
+    ],
     rows: 90,
     columns: 5,
     getData: () => {
@@ -152,10 +201,18 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "survey-likert",
-    name: "Khảo sát mức độ hài lòng",
-    domain: "Khảo sát",
-    description: "Thang Likert 1–5 (câu_1 đến câu_5), nhóm tuổi. Thử: Độ tin cậy Cronbach alpha, EFA, thống kê mô tả, ANOVA/Kruskal-Wallis theo nhóm_tuổi.",
-    tags: ["Cronbach", "EFA", "phân tích nhân tố", "Likert", "mô tả", "ANOVA", "khảo sát"],
+    name: t("sampleDatasets.surveyLikert.name"),
+    domain: t("sampleDatasets.surveyLikert.domain"),
+    description: t("sampleDatasets.surveyLikert.description"),
+    tags: [
+      t("sampleDatasets.surveyLikert.tags.0"),
+      t("sampleDatasets.surveyLikert.tags.1"),
+      t("sampleDatasets.surveyLikert.tags.2"),
+      t("sampleDatasets.surveyLikert.tags.3"),
+      t("sampleDatasets.surveyLikert.tags.4"),
+      t("sampleDatasets.surveyLikert.tags.5"),
+      t("sampleDatasets.surveyLikert.tags.6"),
+    ],
     rows: 50,
     columns: 6,
     getData: () => {
@@ -173,10 +230,17 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "sport-performance",
-    name: "Thành tích chạy theo độ tuổi",
-    domain: "Thể thao",
-    description: "Thời gian chạy 5km, nhịp tim, giới tính theo độ tuổi. Thử: Tương quan, hồi quy, so sánh nhóm (t-test, ANOVA theo giới).",
-    tags: ["tương quan", "hồi quy", "t-test", "ANOVA", "mô tả", "thể thao"],
+    name: t("sampleDatasets.sportPerformance.name"),
+    domain: t("sampleDatasets.sportPerformance.domain"),
+    description: t("sampleDatasets.sportPerformance.description"),
+    tags: [
+      t("sampleDatasets.sportPerformance.tags.0"),
+      t("sampleDatasets.sportPerformance.tags.1"),
+      t("sampleDatasets.sportPerformance.tags.2"),
+      t("sampleDatasets.sportPerformance.tags.3"),
+      t("sampleDatasets.sportPerformance.tags.4"),
+      t("sampleDatasets.sportPerformance.tags.5"),
+    ],
     rows: 55,
     columns: 4,
     getData: () => {
@@ -191,10 +255,15 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "env-temp",
-    name: "Nhiệt độ – Độ ẩm",
-    domain: "Môi trường",
-    description: "Nhiệt độ và độ ẩm theo ngày, mùa. Thử: Tương quan, ANOVA theo mùa, thống kê mô tả, biểu đồ đường.",
-    tags: ["tương quan", "ANOVA", "mô tả", "môi trường"],
+    name: t("sampleDatasets.envTemp.name"),
+    domain: t("sampleDatasets.envTemp.domain"),
+    description: t("sampleDatasets.envTemp.description"),
+    tags: [
+      t("sampleDatasets.envTemp.tags.0"),
+      t("sampleDatasets.envTemp.tags.1"),
+      t("sampleDatasets.envTemp.tags.2"),
+      t("sampleDatasets.envTemp.tags.3"),
+    ],
     rows: 60,
     columns: 4,
     getData: () => {
@@ -211,10 +280,15 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "finance-quarterly",
-    name: "Lợi nhuận theo quý",
-    domain: "Tài chính",
-    description: "Doanh thu, chi phí, lợi nhuận theo năm và quý. Thử: Thống kê mô tả, ANOVA (theo quý/năm), xu hướng, hồi quy.",
-    tags: ["ANOVA", "hồi quy", "mô tả", "tài chính"],
+    name: t("sampleDatasets.financeQuarterly.name"),
+    domain: t("sampleDatasets.financeQuarterly.domain"),
+    description: t("sampleDatasets.financeQuarterly.description"),
+    tags: [
+      t("sampleDatasets.financeQuarterly.tags.0"),
+      t("sampleDatasets.financeQuarterly.tags.1"),
+      t("sampleDatasets.financeQuarterly.tags.2"),
+      t("sampleDatasets.financeQuarterly.tags.3"),
+    ],
     rows: 48,
     columns: 5,
     getData: () => {
@@ -229,10 +303,17 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "customer-seg",
-    name: "Phân khúc khách hàng",
-    domain: "CRM",
-    description: "Tuổi, thu nhập, số giao dịch, giá trị đơn, khu vực. Thử: K-means phân cụm, tương quan, thống kê mô tả theo nhóm, ANOVA theo khu_vực.",
-    tags: ["K-means", "phân cụm", "tương quan", "mô tả", "ANOVA", "CRM"],
+    name: t("sampleDatasets.customerSeg.name"),
+    domain: t("sampleDatasets.customerSeg.domain"),
+    description: t("sampleDatasets.customerSeg.description"),
+    tags: [
+      t("sampleDatasets.customerSeg.tags.0"),
+      t("sampleDatasets.customerSeg.tags.1"),
+      t("sampleDatasets.customerSeg.tags.2"),
+      t("sampleDatasets.customerSeg.tags.3"),
+      t("sampleDatasets.customerSeg.tags.4"),
+      t("sampleDatasets.customerSeg.tags.5"),
+    ],
     rows: 75,
     columns: 5,
     getData: () => {
@@ -249,10 +330,18 @@ export const SAMPLE_DATASETS: SampleDatasetDef[] = [
   },
   {
     id: "prepost-intervention",
-    name: "Đo trước / sau can thiệp",
-    domain: "Nghiên cứu",
-    description: "Điểm trước và sau can thiệp (hoặc kiểm soát), theo nhóm. Thử: t-test cặp (paired), Wilcoxon cặp, so sánh hai nhóm (t-test độc lập), thống kê mô tả.",
-    tags: ["t-test cặp", "paired", "Wilcoxon cặp", "trước sau", "can thiệp", "nghiên cứu", "mô tả"],
+    name: t("sampleDatasets.prepostIntervention.name"),
+    domain: t("sampleDatasets.prepostIntervention.domain"),
+    description: t("sampleDatasets.prepostIntervention.description"),
+    tags: [
+      t("sampleDatasets.prepostIntervention.tags.0"),
+      t("sampleDatasets.prepostIntervention.tags.1"),
+      t("sampleDatasets.prepostIntervention.tags.2"),
+      t("sampleDatasets.prepostIntervention.tags.3"),
+      t("sampleDatasets.prepostIntervention.tags.4"),
+      t("sampleDatasets.prepostIntervention.tags.5"),
+      t("sampleDatasets.prepostIntervention.tags.6"),
+    ],
     rows: 48,
     columns: 5,
     getData: () => {

@@ -6,6 +6,7 @@
 import type { Dataset, Workflow } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl } from "./store";
+import { t } from "./i18n";
 
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). Mặc định research.neu.edu.vn */
 const RESEARCH_NEU_HOST = "research.neu.edu.vn";
@@ -106,7 +107,7 @@ export async function authRegister(params: {
   name?: string;
 }): Promise<{ user: AuthUser } | { error: string }> {
   const prefix = getAuthPrefix();
-  if (!prefix) return { error: "Chưa cấu hình backend" };
+  if (!prefix) return { error: t("api.backendNotConfigured") };
   try {
     const res = await fetch(`${prefix}/register`, {
       method: "POST",
@@ -115,16 +116,16 @@ export async function authRegister(params: {
       body: JSON.stringify(params),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { error: data.error || "Đăng ký thất bại" };
+    if (!res.ok) return { error: data.error || t("api.registerFailed") };
     return { user: data.user };
   } catch {
-    return { error: "Lỗi kết nối" };
+    return { error: t("api.connectionError") };
   }
 }
 
 export async function authLogin(params: { email: string; password: string }): Promise<{ user: AuthUser } | { error: string }> {
   const prefix = getAuthPrefix();
-  if (!prefix) return { error: "Chưa cấu hình backend" };
+  if (!prefix) return { error: t("api.backendNotConfigured") };
   try {
     const res = await fetch(`${prefix}/login`, {
       method: "POST",
@@ -133,10 +134,10 @@ export async function authLogin(params: { email: string; password: string }): Pr
       body: JSON.stringify(params),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { error: data.error || "Đăng nhập thất bại" };
+    if (!res.ok) return { error: data.error || t("api.loginFailed") };
     return { user: data.user };
   } catch {
-    return { error: "Lỗi kết nối" };
+    return { error: t("api.connectionError") };
   }
 }
 
@@ -258,7 +259,7 @@ function getHeaders(): HeadersInit {
 
 /** Chi tiết lỗi FastAPI / proxy phân tích (detail string hoặc mảng validation). */
 function formatAnalyzeErrorJson(json: unknown, httpStatus: number): string {
-  if (!json || typeof json !== "object") return `Phân tích thất bại (HTTP ${httpStatus}).`;
+  if (!json || typeof json !== "object") return `${t("api.analysisFailed")} (HTTP ${httpStatus}).`;
   const j = json as { detail?: unknown; error?: unknown };
   const d = j.detail ?? j.error;
   if (typeof d === "string") return d;
@@ -271,9 +272,9 @@ function formatAnalyzeErrorJson(json: unknown, httpStatus: number): string {
         return String(x);
       }
     });
-    return parts.filter(Boolean).join("; ") || `Phân tích thất bại (HTTP ${httpStatus}).`;
+    return parts.filter(Boolean).join("; ") || `${t("api.analysisFailed")} (HTTP ${httpStatus}).`;
   }
-  return `Phân tích thất bại (HTTP ${httpStatus}).`;
+  return `${t("api.analysisFailed")} (HTTP ${httpStatus}).`;
 }
 
 export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> {
@@ -299,7 +300,7 @@ export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> 
 /** Gửi file lên backend để parse (Excel, ODS, SPSS, Stata, SAS, R). Cần backend Node + Python. */
 export async function parseFileViaBackend(file: File): Promise<{ rows: string[][]; format: string }> {
   const base = getBase();
-  if (!base) throw new Error("Backend chưa cấu hình. Cần cấu hình URL backend Quantis để import file ODS, SPSS, Stata, SAS, R.");
+  if (!base) throw new Error(t("api.backendNotConfiguredForImport"));
   const form = new FormData();
   form.append("file", file, file.name);
   const res = await fetch(`${base}/api/quantis/parse-file`, {
@@ -772,7 +773,7 @@ export async function analyzeCFA(
 }> {
   const base = getANALYZE_BASE();
   if (!base) {
-    return { error: "Chưa cấu hình URL backend Quantis — không gọi được phân tích CFA." };
+    return { error: t("api.cfaBackendNotConfigured") };
   }
   try {
     const res = await fetch(`${base}/cfa`, {
@@ -798,9 +799,9 @@ export async function analyzeCFA(
         };
       }
     }
-    return { error: "Phản hồi CFA không hợp lệ (thiếu result)." };
+    return { error: t("api.cfaInvalidResponse") };
   } catch {
-    return { error: "Không kết nối được backend phân tích (CFA)." };
+    return { error: t("api.cfaConnectionFailed") };
   }
 }
 
@@ -1234,7 +1235,7 @@ export async function analyzeFTestTwoSample(
     });
     if (!res.ok) {
       const err = (await res.json().catch(() => ({}))) as { detail?: string };
-      throw new Error(err.detail || res.statusText || "F-test lỗi");
+      throw new Error(err.detail || res.statusText || t("api.ftestError"));
     }
     const json = await res.json();
     return json?.result ?? null;
@@ -1723,5 +1724,5 @@ export async function aiComplete(apiBase: string, prompt: string, systemHint?: s
       if (attempt === 1 || !isRetryable) throw lastError
     }
   }
-  throw lastError || new Error("Lỗi kết nối AI")
+  throw lastError || new Error(t("api.aiConnectionError"))
 }

@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from "react";
 import { Sigma, Mail, Lock, User, Globe, X } from "lucide-react";
 import { authLogin, authRegister, type AuthConfig, type AuthUser } from "./api";
+import { t } from "./i18n";
 
 export function QuantAuthGate({
   config,
@@ -44,7 +45,7 @@ export function QuantAuthGate({
     e.preventDefault();
     setError(null);
     if (password.length < 6) {
-      setError("Mật khẩu tối thiểu 6 ký tự");
+      setError(t("auth.passwordMinLength"));
       return;
     }
     setLoading(true);
@@ -75,7 +76,7 @@ export function QuantAuthGate({
             <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">Quantis</h1>
             {subtitle && <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">{subtitle}</p>}
             {!subtitle && (
-              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Đăng nhập để đồng bộ workspace lên tài khoản</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">{t("auth.loginToSync")}</p>
             )}
           </div>
         </div>
@@ -91,7 +92,7 @@ export function QuantAuthGate({
                 tab === "login" ? "bg-brand text-white" : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700/80"
               }`}
             >
-              Đăng nhập
+              {t("auth.login")}
             </button>
             <button
               type="button"
@@ -103,11 +104,11 @@ export function QuantAuthGate({
                 tab === "register" ? "bg-brand text-white" : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700/80"
               }`}
             >
-              Đăng ký
+              {t("auth.register")}
             </button>
           </div>
           {ssoError && (
-            <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">Đăng nhập SSO thất bại. Thử lại hoặc dùng email/mật khẩu.</p>
+            <p className="text-sm text-amber-600 dark:text-amber-400 mb-3">{t("auth.ssoLoginFailed")}</p>
           )}
           {config.ssoEnabled && ssoUrl && (
             <div className="mb-4">
@@ -118,7 +119,7 @@ export function QuantAuthGate({
                 <Globe className="h-4 w-4" />
                 {config.ssoLabel}
               </a>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2 text-center">hoặc</p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2 text-center">{t("auth.or")}</p>
             </div>
           )}
           {tab === "login" ? (
@@ -131,7 +132,7 @@ export function QuantAuthGate({
               </div>
               <div>
                 <label className={labelClass}>
-                  <Lock className="h-3.5 w-3.5 text-neutral-500" /> Mật khẩu
+                  <Lock className="h-3.5 w-3.5 text-neutral-500" /> {t("auth.password")}
                 </label>
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className={inputClass} placeholder="••••••••" />
               </div>
@@ -141,7 +142,7 @@ export function QuantAuthGate({
                 disabled={loading}
                 className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
-                {loading ? "Đang xử lý…" : "Đăng nhập"}
+                {loading ? t("auth.processing") : t("auth.login")}
               </button>
             </form>
           ) : (
@@ -154,13 +155,13 @@ export function QuantAuthGate({
               </div>
               <div>
                 <label className={labelClass}>
-                  <User className="h-3.5 w-3.5 text-neutral-500" /> Họ tên (tùy chọn)
+                  <User className="h-3.5 w-3.5 text-neutral-500" /> {t("auth.fullNameOptional")}
                 </label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="Nguyễn Văn A" />
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder={t("auth.fullNamePlaceholder")} />
               </div>
               <div>
                 <label className={labelClass}>
-                  <Lock className="h-3.5 w-3.5 text-neutral-500" /> Mật khẩu (tối thiểu 6 ký tự)
+                  <Lock className="h-3.5 w-3.5 text-neutral-500" /> {t("auth.passwordMin6")}
                 </label>
                 <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className={inputClass} placeholder="••••••••" />
               </div>
@@ -170,7 +171,7 @@ export function QuantAuthGate({
                 disabled={loading}
                 className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
-                {loading ? "Đang xử lý…" : "Đăng ký"}
+                {loading ? t("auth.processing") : t("auth.register")}
               </button>
             </form>
           )}
@@ -225,7 +226,7 @@ export function QuantLoginModal({
     e.preventDefault();
     setError(null);
     if (password.length < 6) {
-      setError("Mật khẩu tối thiểu 6 ký tự");
+      setError(t("auth.passwordMinLength"));
       return;
     }
     setLoading(true);
@@ -252,9 +253,9 @@ export function QuantLoginModal({
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <User className="h-5 w-5" />
-            Đăng nhập / Đăng ký
+            {t("auth.loginRegister")}
           </h2>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("auth.close")}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -269,7 +270,7 @@ export function QuantLoginModal({
               tab === "login" ? "bg-brand text-white" : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700/80"
             }`}
           >
-            Đăng nhập
+            {t("auth.login")}
           </button>
           <button
             type="button"
@@ -281,7 +282,7 @@ export function QuantLoginModal({
               tab === "register" ? "bg-brand text-white" : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700/80"
             }`}
           >
-            Đăng ký
+            {t("auth.register")}
           </button>
         </div>
         {config.ssoEnabled && ssoUrl && (
@@ -293,7 +294,7 @@ export function QuantLoginModal({
               <Globe className="h-4 w-4" />
               {config.ssoLabel}
             </a>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2 text-center">hoặc</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2 text-center">{t("auth.or")}</p>
           </div>
         )}
         {tab === "login" ? (
@@ -306,13 +307,13 @@ export function QuantLoginModal({
             </div>
             <div>
               <label className={labelClass}>
-                <Lock className="h-3.5 w-3.5" /> Mật khẩu
+                <Lock className="h-3.5 w-3.5" /> {t("auth.password")}
               </label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className={inputClass} placeholder="••••••••" />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
-              {loading ? "Đang xử lý…" : "Đăng nhập"}
+              {loading ? t("auth.processing") : t("auth.login")}
             </button>
           </form>
         ) : (
@@ -325,19 +326,19 @@ export function QuantLoginModal({
             </div>
             <div>
               <label className={labelClass}>
-                <User className="h-3.5 w-3.5" /> Họ tên (tùy chọn)
+                <User className="h-3.5 w-3.5" /> {t("auth.fullNameOptional")}
               </label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="Nguyễn Văn A" />
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder={t("auth.fullNamePlaceholder")} />
             </div>
             <div>
               <label className={labelClass}>
-                <Lock className="h-3.5 w-3.5" /> Mật khẩu (tối thiểu 6 ký tự)
+                <Lock className="h-3.5 w-3.5" /> {t("auth.passwordMin6")}
               </label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className={inputClass} placeholder="••••••••" />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
-              {loading ? "Đang xử lý…" : "Đăng ký"}
+              {loading ? t("auth.processing") : t("auth.register")}
             </button>
           </form>
         )}

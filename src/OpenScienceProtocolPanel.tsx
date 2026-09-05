@@ -7,6 +7,7 @@ import {
   type WritiumReprodItem,
   type WritiumProtocolBlob,
 } from "./writiumResearchProtocols"
+import { t } from "./i18n"
 
 function generateId(): string {
   return crypto.randomUUID?.() || Date.now().toString(36) + Math.random().toString(36).slice(2)
@@ -21,17 +22,19 @@ const EMPTY_PREREG: WritiumPreReg = {
   exclusionCriteria: "",
 }
 
-const DEFAULT_REPROD: Omit<WritiumReprodItem, "id">[] = [
-  { text: "Protocol/đề cương đã đăng ký", checked: false },
-  { text: "Code/script phân tích có sẵn", checked: false },
-  { text: "Dữ liệu có thể chia sẻ (anonymized)", checked: false },
-  { text: "README mô tả cách chạy", checked: false },
-  { text: "Môi trường/phiên bản ghi rõ", checked: false },
-]
+function defaultReprod(): Omit<WritiumReprodItem, "id">[] {
+  return [
+    { text: t("openScience.checklist.protocolRegistered"), checked: false },
+    { text: t("openScience.checklist.analysisCodeAvailable"), checked: false },
+    { text: t("openScience.checklist.dataShareable"), checked: false },
+    { text: t("openScience.checklist.readmeDescribesHowToRun"), checked: false },
+    { text: t("openScience.checklist.environmentVersionNoted"), checked: false },
+  ]
+}
 
 function ensureReprodList(existing: WritiumReprodItem[] | null | undefined): WritiumReprodItem[] {
   if (existing && existing.length > 0) return existing
-  return DEFAULT_REPROD.map((e) => ({ ...e, id: generateId() }))
+  return defaultReprod().map((e) => ({ ...e, id: generateId() }))
 }
 
 export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: string) => void }) {
@@ -82,22 +85,22 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
     a.download = "prereg-draft.html"
     a.click()
     URL.revokeObjectURL(a.href)
-    showToast("Đã tải prereg-draft.html")
+    showToast(t("openScience.downloadedPreregDraft"))
   }
 
   if (blobs.length === 0) {
     return (
       <div className="w-full max-w-full">
-        <h2 className="text-xl font-semibold mb-2">Pre-reg &amp; tái lập</h2>
+        <h2 className="text-xl font-semibold mb-2">{t("openScience.title")}</h2>
         <p className="text-neutral-600 dark:text-neutral-400 mb-4">
-          Chưa có đề cương nào trong trình duyệt. Tạo đề cương trong <strong>Writium</strong> (menu <strong>Đề cương nghiên cứu</strong>) rở lại đây để điền pre-registration và checklist tái lập.
+          {t("openScience.noProtocolYetPart1")} <strong>Writium</strong> {t("openScience.noProtocolYetPart2")} <strong>{t("openScience.researchProtocolMenu")}</strong>{t("openScience.noProtocolYetPart3")}
         </p>
         <button
           type="button"
           onClick={refresh}
           className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700"
         >
-          Tải lại
+          {t("openScience.reload")}
         </button>
       </div>
     )
@@ -106,11 +109,11 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
   return (
     <div className="w-full max-w-full space-y-6">
       <div>
-        <h2 className="text-xl font-semibold mb-1">Pre-reg &amp; tái lập</h2>
+        <h2 className="text-xl font-semibold mb-1">{t("openScience.title")}</h2>
         <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">
-          Dữ liệu lưu chung với Writium (đề cương đã chọn). Dùng cùng trình duyệt / origin để đồng bộ.
+          {t("openScience.dataSharedWithWritium")}
         </p>
-        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Đề cương</label>
+        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t("openScience.protocolLabel")}</label>
         <select
           value={selectedId ?? ""}
           onChange={(e) => setSelectedId(e.target.value || null)}
@@ -127,9 +130,9 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
       {selected && (
         <>
           <section className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 space-y-3">
-            <h3 className="font-semibold text-neutral-800 dark:text-neutral-200">Pre-registration (OSF / ClinicalTrials…)</h3>
+            <h3 className="font-semibold text-neutral-800 dark:text-neutral-200">{t("openScience.preregistrationHeading")}</h3>
             <div>
-              <label className="block text-sm font-medium mb-1">Giả thuyết</label>
+              <label className="block text-sm font-medium mb-1">{t("openScience.hypotheses")}</label>
               <textarea
                 value={pr.hypotheses}
                 onChange={(e) => updateSelected({ prereg: { ...pr, hypotheses: e.target.value } })}
@@ -139,7 +142,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Thiết kế nghiên cứu</label>
+              <label className="block text-sm font-medium mb-1">{t("openScience.studyDesign")}</label>
               <textarea
                 value={pr.design}
                 onChange={(e) => updateSelected({ prereg: { ...pr, design: e.target.value } })}
@@ -148,7 +151,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Cỡ mẫu dự kiến</label>
+              <label className="block text-sm font-medium mb-1">{t("openScience.expectedSampleSize")}</label>
               <input
                 type="text"
                 value={pr.sampleSize}
@@ -157,7 +160,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Kế hoạch phân tích</label>
+              <label className="block text-sm font-medium mb-1">{t("openScience.analysisPlan")}</label>
               <textarea
                 value={pr.analysisPlan}
                 onChange={(e) => updateSelected({ prereg: { ...pr, analysisPlan: e.target.value } })}
@@ -166,7 +169,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến kết quả chính</label>
+              <label className="block text-sm font-medium mb-1">{t("openScience.primaryOutcome")}</label>
               <input
                 type="text"
                 value={pr.primaryOutcome}
@@ -175,7 +178,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Tiêu chí loại trừ</label>
+              <label className="block text-sm font-medium mb-1">{t("openScience.exclusionCriteria")}</label>
               <textarea
                 value={pr.exclusionCriteria}
                 onChange={(e) => updateSelected({ prereg: { ...pr, exclusionCriteria: e.target.value } })}
@@ -188,12 +191,12 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
               onClick={exportPreregHtml}
               className="inline-flex items-center gap-2 rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90"
             >
-              <Download className="h-4 w-4" /> Xuất draft (HTML)
+              <Download className="h-4 w-4" /> {t("openScience.exportDraftHtml")}
             </button>
           </section>
 
           <section className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-            <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Checklist tái lập (open science)</h3>
+            <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("openScience.reproducibilityChecklist")}</h3>
             <ul className="space-y-2">
               {reproList.map((e) => (
                 <li key={e.id} className="flex items-center gap-2">

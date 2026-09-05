@@ -80,6 +80,7 @@ import { getSampleWorkflowStandalone, getDefaultStandardWorkflow, getDemoWorkflo
 import { OpenScienceProtocolPanel } from "./OpenScienceProtocolPanel";
 import type { DescriptiveRow, TTestResult, ChiSquareResult, ANOVAResult, BoxGroupStats, MannWhitneyResult, OLSResult, BetaPosteriorResult, KMeansResult, LogisticResult, EFAResult, MediationResult, ShapiroWilkResult, MulticlassLogisticResult, SampleSizeProportionResult, SampleSizeChiSquareResult, SampleSizeAnovaResult, SampleSizeRegressionResult, PairedTTestResult, WilcoxonSignedRankResult, FriedmanResult, LeveneResult, McNemarResult, FisherExactResult, OneSampleTTestResult, BinomialTestResult, TwoProportionZTestResult, SignTestResult } from "./utils/stats";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, CartesianGrid, PieChart, Pie, LineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend, ComposedChart, ReferenceArea, ReferenceLine } from "recharts";
+import { t, aiAnswerLangHint, tAllLocales } from "./i18n";
 
 type DataTab = "import" | "profiling" | "transform" | "preview" | "descriptive";
 type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian";
@@ -88,18 +89,18 @@ type PresentationTab = "visualization";
 
 type MainSection = "data" | "analysis" | "reproducibility" | "presentation" | "ai" | "workflow";
 
-const BACKEND_PYTHON_REQUIRED_MSG = "Phân tích này cần backend Python. Vui lòng khởi động backend-python và cấu hình ANALYZE_PYTHON_URL.";
+const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
 
 const WORKFLOW_STEPS = [
-  { id: "import", label: "Thu thập / Import dữ liệu", icon: Upload },
-  { id: "profiling", label: "Phân tích sơ bộ dữ liệu", icon: ScanSearch },
-  { id: "clean", label: "Làm sạch & kiểm tra chất lượng", icon: Shuffle },
+  { id: "import", label: t("app.stepType.import"), icon: Upload },
+  { id: "profiling", label: t("app.stepType.profiling"), icon: ScanSearch },
+  { id: "clean", label: t("app.stepType.clean"), icon: Shuffle },
   { id: "reliability", label: "Reliability & validity", icon: CheckCircle2 },
-  { id: "hypothesis", label: "Kiểm định giả thuyết", icon: TestTube },
-  { id: "model", label: "Hồi quy & mô hình", icon: TrendingUp },
-  { id: "visualize", label: "Trực quan hóa", icon: LineChartIcon },
-  { id: "report", label: "Viết báo cáo", icon: FileText },
-  { id: "save", label: "Lưu workflow tại chỗ", icon: GitBranch },
+  { id: "hypothesis", label: t("app.stepType.test"), icon: TestTube },
+  { id: "model", label: t("app.stepType.model"), icon: TrendingUp },
+  { id: "visualize", label: t("app.stepType.visualize"), icon: LineChartIcon },
+  { id: "report", label: t("app.stepType.report"), icon: FileText },
+  { id: "save", label: t("app.stepType.save"), icon: GitBranch },
 ];
 
 export default function App() {
@@ -219,7 +220,7 @@ export default function App() {
       quantisApi.parseFileViaBackend(file)
         .then(({ rows, format: fmt }) => applyRows(rows, fmt))
         .catch((err) => {
-          showToast?.(err?.message ?? "Không thể đọc file. Cần bật backend Quantis + Python để import Excel, ODS, SPSS, Stata, SAS, R.");
+          showToast?.(err?.message ?? t("app.errCannotReadFileNeedBackend"));
         })
         .finally(() => setSidebarImportBusy(false));
       e.target.value = "";
@@ -284,15 +285,35 @@ export default function App() {
   }, []);
 
   const STEP_TYPE_LABELS: Record<WorkflowStep["type"], string> = {
-    import: "Thu thập / Import dữ liệu",
-    clean: "Làm sạch & kiểm tra chất lượng",
-    transform: "Chuẩn bị biến & biến đổi",
-    describe: "Thống kê mô tả (EDA)",
-    test: "Kiểm định giả thuyết",
-    model: "Hồi quy & mô hình",
-    visualize: "Trực quan hóa",
-    report: "Viết báo cáo",
+    import: t("app.stepType.import"),
+    clean: t("app.stepType.clean"),
+    transform: t("app.stepType.transform"),
+    describe: t("app.stepType.describe"),
+    test: t("app.stepType.test"),
+    model: t("app.stepType.model"),
+    visualize: t("app.stepType.visualize"),
+    report: t("app.stepType.report"),
   };
+  /**
+   * Labels that merely repeat the step-type name the UI already shows.
+   * Seeded sample workflows stored their label in whatever language was active
+   * at seed time, so a Vietnamese label would keep showing next to an English
+   * type name (and vice versa). Collect every locale's wording for both the
+   * step type and the seeded sample label, and skip rendering those.
+   */
+  const REDUNDANT_STEP_LABELS = useMemo(() => {
+    const keys = ["import", "clean", "transform", "describe", "test", "model", "visualize", "report"]
+    const set = new Set<string>()
+    for (const k of keys) {
+      for (const v of tAllLocales(`app.stepType.${k}`)) set.add(v.trim().toLowerCase())
+      for (const v of tAllLocales(`sampleData.stepLabel.${k}`)) set.add(v.trim().toLowerCase())
+      for (const v of tAllLocales(`sampleData.demoTemplates.stepLabel.${k}`)) set.add(v.trim().toLowerCase())
+    }
+    return set
+  }, [])
+  const isRedundantStepLabel = (label?: string) =>
+    !label || REDUNDANT_STEP_LABELS.has(label.trim().toLowerCase())
+
   const STEP_TYPE_ICONS: Record<WorkflowStep["type"], React.ReactNode> = {
     import: <Upload className="w-3.5 h-3.5" />,
     clean: <Shuffle className="w-3.5 h-3.5" />,
@@ -306,22 +327,22 @@ export default function App() {
 
   /** Quy trình chuẩn nghiên cứu – dùng để khởi tạo workflow mới hoặc tham chiếu */
   const DEFAULT_WORKFLOW_STEPS: { type: WorkflowStep["type"]; label: string }[] = [
-    { type: "import", label: "Thu thập / Import dữ liệu" },
-    { type: "clean", label: "Làm sạch & kiểm tra chất lượng" },
-    { type: "transform", label: "Chuẩn bị biến & biến đổi" },
-    { type: "describe", label: "Thống kê mô tả (EDA)" },
-    { type: "test", label: "Kiểm định giả thuyết" },
-    { type: "model", label: "Hồi quy & mô hình" },
-    { type: "visualize", label: "Trực quan hóa" },
-    { type: "report", label: "Viết báo cáo" },
+    { type: "import", label: t("app.stepType.import") },
+    { type: "clean", label: t("app.stepType.clean") },
+    { type: "transform", label: t("app.stepType.transform") },
+    { type: "describe", label: t("app.stepType.describe") },
+    { type: "test", label: t("app.stepType.test") },
+    { type: "model", label: t("app.stepType.model") },
+    { type: "visualize", label: t("app.stepType.visualize") },
+    { type: "report", label: t("app.stepType.report") },
   ];
 
   /** 4 nhóm tab chính trên header */
   const MAIN_TABS = [
-    { id: "data" as const, label: "Khám phá & biến đổi dữ liệu", shortLabel: "Dữ liệu", icon: Database, section: "data" as const },
-    { id: "analysis" as const, label: "Phân tích thống kê", shortLabel: "Phân tích", icon: BarChart3, section: "analysis" as const },
-    { id: "presentation" as const, label: "Trực quan", shortLabel: "Trực quan", icon: LineChartIcon, section: "presentation" as const },
-    { id: "ai" as const, label: "AI hướng dẫn", shortLabel: "AI", icon: Sparkles, section: "ai" as const },
+    { id: "data" as const, label: t("app.mainTab.data.label"), shortLabel: t("app.mainTab.data.shortLabel"), icon: Database, section: "data" as const },
+    { id: "analysis" as const, label: t("app.mainTab.analysis.label"), shortLabel: t("app.mainTab.analysis.shortLabel"), icon: BarChart3, section: "analysis" as const },
+    { id: "presentation" as const, label: t("app.mainTab.presentation.label"), shortLabel: t("app.mainTab.presentation.label"), icon: LineChartIcon, section: "presentation" as const },
+    { id: "ai" as const, label: t("app.mainTab.ai.label"), shortLabel: "AI", icon: Sparkles, section: "ai" as const },
   ] as const;
 
   const getFirstStepInGroup = useCallback((group: "data" | "presentation" | "analysis") => {
@@ -692,7 +713,7 @@ export default function App() {
     setShowSettings(false);
     setConfirmDialog({
       message:
-        "Đặt lại ứng dụng về trạng thái như mới cài? Mọi dataset, workflow, biểu đồ báo cáo, cấu hình URL lưu trên trình duyệt (backend, Archive), góp ý và pre-reg/Writium sẽ bị xóa. Cấu hình Ollama upstream trên server không đổi. Nếu đang đăng nhập và đồng bộ server, workspace trên tài khoản cũng sẽ được ghi đè rỗng.",
+        t("app.confirmFactoryReset"),
       onConfirm: () => {
         setConfirmDialog(null);
         clearQuantisLocalAppData();
@@ -711,10 +732,10 @@ export default function App() {
           const online = typeof navigator !== "undefined" && navigator.onLine;
           if (hasBackend && online) {
             const ok = await quantisApi.saveData({ datasets: [], workflows: [] });
-            if (!ok) showToast("Đã xóa dữ liệu cục bộ. Không ghi được workspace rỗng lên server — kiểm tra đăng nhập / mạng.");
-            else showToast("Đã đặt lại ứng dụng (cục bộ và trên server nếu có).");
+            if (!ok) showToast(t("app.toastResetLocalOnlyServerFailed"));
+            else showToast(t("app.toastResetAppLocalAndServer"));
           } else {
-            showToast("Đã đặt lại ứng dụng trên trình duyệt.");
+            showToast(t("app.toastResetAppLocalOnly"));
           }
           quantisApi.checkBackendAvailable().then(setUseBackend);
           quantisApi.checkAnalysisBackendAvailable().then(setAnalysisBackendAvailable);
@@ -752,7 +773,7 @@ export default function App() {
     return (
       <div className="min-h-dvh bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center justify-center gap-3 text-neutral-600 dark:text-neutral-400 px-4">
         <Loader2 className="w-10 h-10 animate-spin text-brand" />
-        <p className="text-sm">Đang kết nối…</p>
+        <p className="text-sm">{t("app.connecting")}</p>
       </div>
     );
   }
@@ -776,14 +797,14 @@ export default function App() {
           type="button"
           onClick={() => { setMainSection("workflow"); setSelectedWorkflowId(null); setSelectedWorkflowStepId(null); }}
           className="flex items-center gap-1.5 sm:gap-2 min-w-0 rounded-lg hover:opacity-90 transition-opacity text-left flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-          title="Về Workflow nghiên cứu"
+          title={t("app.backToResearchWorkflow")}
         >
           <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
             <Sigma className="w-4 h-4 text-white" />
           </div>
           <div className="min-w-0">
             <h1 className="font-semibold text-sm sm:text-base truncate leading-tight">Quantis</h1>
-            <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 truncate hidden sm:block">Phân tích định lượng &amp; thống kê</p>
+            <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 truncate hidden sm:block">{t("app.tagline")}</p>
           </div>
         </button>
         <div className="flex-1 flex items-center justify-center min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] snap-x snap-mandatory">
@@ -815,8 +836,8 @@ export default function App() {
             type="button"
             onClick={toggleTheme}
             className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-            title={theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
-            aria-label={theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
+            title={theme === "dark" ? t("app.lightMode") : t("app.darkMode")}
+            aria-label={theme === "dark" ? t("app.lightMode") : t("app.darkMode")}
           >
             {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
@@ -829,11 +850,11 @@ export default function App() {
                   setShowLoginModal(true);
                 }}
                 className="flex min-h-[40px] items-center justify-center gap-1 rounded-lg px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                title="Đăng nhập"
-                aria-label="Đăng nhập"
+                title={t("app.login")}
+                aria-label={t("app.login")}
               >
                 <User className="w-4 h-4 shrink-0" />
-                <span className="hidden sm:inline">Đăng nhập</span>
+                <span className="hidden sm:inline">{t("app.login")}</span>
               </button>
               <button
                 type="button"
@@ -842,10 +863,10 @@ export default function App() {
                   setShowLoginModal(true);
                 }}
                 className="flex min-h-[40px] items-center justify-center rounded-lg px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-semibold text-brand hover:bg-brand/10 dark:hover:bg-brand/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                title="Đăng ký tài khoản"
-                aria-label="Đăng ký"
+                title={t("app.registerAccount")}
+                aria-label={t("app.register")}
               >
-                Đăng ký
+                {t("app.register")}
               </button>
             </div>
           )}
@@ -854,8 +875,8 @@ export default function App() {
               type="button"
               onClick={() => setHeaderMenuOpen((v) => !v)}
               className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-              title="Menu — trợ giúp, cấu hình, workflow mẫu"
-              aria-label="Mở menu: trợ giúp, cấu hình và khác"
+              title={t("app.menuHelpConfigSampleWorkflow")}
+              aria-label={t("app.openMenuHelpConfigMore")}
               aria-expanded={headerMenuOpen}
               aria-haspopup="menu"
             >
@@ -864,7 +885,7 @@ export default function App() {
             {headerMenuOpen && (
               <div
                 role="menu"
-                aria-label="Menu ứng dụng"
+                aria-label={t("app.appMenu")}
                 className="absolute right-0 top-full mt-1 py-1 min-w-[min(100vw-2rem,16rem)] max-w-[calc(100vw-1rem)] max-h-[min(75vh,28rem)] overflow-y-auto overscroll-contain rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-lg z-50"
               >
                 {authUser && (
@@ -878,8 +899,8 @@ export default function App() {
                     className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                   >
                     <User className="w-4 h-4 shrink-0" />
-                    <span className="flex-1 min-w-0 truncate" title={authUser.name || authUser.email || "Tài khoản"}>
-                      {authUser.name || authUser.email || "Tài khoản"}
+                    <span className="flex-1 min-w-0 truncate" title={authUser.name || authUser.email || t("app.account")}>
+                      {authUser.name || authUser.email || t("app.account")}
                     </span>
                   </button>
                 )}
@@ -891,8 +912,8 @@ export default function App() {
                 >
                   <BookOpen className="w-4 h-4 shrink-0 text-brand" />
                   <span className="flex flex-col min-w-0">
-                    <span className="font-semibold text-neutral-800 dark:text-neutral-100">Hướng dẫn &amp; trợ giúp</span>
-                    <span className="text-xs text-neutral-500 dark:text-neutral-400 font-normal leading-snug">Giao diện, import, phân tích, đồng bộ, AI Portal</span>
+                    <span className="font-semibold text-neutral-800 dark:text-neutral-100">{t("app.guideAndHelp")}</span>
+                    <span className="text-xs text-neutral-500 dark:text-neutral-400 font-normal leading-snug">{t("app.guideAndHelpDesc")}</span>
                   </span>
                 </button>
                 <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-600 mx-2" role="separator" />
@@ -903,7 +924,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
                   <Download className="w-4 h-4 shrink-0" />
-                  Tải workflow mẫu
+                  {t("app.downloadSampleWorkflow")}
                 </button>
                 <button
                   type="button"
@@ -916,7 +937,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
                   <GitBranch className="w-4 h-4 shrink-0" />
-                  Workflows &amp; tái lập
+                  {t("app.workflowsAndReproducibility")}
                 </button>
                 <button
                   type="button"
@@ -929,7 +950,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
                   <FileText className="w-4 h-4 shrink-0" />
-                  Pre-reg &amp; mở khoa học
+                  {t("app.preRegAndOpenScience")}
                 </button>
                 <div className="my-1 h-px bg-neutral-200 dark:bg-neutral-600 mx-2" role="separator" />
                 <button
@@ -940,8 +961,8 @@ export default function App() {
                 >
                   <Server className="w-4 h-4 shrink-0 mt-0.5 text-brand" />
                   <span className="min-w-0">
-                    <span className="block font-medium">Cấu hình kết nối</span>
-                    <span className="block text-xs text-neutral-500 dark:text-neutral-400 font-normal">Backend, Ollama, Archive; đặt lại ứng dụng</span>
+                    <span className="block font-medium">{t("app.connectionSettings")}</span>
+                    <span className="block text-xs text-neutral-500 dark:text-neutral-400 font-normal">{t("app.connectionSettingsDesc")}</span>
                   </span>
                 </button>
                 <button
@@ -951,7 +972,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded"
                 >
                   <ThumbsUp className="w-4 h-4 shrink-0" />
-                  Góp ý ứng dụng
+                  {t("app.appFeedback")}
                 </button>
               </div>
             )}
@@ -966,7 +987,7 @@ export default function App() {
           aria-live="polite"
         >
           <Loader2 className="w-4 h-4 shrink-0 animate-spin" aria-hidden />
-          <span>Đang tải workspace từ máy chủ…</span>
+          <span>{t("app.loadingWorkspaceFromServer")}</span>
         </div>
       )}
 
@@ -980,8 +1001,8 @@ export default function App() {
           <div className="flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-5 py-4 shadow-xl max-w-sm">
             <Loader2 className="w-8 h-8 shrink-0 animate-spin text-brand" aria-hidden />
             <div>
-              <p className="font-medium text-neutral-900 dark:text-neutral-100">Đang đọc file trên máy chủ</p>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">Excel, SPSS, Stata… có thể mất vài giây.</p>
+              <p className="font-medium text-neutral-900 dark:text-neutral-100">{t("app.readingFileOnServer")}</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{t("app.readingFileOnServerDesc")}</p>
             </div>
           </div>
         </div>
@@ -990,7 +1011,7 @@ export default function App() {
       {isMobileLayout && sidebarOpen && (
         <button
           type="button"
-          aria-label="Đóng panel bên trái"
+          aria-label={t("app.closeLeftPanel")}
           className="fixed inset-x-0 top-14 bottom-8 z-30 bg-black/45 md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
@@ -1020,20 +1041,20 @@ export default function App() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand/15 text-brand">
                   <User className="h-5 w-5" />
                 </span>
-                Tài khoản
+                {t("app.account")}
               </h2>
               <button
                 type="button"
                 onClick={() => setShowAccountDialog(false)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
-                aria-label="Đóng"
+                aria-label={t("app.close")}
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-4 space-y-4">
               <div className="space-y-1">
-                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Họ tên</p>
+                <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t("app.fullName")}</p>
                 <p className="text-sm text-neutral-800 dark:text-neutral-100">{authUser.name || "—"}</p>
               </div>
               <div className="space-y-1">
@@ -1050,7 +1071,7 @@ export default function App() {
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg"
                 >
                   <Settings className="h-4 w-4 shrink-0" />
-                  Cấu hình kết nối (Backend &amp; Ollama)
+                  {t("app.connectionSettingsBackendOllama")}
                 </button>
                 <button
                   type="button"
@@ -1060,12 +1081,12 @@ export default function App() {
                     setShowAccountDialog(false);
                     setDatasets(loadDatasets());
                     setWorkflows(loadWorkflows());
-                    showToast("Đã đăng xuất.");
+                    showToast(t("app.toastLoggedOut"));
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
                 >
                   <LogOut className="h-4 w-4" />
-                  Đăng xuất
+                  {t("app.logout")}
                 </button>
               </div>
             </div>
@@ -1100,7 +1121,7 @@ export default function App() {
                   className="flex-1 min-w-0 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 truncate"
                   title={selectedWorkflow?.name}
                 >
-                  <option value="">— Chọn workflow —</option>
+                  <option value="">{t("app.selectWorkflowPlaceholder")}</option>
                   {workflows.map((w) => (
                     <option key={w.id} value={w.id}>{w.name} ({w.steps.length})</option>
                   ))}
@@ -1114,7 +1135,7 @@ export default function App() {
                     setSelectedWorkflowStepId(null);
                   }}
                   className="flex-shrink-0 flex items-center justify-center p-2 rounded-lg border border-brand bg-brand/10 dark:bg-brand/20 text-brand text-sm font-medium hover:bg-brand/20 dark:hover:bg-brand/30"
-                  title="Tạo workflow mới"
+                  title={t("app.createNewWorkflow")}
                 >
                   <FilePlus className="w-4 h-4" />
                 </button>
@@ -1124,7 +1145,7 @@ export default function App() {
             <div className="flex flex-col flex-1 min-h-0 border-t border-neutral-200 dark:border-neutral-700">
                 <div className="flex-shrink-0 px-3 py-2 flex items-center gap-2 text-neutral-700 dark:text-neutral-200">
                   <Database className="w-4 h-4 shrink-0" />
-                  <span className="text-sm font-semibold">Bộ dữ liệu (Import)</span>
+                  <span className="text-sm font-semibold">{t("app.datasetsImportSection")}</span>
                 </div>
                 <div className="flex-shrink-0 px-3 pb-2 flex flex-col gap-1.5">
                   <input ref={csvFileInputRef} type="file" accept=".csv,.tsv,.txt,.json,.xlsx,.xls,.ods,.sav,.dta,.sas7bdat,.rds,.RData,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleSidebarCsvImport} />
@@ -1133,14 +1154,14 @@ export default function App() {
                     onClick={() => csvFileInputRef.current?.click()}
                     className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                   >
-                    <Upload className="w-4 h-4" /> Tải file
+                    <Upload className="w-4 h-4" /> {t("app.uploadFile")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowSampleModal(true)}
                     className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
                   >
-                    <Plus className="w-4 h-4" /> Thêm dataset mẫu
+                    <Plus className="w-4 h-4" /> {t("app.addSampleDataset")}
                   </button>
                   <button
                     type="button"
@@ -1156,23 +1177,23 @@ export default function App() {
                         setArchivePage(1);
                         setArchiveSearchLoading(false);
                       }).catch((e) => {
-                        setArchiveSearchError(e instanceof Error ? e.message : "Không tải được danh sách");
+                        setArchiveSearchError(e instanceof Error ? e.message : t("app.errCannotLoadList"));
                         setArchiveSearchLoading(false);
                       });
                     }}
                     className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-sky-300 dark:border-sky-600 bg-sky-50 dark:bg-sky-900/20 text-sky-800 dark:text-sky-200 text-sm hover:bg-sky-100 dark:hover:bg-sky-800/30"
                   >
-                    <Cloud className="w-4 h-4" /> Lấy từ Archive NEU
+                    <Cloud className="w-4 h-4" /> {t("app.getFromArchiveNeu")}
                   </button>
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
                   {(selectedWorkflowId && selectedWorkflow ? workflowDatasets : datasets).length === 0 ? (
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 py-2">Chưa có bộ dữ liệu. Dùng nút trên để import.</p>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 py-2">{t("app.noDatasetsYet")}</p>
                   ) : (
                     <ul className="space-y-1">
                       {(selectedWorkflowId && selectedWorkflow ? workflowDatasets : datasets).map((d) => {
                         const ext = d.sourceFormat ? (d.sourceFormat === "csv" ? ".csv" : d.sourceFormat === "tsv" ? ".tsv" : d.sourceFormat === "excel" ? ".xlsx" : `.${d.sourceFormat}`) : "";
-                        const sourceLabel = d.sourceKey?.startsWith("sample:") ? "Dữ liệu mẫu" : d.sourceKey?.startsWith("archive:") ? "Archive NEU" : null;
+                        const sourceLabel = d.sourceKey?.startsWith("sample:") ? t("app.sourceLabelSampleData") : d.sourceKey?.startsWith("archive:") ? "Archive NEU" : null;
                         return (
                           <li key={d.id} className="group flex items-stretch gap-0.5 rounded-lg overflow-hidden border border-transparent hover:border-neutral-200 dark:hover:border-neutral-600">
                             <button
@@ -1204,7 +1225,7 @@ export default function App() {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setConfirmDialog({
-                                  message: `Xóa bộ dữ liệu "${d.name}"?`,
+                                  message: `${t("app.confirmDeleteDatasetPrefix")} "${d.name}"?`,
                                   onConfirm: () => {
                                     setDatasets((prev) => prev.filter((x) => x.id !== d.id));
                                     if (selectedDatasetId === d.id) setSelectedDatasetId(null);
@@ -1215,13 +1236,13 @@ export default function App() {
                                       updatedAt: now,
                                     })));
                                     setConfirmDialog(null);
-                                    showToast("Đã xóa bộ dữ liệu.");
+                                    showToast(t("app.toastDatasetDeleted"));
                                   },
                                 });
                               }}
                               className="flex-shrink-0 p-1.5 rounded-r-lg border border-transparent hover:bg-red-50 dark:hover:bg-red-900/20 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
-                              title="Xóa bộ dữ liệu"
-                              aria-label="Xóa bộ dữ liệu"
+                              title={t("app.deleteDataset")}
+                              aria-label={t("app.deleteDataset")}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1241,82 +1262,82 @@ export default function App() {
         {/* Toolbar ngang khi tab Khám phá & biến đổi — ẩn khi đang xem chi tiết workflow */}
         {mainSection === "data" && !(selectedWorkflowId && selectedWorkflow && !selectedStep) && (
           <div className="flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
-            <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> Xem dữ liệu</button>
-            <button type="button" onClick={() => setDataTab("profiling")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "profiling" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><ScanSearch className="w-4 h-4 shrink-0" /> Sơ bộ</button>
-            <button type="button" onClick={() => setDataTab("descriptive")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "descriptive" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> Mô tả</button>
-            <button type="button" onClick={() => setDataTab("transform")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "transform" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Shuffle className="w-4 h-4 shrink-0" /> Biến đổi</button>
+            <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> {t("app.dataTab.preview")}</button>
+            <button type="button" onClick={() => setDataTab("profiling")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "profiling" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><ScanSearch className="w-4 h-4 shrink-0" /> {t("app.dataTab.profiling")}</button>
+            <button type="button" onClick={() => setDataTab("descriptive")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "descriptive" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> {t("app.dataTab.descriptive")}</button>
+            <button type="button" onClick={() => setDataTab("transform")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "transform" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Shuffle className="w-4 h-4 shrink-0" /> {t("app.dataTab.transform")}</button>
           </div>
         )}
         {/* Toolbar ở Analysis: Kiểm định / Hồi quy / SEM / ... */}
         {mainSection === "analysis" && (!selectedWorkflowId || selectedStep) && (
-          <div role="toolbar" aria-label="Tab phân tích" className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
-            <button type="button" onClick={() => setAnalysisTab("correlation")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "correlation" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> Tương quan</button>
-            <button type="button" onClick={() => setAnalysisTab("hypothesis")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "hypothesis" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TestTube className="w-4 h-4 shrink-0" /> Kiểm định</button>
-            <button type="button" onClick={() => setAnalysisTab("reliability")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "reliability" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><CheckCircle2 className="w-4 h-4 shrink-0" /> Độ tin cậy</button>
-            <button type="button" onClick={() => setAnalysisTab("regression")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "regression" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TrendingUp className="w-4 h-4 shrink-0" /> Hồi quy</button>
-            <button type="button" onClick={() => setAnalysisTab("factor")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "factor" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Calculator className="w-4 h-4 shrink-0" /> Nhân tố</button>
+          <div role="toolbar" aria-label={t("app.analysisTabsAriaLabel")} className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
+            <button type="button" onClick={() => setAnalysisTab("correlation")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "correlation" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> {t("app.analysisTab.correlation")}</button>
+            <button type="button" onClick={() => setAnalysisTab("hypothesis")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "hypothesis" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TestTube className="w-4 h-4 shrink-0" /> {t("app.analysisTab.hypothesis")}</button>
+            <button type="button" onClick={() => setAnalysisTab("reliability")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "reliability" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><CheckCircle2 className="w-4 h-4 shrink-0" /> {t("app.analysisTab.reliability")}</button>
+            <button type="button" onClick={() => setAnalysisTab("regression")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "regression" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TrendingUp className="w-4 h-4 shrink-0" /> {t("app.analysisTab.regression")}</button>
+            <button type="button" onClick={() => setAnalysisTab("factor")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "factor" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Calculator className="w-4 h-4 shrink-0" /> {t("app.analysisTab.factor")}</button>
             <button type="button" onClick={() => setAnalysisTab("sem")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "sem" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Network className="w-4 h-4 shrink-0" /> SEM</button>
-            <button type="button" onClick={() => setAnalysisTab("ml")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "ml" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Cpu className="w-4 h-4 shrink-0" /> Học máy</button>
+            <button type="button" onClick={() => setAnalysisTab("ml")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "ml" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Cpu className="w-4 h-4 shrink-0" /> {t("app.analysisTab.ml")}</button>
             <button type="button" onClick={() => setAnalysisTab("bayesian")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${analysisTab === "bayesian" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Sigma className="w-4 h-4 shrink-0" /> Bayesian</button>
           </div>
         )}
         {/* Trực quan: toolbar loại biểu đồ (cùng vị trí với tab Data / Analysis) */}
         {mainSection === "presentation" && (!selectedWorkflowId || selectedStep) && (
-          <div role="toolbar" aria-label="Loại biểu đồ" className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
+          <div role="toolbar" aria-label={t("app.chartTypeAriaLabel")} className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-nowrap overflow-x-auto min-w-0">
             {/* Thứ tự: hay dùng trong báo cáo nghiên cứu lên trước */}
-            <button type="button" onClick={() => setPresentationChartType("bar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "bar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột"><BarChart3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột</span></button>
-            <button type="button" onClick={() => setPresentationChartType("line")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "line" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Đường"><LineChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Đường</span></button>
-            <button type="button" onClick={() => setPresentationChartType("scatter")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "scatter" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Phân tán"><ScatterChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Phân tán</span></button>
+            <button type="button" onClick={() => setPresentationChartType("bar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "bar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.bar")}><BarChart3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.bar")}</span></button>
+            <button type="button" onClick={() => setPresentationChartType("line")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "line" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.line")}><LineChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.line")}</span></button>
+            <button type="button" onClick={() => setPresentationChartType("scatter")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "scatter" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.scatter")}><ScatterChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.scatter")}</span></button>
             <button type="button" onClick={() => setPresentationChartType("histogram")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "histogram" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Histogram"><BarChart2 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Histogram</span></button>
             <button type="button" onClick={() => setPresentationChartType("box")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "box" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Box plot"><BoxSelect className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Box plot</span></button>
-            <button type="button" onClick={() => setPresentationChartType("heatmap")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "heatmap" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Heatmap tương quan"><Grid3X3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Heatmap</span></button>
-            <button type="button" onClick={() => setPresentationChartType("pie")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "pie" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Tròn"><PieChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Tròn</span></button>
-            <button type="button" onClick={() => setPresentationChartType("stackedBar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "stackedBar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột chồng"><Layers className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột chồng</span></button>
-            <button type="button" onClick={() => setPresentationChartType("barH")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "barH" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Cột ngang"><BarChart3 className="w-4 h-4 shrink-0 rotate-90" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Cột ngang</span></button>
-            <button type="button" onClick={() => setPresentationChartType("area")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "area" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Vùng"><AreaChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Vùng</span></button>
+            <button type="button" onClick={() => setPresentationChartType("heatmap")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "heatmap" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.heatmap")}><Grid3X3 className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Heatmap</span></button>
+            <button type="button" onClick={() => setPresentationChartType("pie")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "pie" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.pie")}><PieChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.pie")}</span></button>
+            <button type="button" onClick={() => setPresentationChartType("stackedBar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "stackedBar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.stackedBar")}><Layers className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.stackedBar")}</span></button>
+            <button type="button" onClick={() => setPresentationChartType("barH")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "barH" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.barH")}><BarChart3 className="w-4 h-4 shrink-0 rotate-90" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.barH")}</span></button>
+            <button type="button" onClick={() => setPresentationChartType("area")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "area" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.area")}><AreaChartIcon className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">{t("app.chartType.area")}</span></button>
             <button type="button" onClick={() => setPresentationChartType("donut")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "donut" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Donut"><CircleDot className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Donut</span></button>
-            <button type="button" onClick={() => setPresentationChartType("density")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "density" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Density so sánh hai nhóm"><TrendingUp className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Density</span></button>
+            <button type="button" onClick={() => setPresentationChartType("density")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "density" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title={t("app.chartType.densityCompareTwoGroups")}><TrendingUp className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Density</span></button>
             <button type="button" onClick={() => setPresentationChartType("radar")} className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${presentationChartType === "radar" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`} title="Radar"><Gauge className="w-4 h-4 shrink-0" /><span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">Radar</span></button>
           </div>
         )}
         {/* Toolbar ở theo bước workflow (khi đang xem Các bước, chọn 1 bước) — không hiện khi đang ở tab AI hướng dẫn */}
         {selectedStep && mainSection !== "data" && mainSection !== "presentation" && mainSection !== "analysis" && mainSection !== "ai" && (
-          <div role="toolbar" aria-label="Tab theo bước" className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
+          <div role="toolbar" aria-label={t("app.stepTabsAriaLabel")} className="toolbar flex-shrink-0 px-2 sm:px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/80 flex items-center gap-1 flex-wrap min-w-0">
             {selectedStep.type === "import" && (
               <>
-                <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> Xem dữ liệu</button>
-                <button type="button" onClick={() => setDataTab("profiling")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "profiling" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><ScanSearch className="w-4 h-4 shrink-0" /> Sơ bộ</button>
-                <button type="button" onClick={() => setDataTab("transform")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "transform" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Shuffle className="w-4 h-4 shrink-0" /> Biến đổi</button>
+                <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> {t("app.dataTab.preview")}</button>
+                <button type="button" onClick={() => setDataTab("profiling")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "profiling" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><ScanSearch className="w-4 h-4 shrink-0" /> {t("app.dataTab.profiling")}</button>
+                <button type="button" onClick={() => setDataTab("transform")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "transform" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Shuffle className="w-4 h-4 shrink-0" /> {t("app.dataTab.transform")}</button>
               </>
             )}
             {(selectedStep.type === "clean" || selectedStep.type === "transform") && (
               <>
-                <button type="button" onClick={() => setDataTab("transform")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "transform" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Shuffle className="w-4 h-4 shrink-0" /> Biến đổi</button>
-                <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> Xem dữ liệu</button>
+                <button type="button" onClick={() => setDataTab("transform")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "transform" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Shuffle className="w-4 h-4 shrink-0" /> {t("app.dataTab.transform")}</button>
+                <button type="button" onClick={() => setDataTab("preview")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${dataTab === "preview" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Table2 className="w-4 h-4 shrink-0" /> {t("app.dataTab.preview")}</button>
               </>
             )}
             {(selectedStep.type === "describe" || selectedStep.type === "test" || selectedStep.type === "model") && (
               <>
-                <button type="button" onClick={() => setAnalysisTab("correlation")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "correlation" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> Tương quan</button>
-                <button type="button" onClick={() => setAnalysisTab("hypothesis")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "hypothesis" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TestTube className="w-4 h-4 shrink-0" /> Kiểm định</button>
-                <button type="button" onClick={() => setAnalysisTab("reliability")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "reliability" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><CheckCircle2 className="w-4 h-4 shrink-0" /> Độ tin cậy</button>
-                <button type="button" onClick={() => setAnalysisTab("regression")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "regression" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TrendingUp className="w-4 h-4 shrink-0" /> Hồi quy</button>
-                <button type="button" onClick={() => setAnalysisTab("factor")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "factor" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Calculator className="w-4 h-4 shrink-0" /> Nhân tố</button>
+                <button type="button" onClick={() => setAnalysisTab("correlation")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "correlation" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><BarChart3 className="w-4 h-4 shrink-0" /> {t("app.analysisTab.correlation")}</button>
+                <button type="button" onClick={() => setAnalysisTab("hypothesis")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "hypothesis" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TestTube className="w-4 h-4 shrink-0" /> {t("app.analysisTab.hypothesis")}</button>
+                <button type="button" onClick={() => setAnalysisTab("reliability")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "reliability" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><CheckCircle2 className="w-4 h-4 shrink-0" /> {t("app.analysisTab.reliability")}</button>
+                <button type="button" onClick={() => setAnalysisTab("regression")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "regression" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><TrendingUp className="w-4 h-4 shrink-0" /> {t("app.analysisTab.regression")}</button>
+                <button type="button" onClick={() => setAnalysisTab("factor")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "factor" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Calculator className="w-4 h-4 shrink-0" /> {t("app.analysisTab.factor")}</button>
                 <button type="button" onClick={() => setAnalysisTab("sem")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "sem" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Network className="w-4 h-4 shrink-0" /> SEM</button>
-                <button type="button" onClick={() => setAnalysisTab("ml")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "ml" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Cpu className="w-4 h-4 shrink-0" /> Học máy</button>
+                <button type="button" onClick={() => setAnalysisTab("ml")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "ml" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Cpu className="w-4 h-4 shrink-0" /> {t("app.analysisTab.ml")}</button>
                 <button type="button" onClick={() => setAnalysisTab("bayesian")} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${analysisTab === "bayesian" ? "bg-brand text-white" : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"}`}><Sigma className="w-4 h-4 shrink-0" /> Bayesian</button>
               </>
             )}
             {selectedStep.type === "visualize" && (
-              <span className="text-sm text-neutral-500 dark:text-neutral-400">Trực quan</span>
+              <span className="text-sm text-neutral-500 dark:text-neutral-400">{t("app.mainTab.presentation.label")}</span>
             )}
           </div>
         )}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 min-h-0 w-full max-w-full">
         {!selectedWorkflowId && (
           <div className="w-full max-w-full py-12">
-            <h2 className="text-xl font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Workflow phân tích</h2>
-            <p className="text-neutral-600 dark:text-neutral-400 mb-4">Chọn workflow trong danh sách bên trái (hoặc bấm <strong>Tạo mới</strong> cạnh ở trên) để bắt đầu. Trong mỗi workflow bạn có thể import bộ dữ liệu từ panel trái ở sau đó dùng 4 tab trên header để khám phá, phân tích, trực quan hóa và AI hướng dẫn trên dữ liệu đã chọn.</p>
+            <h2 className="text-xl font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("app.researchWorkflowHeading")}</h2>
+            <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("app.emptyWorkflowIntroPart1")}<strong>{t("app.createNew")}</strong>{t("app.emptyWorkflowIntroPart2")}</p>
           </div>
         )}
         {selectedWorkflowId && selectedWorkflow && !selectedStep && (
@@ -1327,26 +1348,26 @@ export default function App() {
                   <div className="min-w-0 flex-1">
                     {editingWorkflowNameId === selectedWorkflow.id ? (
                       <div className="space-y-3">
-                        <p className="text-xs font-medium text-brand dark:text-brand/90">Đang sửa workflow</p>
+                        <p className="text-xs font-medium text-brand dark:text-brand/90">{t("app.editingWorkflow")}</p>
                         <div>
-                          <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">Tên workflow</label>
+                          <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">{t("app.workflowNameLabel")}</label>
                           <input
                             type="text"
                             value={editingWorkflowName}
                             onChange={(e) => setEditingWorkflowName(e.target.value)}
                             className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200"
-                            placeholder="Tên workflow"
+                            placeholder={t("app.workflowNameLabel")}
                             autoFocus
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">Mô tả</label>
+                          <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">{t("app.descriptionLabel")}</label>
                           <textarea
                             value={editingWorkflowDescription}
                             onChange={(e) => setEditingWorkflowDescription(e.target.value)}
                             rows={2}
                             className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200 resize-none"
-                            placeholder="Mô tả (tùy chọn)"
+                            placeholder={t("app.descriptionOptionalPlaceholder")}
                           />
                         </div>
                         <div className="flex items-center gap-2">
@@ -1361,14 +1382,14 @@ export default function App() {
                             }}
                             className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90"
                           >
-                            Lưu
+                            {t("app.save")}
                           </button>
                           <button
                             type="button"
                             onClick={() => { setEditingWorkflowNameId(null); setEditingWorkflowDescriptionId(null); }}
                             className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                           >
-                            Hủy
+                            {t("app.cancel")}
                           </button>
                         </div>
                       </div>
@@ -1379,7 +1400,7 @@ export default function App() {
                           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2">{selectedWorkflow.description}</p>
                         )}
                         <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
-                          Cập nhật: {new Date(selectedWorkflow.updatedAt).toLocaleDateString("vi-VN")} · {selectedWorkflow.steps.length} bước · {(selectedWorkflow.datasetIds ?? []).length} bộ dữ liệu
+                          {t("app.updatedAtPrefix")} {new Date(selectedWorkflow.updatedAt).toLocaleDateString("vi-VN")} · {selectedWorkflow.steps.length} {t("app.stepsCountSuffix")} · {(selectedWorkflow.datasetIds ?? []).length} {t("app.workflowDatasetsSuffix")}
                         </p>
                       </>
                     )}
@@ -1396,13 +1417,13 @@ export default function App() {
                         }}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                       >
-                        <Edit2 className="w-4 h-4 shrink-0" /> Sửa
+                        <Edit2 className="w-4 h-4 shrink-0" /> {t("app.edit")}
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setConfirmDialog({
-                            message: `Xóa workflow "${selectedWorkflow.name}"?`,
+                            message: `${t("app.confirmDeleteWorkflowPrefix")} "${selectedWorkflow.name}"?`,
                             onConfirm: () => {
                               setWorkflows((prev) => prev.filter((x) => x.id !== selectedWorkflow.id));
                               setSelectedWorkflowId(selectedWorkflowId === selectedWorkflow.id ? null : selectedWorkflowId);
@@ -1413,7 +1434,7 @@ export default function App() {
                         }}
                         className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       >
-                        <Trash2 className="w-4 h-4 shrink-0" /> Xóa workflow
+                        <Trash2 className="w-4 h-4 shrink-0" /> {t("app.deleteWorkflow")}
                       </button>
                     </div>
                   )}
@@ -1421,10 +1442,10 @@ export default function App() {
               </div>
               <div className="p-6 space-y-6">
                 <div>
-                  <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">Các bước trong workflow</h3>
+                  <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">{t("app.stepsInWorkflowHeading")}</h3>
                   {selectedWorkflow.steps.length === 0 ? (
                     <>
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Quy trình chuẩn nghiên cứu định tính/định lượng:</p>
+                      <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">{t("app.standardQualQuantProcess")}</p>
                       <ol className="list-decimal list-inside space-y-1.5 text-sm text-neutral-600 dark:text-neutral-400 mb-4">
                         {DEFAULT_WORKFLOW_STEPS.map((d, i) => (
                           <li key={i}>{d.label}</li>
@@ -1449,7 +1470,7 @@ export default function App() {
                         }}
                         className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90"
                       >
-                        Khởi tạo theo quy trình chuẩn
+                        {t("app.initFromStandardProcess")}
                       </button>
                     </>
                   ) : (
@@ -1511,31 +1532,33 @@ export default function App() {
                                       <option key={t} value={t}>{STEP_TYPE_LABELS[t]}</option>
                                     ))}
                                   </select>
-                                  <input type="text" value={editingStepLabel} onChange={(e) => setEditingStepLabel(e.target.value)} placeholder="Nhãn bước" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm flex-1 min-w-[140px]" />
+                                  <input type="text" value={editingStepLabel} onChange={(e) => setEditingStepLabel(e.target.value)} placeholder={t("app.stepLabelPlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm flex-1 min-w-[140px]" />
                                 </div>
-                                <textarea value={editingStepNote} onChange={(e) => setEditingStepNote(e.target.value)} placeholder="Ghi chú (tùy chọn)" rows={2} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm resize-none" />
+                                <textarea value={editingStepNote} onChange={(e) => setEditingStepNote(e.target.value)} placeholder={t("app.noteOptionalPlaceholder")} rows={2} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm resize-none" />
                                 <div className="flex items-center gap-2">
                                   <button type="button" onClick={() => {
                                     const next = selectedWorkflow.steps.map((st) => st.id === s.id ? { ...st, type: editingStepType, label: editingStepLabel.trim() || st.label, note: editingStepNote.trim() || undefined, updatedAt: new Date().toISOString() } : st);
                                     setWorkflows((prev) => prev.map((w) => (w.id !== selectedWorkflow.id ? w : { ...w, steps: next, updatedAt: new Date().toISOString() })));
                                     setEditingStepId(null);
-                                  }} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90">Lưu</button>
-                                  <button type="button" onClick={() => { setEditingStepId(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300">Hủy</button>
+                                  }} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90">{t("app.save")}</button>
+                                  <button type="button" onClick={() => { setEditingStepId(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300">{t("app.cancel")}</button>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 flex-1 flex items-center gap-2">
                                   {editingStepId !== s.id && (
-                                    <span className="cursor-grab active:cursor-grabbing text-neutral-400 dark:text-neutral-500 shrink-0" aria-label="Kéo để đổi thứ tự">
+                                    <span className="cursor-grab active:cursor-grabbing text-neutral-400 dark:text-neutral-500 shrink-0" aria-label={t("app.dragToReorder")}>
                                       <GripVertical className="w-4 h-4" />
                                     </span>
                                   )}
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="flex items-center justify-center w-6 h-6 rounded-full bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200 font-medium text-xs shrink-0">{i + 1}</span>
-                                      <span className="text-neutral-600 dark:text-neutral-400 text-xs">{STEP_TYPE_LABELS[s.type]}</span>
-                                      <span className="text-neutral-800 dark:text-neutral-200 font-medium">{s.label}</span>
+                                      <span className={isRedundantStepLabel(s.label) ? "text-neutral-800 dark:text-neutral-200 font-medium" : "text-neutral-600 dark:text-neutral-400 text-xs"}>{STEP_TYPE_LABELS[s.type]}</span>
+                                      {!isRedundantStepLabel(s.label) && (
+                                        <span className="text-neutral-800 dark:text-neutral-200 font-medium">{s.label}</span>
+                                      )}
                                     </div>
                                     {s.note && <p className="mt-1.5 ml-8 text-xs text-neutral-500 dark:text-neutral-400 italic">{s.note}</p>}
                                   </div>
@@ -1546,7 +1569,7 @@ export default function App() {
                                       type="button"
                                       onClick={() => setStepMenuOpenId((id) => (id === s.id ? null : s.id))}
                                       className="p-1.5 rounded text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-600 hover:text-neutral-800 dark:hover:text-neutral-200"
-                                      title="Tùy chọn bước"
+                                      title={t("app.stepOptions")}
                                       aria-expanded={stepMenuOpenId === s.id}
                                     >
                                       <MoreVertical className="w-3.5 h-3.5" />
@@ -1566,14 +1589,14 @@ export default function App() {
                                             }}
                                             className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                                           >
-                                            <Edit2 className="w-3.5 h-3.5 shrink-0" /> Sửa bước
+                                            <Edit2 className="w-3.5 h-3.5 shrink-0" /> {t("app.editStep")}
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => {
                                               setStepMenuOpenId(null);
                                               setConfirmDialog({
-                                                message: `Xóa bước "${s.label}"?`,
+                                                message: `${t("app.confirmDeleteStepPrefix")} "${s.label}"?`,
                                                 onConfirm: () => {
                                                   setWorkflows((prev) => prev.map((w) => (w.id !== selectedWorkflow.id ? w : { ...w, steps: w.steps.filter((st) => st.id !== s.id).map((st, idx) => ({ ...st, order: idx })), updatedAt: new Date().toISOString() })));
                                                   setConfirmDialog(null);
@@ -1583,7 +1606,7 @@ export default function App() {
                                             }}
                                             className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                                           >
-                                            <Trash2 className="w-3.5 h-3.5 shrink-0" /> Xóa bước
+                                            <Trash2 className="w-3.5 h-3.5 shrink-0" /> {t("app.deleteStep")}
                                           </button>
                                         </div>
                                       </>
@@ -1602,7 +1625,7 @@ export default function App() {
                             <option key={t} value={t}>{STEP_TYPE_LABELS[t]}</option>
                           ))}
                         </select>
-                        <input type="text" value={newWorkflowStepLabel} onChange={(e) => setNewWorkflowStepLabel(e.target.value)} placeholder="Nhãn bước (tùy chọn)" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm w-44" />
+                        <input type="text" value={newWorkflowStepLabel} onChange={(e) => setNewWorkflowStepLabel(e.target.value)} placeholder={t("app.stepLabelOptionalPlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm w-44" />
                         <button
                           type="button"
                           onClick={() => {
@@ -1614,7 +1637,7 @@ export default function App() {
                           }}
                           className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90"
                         >
-                          Thêm bước
+                          {t("app.addStep")}
                         </button>
                       </div>
                     </>
@@ -1622,7 +1645,7 @@ export default function App() {
                 </div>
                 {workflowDatasets.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">Bộ dữ liệu đã gắn</h3>
+                    <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">{t("app.attachedDatasetsHeading")}</h3>
                     <ul className="space-y-1.5">
                       {workflowDatasets.map((d) => (
                         <li key={d.id} className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -1689,33 +1712,33 @@ export default function App() {
           type="button"
           onClick={() => setSidebarOpen((o) => !o)}
           className="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded-md p-1.5 text-neutral-600 hover:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-700 touch-manipulation sm:min-h-0 sm:min-w-0 sm:p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
-          title={sidebarOpen ? "Thu gọn sidebar" : "Mở sidebar"}
-          aria-label={sidebarOpen ? "Thu gọn sidebar" : "Mở sidebar"}
+          title={sidebarOpen ? t("app.collapseSidebar") : t("app.openSidebar")}
+          aria-label={sidebarOpen ? t("app.collapseSidebar") : t("app.openSidebar")}
         >
           {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
         </button>
-        <span className="min-w-0 flex-1 truncate text-left" title={selectedDataset ? `${selectedDataset.name} (${selectedDataset.rows}×${selectedDataset.columns})` : "Chọn hoặc import bộ dữ liệu"}>
+        <span className="min-w-0 flex-1 truncate text-left" title={selectedDataset ? `${selectedDataset.name} (${selectedDataset.rows}×${selectedDataset.columns})` : t("app.selectOrImportDataset")}>
           {selectedDataset ? (
-            <>Dataset: <strong className="font-medium text-neutral-700 dark:text-neutral-300">{selectedDataset.name}</strong> ({selectedDataset.rows}×{selectedDataset.columns}){selectedWorkflow ? <> · Workflow: {selectedWorkflow.name}{selectedStep ? ` · ${selectedStep.label}` : ""}</> : ""} · {datasets.length} bộ</>
+            <>Dataset: <strong className="font-medium text-neutral-700 dark:text-neutral-300">{selectedDataset.name}</strong> ({selectedDataset.rows}×{selectedDataset.columns}){selectedWorkflow ? <> · Workflow: {selectedWorkflow.name}{selectedStep ? ` · ${selectedStep.label}` : ""}</> : ""} · {datasets.length} {t("app.datasetsCountSuffix")}</>
           ) : (
-            <>Chưa chọn dataset{selectedWorkflow ? ` · Workflow: ${selectedWorkflow.name}${selectedStep ? ` · ${selectedStep.label}` : ""}` : ""} · {datasets.length} bộ</>
+            <>{t("app.noDatasetSelected")}{selectedWorkflow ? ` · Workflow: ${selectedWorkflow.name}${selectedStep ? ` · ${selectedStep.label}` : ""}` : ""} · {datasets.length} {t("app.datasetsCountSuffix")}</>
           )}
         </span>
         <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1.5 border-l border-neutral-200 pl-2 dark:border-neutral-600 sm:gap-2">
           {quantisApi.isPortalEmbed() && authLoading && !authUser && (
-            <span className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap truncate">Đang tải…</span>
+            <span className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap truncate">{t("app.loadingEllipsis")}</span>
           )}
           {authUser && (
             <button
               type="button"
               onClick={() => setShowAccountDialog(true)}
               className="flex items-center gap-1.5 min-h-[36px] max-w-full rounded-md px-2 py-1 text-left text-neutral-700 dark:text-neutral-200 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
-              title={authUser.name || authUser.email || "Tài khoản"}
-              aria-label={`Tài khoản: ${authUser.name || authUser.email || ""}`}
+              title={authUser.name || authUser.email || t("app.account")}
+              aria-label={`${t("app.account")}: ${authUser.name || authUser.email || ""}`}
             >
               <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-brand" />
               <span className="truncate font-medium text-[10px] sm:text-xs">
-                {authUser.name || authUser.email || "Tài khoản"}
+                {authUser.name || authUser.email || t("app.account")}
               </span>
             </button>
           )}
@@ -1729,7 +1752,7 @@ export default function App() {
                 }}
                 className="rounded px-1.5 py-1 text-[10px] sm:text-xs font-medium text-brand hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                Đăng nhập
+                {t("app.login")}
               </button>
               <span className="text-neutral-400" aria-hidden>
                 ·
@@ -1742,7 +1765,7 @@ export default function App() {
                 }}
                 className="rounded px-1.5 py-1 text-[10px] sm:text-xs font-medium text-brand hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                Đăng ký
+                {t("app.register")}
               </button>
             </div>
           )}
@@ -1753,15 +1776,15 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setConfirmDialog(null)}>
           <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-xl max-w-md w-full border border-neutral-200 dark:border-neutral-700 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-end p-2 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-              <button type="button" onClick={() => setConfirmDialog(null)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+              <button type="button" onClick={() => setConfirmDialog(null)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("app.close")}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-4 flex flex-col gap-4">
               <p className="text-neutral-700 dark:text-neutral-300">{confirmDialog.message}</p>
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setConfirmDialog(null)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">Hủy</button>
-                <button type="button" onClick={() => confirmDialog.onConfirm()} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">Xác nhận</button>
+                <button type="button" onClick={() => setConfirmDialog(null)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">{t("app.cancel")}</button>
+                <button type="button" onClick={() => confirmDialog.onConfirm()} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2">{t("app.confirm")}</button>
               </div>
             </div>
           </div>
@@ -1772,12 +1795,12 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowDemoGallery(false)}>
           <div className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
-              <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Chọn workflow mẫu</h2>
+              <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("app.chooseSampleWorkflow")}</h2>
               <button type="button" onClick={() => setShowDemoGallery(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="px-4 pb-3 text-sm text-neutral-500 dark:text-neutral-400">Chọn một mẫu theo lĩnh vực — workflow và dữ liệu sẽ được tải vào workspace.</p>
+            <p className="px-4 pb-3 text-sm text-neutral-500 dark:text-neutral-400">{t("app.chooseSampleWorkflowDesc")}</p>
             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               {getDemoWorkflowTemplates().map((tpl) => (
                 <button
@@ -1808,7 +1831,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowSampleModal(false)}>
           <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
-              <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Chọn dataset mẫu</h2>
+              <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("app.chooseSampleDataset")}</h2>
               <button type="button" onClick={() => setShowSampleModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                 <X className="w-5 h-5" />
               </button>
@@ -1818,7 +1841,7 @@ export default function App() {
                 type="text"
                 value={sampleDatasetSearch}
                 onChange={(e) => setSampleDatasetSearch(e.target.value)}
-                placeholder="Tìm theo tên, lĩnh vực, mô tả..."
+                placeholder={t("app.searchByNameDomainDesc")}
                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
               />
             </div>
@@ -1835,7 +1858,7 @@ export default function App() {
                       return name.includes(q) || domain.includes(q) || desc.includes(q) || tagsStr.includes(q);
                     });
                 if (list.length === 0) {
-                  return <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4">Không có dataset mẫu nào trùng với từ khóa. Thử gõ khác (vd. t-test, ANOVA, K-means, tương quan).</p>;
+                  return <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4">{t("app.noSampleDatasetMatch")}</p>;
                 }
                 return list.map((def) => (
                   <button
@@ -1858,12 +1881,12 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setArchiveModalOpen(false)}>
           <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
-              <h3 className="font-semibold flex items-center gap-2"><Cloud className="w-5 h-5 text-sky-600" /> Archive NEU — Chọn dataset</h3>
+              <h3 className="font-semibold flex items-center gap-2"><Cloud className="w-5 h-5 text-sky-600" /> {t("app.archiveNeuChooseDataset")}</h3>
               <button type="button" onClick={() => setArchiveModalOpen(false)} className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700"><X className="w-5 h-5" /></button>
             </div>
             <div className="flex-1 overflow-auto p-4">
               {archiveSearchError && <pre className="text-red-600 dark:text-red-400 text-sm mb-3 whitespace-pre-wrap font-sans break-all">{archiveSearchError}</pre>}
-              {archiveSearchLoading && <p className="text-neutral-500 text-sm">Đang tải danh sách...</p>}
+              {archiveSearchLoading && <p className="text-neutral-500 text-sm">{t("app.loadingList")}</p>}
               {!selectedArchiveRequestId ? (
                 <ul className="space-y-2">
                   {archiveSearchResult.map((item) => {
@@ -1883,7 +1906,7 @@ export default function App() {
                             }).catch((e) => {
                               setArchiveFiles([]);
                               setArchiveFilesLoading(false);
-                              setArchiveSearchError(e instanceof Error ? e.message : "Không tải được file");
+                              setArchiveSearchError(e instanceof Error ? e.message : t("app.errCannotLoadFile"));
                             });
                           }}
                           className="w-full text-left p-3 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
@@ -1897,9 +1920,9 @@ export default function App() {
                 </ul>
               ) : (
                 <div>
-                  <button type="button" onClick={() => { setSelectedArchiveRequestId(null); setArchiveFiles([]); setArchiveSearchError(null); }} className="text-sm text-sky-600 dark:text-sky-400 mb-2">Quay lại danh sách</button>
+                  <button type="button" onClick={() => { setSelectedArchiveRequestId(null); setArchiveFiles([]); setArchiveSearchError(null); }} className="text-sm text-sky-600 dark:text-sky-400 mb-2">{t("app.backToList")}</button>
                   <p className="font-medium mb-2">Dataset: {selectedArchiveTitle}</p>
-                  {archiveFilesLoading && <p className="text-sm text-neutral-500">Đang tải danh sách file...</p>}
+                  {archiveFilesLoading && <p className="text-sm text-neutral-500">{t("app.loadingFileList")}</p>}
                   <ul className="space-y-2">
                     {archiveFiles.map((f) => {
                       const loading = archiveDownloadingFileId === f.id;
@@ -1916,7 +1939,7 @@ export default function App() {
                               try {
                                 const text = await archiveApi.fetchArchiveFileAsText(f.id, selectedArchiveRequestId);
                                 const { rows, format } = parseFileContent(text, f.file_name || "data.csv");
-                                if (rows.length < 2) { setArchiveSearchError("File không có đủ dòng dữ liệu."); return; }
+                                if (rows.length < 2) { setArchiveSearchError(t("app.errFileNotEnoughRows")); return; }
                                 /** Cho phép tải lại cùng file — mỗi lần một dataset mới. */
                                 const archiveSourceKey = `archive:${selectedArchiveRequestId}:${f.id}:${generateId()}`;
                                 const headers = rows[0];
@@ -1931,20 +1954,20 @@ export default function App() {
                                 }
                                 setArchiveModalOpen(false);
                               } catch (e) {
-                                setArchiveSearchError(e instanceof Error ? e.message : "Tải file thất bại.");
+                                setArchiveSearchError(e instanceof Error ? e.message : t("app.errFileDownloadFailed"));
                               } finally {
                                 setArchiveDownloadingFileId(null);
                               }
                             }}
                             className="rounded px-3 py-1.5 text-sm bg-brand text-white hover:opacity-90 disabled:opacity-50"
                           >
-                            {loading ? "Đang tải..." : "Tải vào Quantis"}
+                            {loading ? t("app.loadingEllipsis2") : t("app.loadIntoQuantis")}
                           </button>
                         </li>
                       );
                     })}
                   </ul>
-                  {!archiveFilesLoading && archiveFiles.length === 0 && selectedArchiveRequestId && <p className="text-sm text-neutral-500">Không có file nào.</p>}
+                  {!archiveFilesLoading && archiveFiles.length === 0 && selectedArchiveRequestId && <p className="text-sm text-neutral-500">{t("app.noFiles")}</p>}
                 </div>
               )}
             </div>
@@ -2026,8 +2049,8 @@ function WorkflowView({
 }) {
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Workflow nghiên cứu tiêu chuẩn</h2>
-      <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-4">Bấm vào từng bước để chuyển sang tính năng tương ứng.</p>
+      <h2 className="text-xl font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("workflowView.title")}</h2>
+      <p className="text-sm text-neutral-500 dark:text-neutral-400 mb-4">{t("workflowView.subtitle")}</p>
       <div className="space-y-2">
         {steps.map((step, i) => {
           const StepIcon = step.icon;
@@ -2097,7 +2120,7 @@ function DescriptiveStatsView({
 
   const copyDescriptiveTsv = useCallback(() => {
     if (stats.length === 0) return;
-    const headers = ["Cột", "Kiểu", "N", "Missing", "Mean", "Median", "Std", "Q25", "Q75", "P10", "P90", "Min", "Max", "Kurtosis"];
+    const headers = [t("descriptiveStats.table.column"), t("descriptiveStats.table.type"), "N", "Missing", "Mean", "Median", "Std", "Q25", "Q75", "P10", "P90", "Min", "Max", "Kurtosis"];
     const na = "\u2014";
     const tsvRows = stats.map((s) => [
       s.column,
@@ -2126,31 +2149,31 @@ function DescriptiveStatsView({
   return (
     <div className="w-full max-w-full">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 className="text-xl font-semibold">Thống kê mô tả</h2>
+        <h2 className="text-xl font-semibold">{t("descriptiveStats.title")}</h2>
         <div className="flex items-center gap-2">
           {stats.length > 0 && (
-            <button type="button" onClick={copyDescriptiveTsv} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /> Sao chép bảng</button>
+            <button type="button" onClick={copyDescriptiveTsv} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /> {t("descriptiveStats.copyTable")}</button>
           )}
           {aiContextDescriptive ? (
             <AIAssistPanel
               context={aiContextDescriptive}
-              quickPrompts={[{ label: "Giải thích thống kê mô tả", systemHint: "Bạn là chuyên gia thống kê mô tả. Giải thích ý nghĩa từng chỉ số: N (cỡ mẫu), mean (trung bình), median (trung vị), std (độ lệch chuẩn), các phân vị. Nêu cách đọc và ý nghĩa trong nghiên cứu. Trả lời ngắn gọn bằng tiếng Việt." }]}
-              title="Hỏi AI về thống kê mô tả"
+              quickPrompts={[{ label: t("descriptiveStats.aiExplainLabel"), systemHint: `Bạn là chuyên gia thống kê mô tả. Giải thích ý nghĩa từng chỉ số: N (cỡ mẫu), mean (trung bình), median (trung vị), std (độ lệch chuẩn), các phân vị. Nêu cách đọc và ý nghĩa trong nghiên cứu. ${aiAnswerLangHint()}` }]}
+              title={t("descriptiveStats.aiAskTitle")}
             />
           ) : null}
         </div>
       </div>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Descriptive statistics, phân bố, bảng tần suất, crosstab, thống kê văn bản, điểm ngoại lai (IQR).</p>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("descriptiveStats.subtitle")}</p>
       {!selectedDataset ? (
-        <p className="text-neutral-500">Chọn một bộ dữ liệu ở panel trái.</p>
+        <p className="text-neutral-500">{t("descriptiveStats.selectDatasetPrompt")}</p>
       ) : stats.length > 0 ? (
         <>
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto mb-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                  <th className="text-left p-2">Cột</th>
-                  <th className="text-left p-2">Kiểu</th>
+                  <th className="text-left p-2">{t("descriptiveStats.table.column")}</th>
+                  <th className="text-left p-2">{t("descriptiveStats.table.type")}</th>
                   <th className="text-right p-2">N</th>
                   <th className="text-right p-2">Missing</th>
                   <th className="text-right p-2">Mean</th>
@@ -2188,48 +2211,48 @@ function DescriptiveStatsView({
             </table>
           </div>
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-4 mb-4">
-            <p className="text-sm font-medium mb-2">Khoảng tin cậy 95% cho trung bình (Bootstrap)</p>
-            <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">Lấy mẫu có hoàn lại 2000 lần để ước lượng CI. Tương đương JASP/Jamovi.</p>
+            <p className="text-sm font-medium mb-2">{t("descriptiveStats.bootstrapTitle")}</p>
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">{t("descriptiveStats.bootstrapDesc")}</p>
             <div className="flex flex-wrap gap-4 items-end">
               <div>
-                <label className="block text-xs font-medium mb-1">Cột số</label>
+                <label className="block text-xs font-medium mb-1">{t("descriptiveStats.numericColumnLabel")}</label>
                 <select value={bootstrapCICol} onChange={(e) => { setBootstrapCICol(e.target.value); setBootstrapCIResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
-                  <option value="">— Chọn —</option>
+                  <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                   {numericColsDesc.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <button type="button" onClick={() => { if (!bootstrapCICol || rows.length < 2) return; const ci = rows[0].indexOf(bootstrapCICol); if (ci === -1) return; const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v)); const res = computeBootstrapMeanCI(vals); setBootstrapCIResult(res ?? null); }} disabled={!bootstrapCICol} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">Tính CI 95%</button>
+              <button type="button" onClick={() => { if (!bootstrapCICol || rows.length < 2) return; const ci = rows[0].indexOf(bootstrapCICol); if (ci === -1) return; const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v)); const res = computeBootstrapMeanCI(vals); setBootstrapCIResult(res ?? null); }} disabled={!bootstrapCICol} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">{t("descriptiveStats.calculateCIButton")}</button>
             </div>
             {bootstrapCIResult && (
               <div className="mt-2">
                 <AIAssistPanel
                   context={`Khoảng tin cậy bootstrap 95%: trung bình = ${bootstrapCIResult.mean.toFixed(4)}, CI = [${bootstrapCIResult.ciLower.toFixed(4)}, ${bootstrapCIResult.ciUpper.toFixed(4)}], n = ${bootstrapCIResult.n}.`}
-                  quickPrompts={[{ label: "Diễn giải khoảng tin cậy 95%", systemHint: "Bạn là chuyên gia thống kê. Giải thích ý nghĩa khoảng tin cậy 95% (bootstrap): trung bình nằm trong khoảng [ciLower, ciUpper] với độ tin cậy 95%. Nêu cách đọc và dùng trong báo cáo. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                  title="Hỏi AI về khoảng tin cậy bootstrap"
+                  quickPrompts={[{ label: t("descriptiveStats.aiInterpretCILabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích ý nghĩa khoảng tin cậy 95% (bootstrap): trung bình nằm trong khoảng [ciLower, ciUpper] với độ tin cậy 95%. Nêu cách đọc và dùng trong báo cáo. ${aiAnswerLangHint()}` }]}
+                  title={t("descriptiveStats.aiInterpretCITitle")}
                 />
-                  <p className="text-sm mt-2">Trung bình = {bootstrapCIResult.mean.toFixed(4)}, 95% CI [{bootstrapCIResult.ciLower.toFixed(4)}, {bootstrapCIResult.ciUpper.toFixed(4)}], n = {bootstrapCIResult.n}</p>
+                  <p className="text-sm mt-2">{t("descriptiveStats.bootstrapResultMean")} {bootstrapCIResult.mean.toFixed(4)}, 95% CI [{bootstrapCIResult.ciLower.toFixed(4)}, {bootstrapCIResult.ciUpper.toFixed(4)}], n = {bootstrapCIResult.n}</p>
               </div>
             )}
           </div>
           {chartData.length > 0 && (
             <div className="h-64 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <p className="text-sm font-medium mb-2">Phân bố: {chartCol?.column}</p>
+              <p className="text-sm font-medium mb-2">{t("descriptiveStats.distributionLabel")} {chartCol?.column}</p>
               <ResponsiveContainer width="100%" height="90%">
                 <BarChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name="Số lượng" />
+                  <Bar dataKey="count" fill="#0061bb" name={t("descriptiveStats.chartCountName")} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           )}
           <div className="mt-6 space-y-4">
             <div>
-              <h3 className="font-medium mb-2">Bảng tần suất (1 biến)</h3>
+              <h3 className="font-medium mb-2">{t("descriptiveStats.freqTableTitle")}</h3>
               <select value={freqCol} onChange={(e) => setFreqCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm mb-2">
-                <option value="">— Chọn cột —</option>
+                <option value="">{t("descriptiveStats.selectColumnPlaceholder")}</option>
                 {stats.filter((s) => s.freq && s.freq.length > 0).map((s) => <option key={s.column} value={s.column}>{s.column}</option>)}
               </select>
               {freqCol && (() => {
@@ -2239,7 +2262,7 @@ function DescriptiveStatsView({
                 return (
                   <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Giá trị</th><th className="text-right p-2">Tần số</th><th className="text-right p-2">%</th></tr></thead>
+                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">{t("descriptiveStats.freqTable.value")}</th><th className="text-right p-2">{t("descriptiveStats.freqTable.freq")}</th><th className="text-right p-2">%</th></tr></thead>
                       <tbody>
                         {s.freq.map((f) => (
                           <tr key={f.value} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -2255,19 +2278,19 @@ function DescriptiveStatsView({
               })()}
             </div>
             <div>
-              <h3 className="font-medium mb-2">Bảng chéo (Crosstab)</h3>
+              <h3 className="font-medium mb-2">{t("descriptiveStats.crosstabTitle")}</h3>
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
-                  <label className="block text-sm mb-1">Hàng</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.rowLabel")}</label>
                   <select value={crosstabCol1} onChange={(e) => setCrosstabCol1(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm mb-1">Cột</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.columnLabel")}</label>
                   <select value={crosstabCol2} onChange={(e) => setCrosstabCol2(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
@@ -2280,8 +2303,8 @@ function DescriptiveStatsView({
                   <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
                     <AIAssistPanel
                       context={crosstabCtx}
-                      quickPrompts={[{ label: "Diễn giải bảng chéo", systemHint: "Bạn là chuyên gia thống kê. Giải thích ý nghĩa bảng chéo (crosstab): tần số chéo của hai biến phân loại, mối liên hệ giữa hai biến. Gợi ý khi nào dùng kiểm định Chi-square. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                      title="Hỏi AI về bảng chéo"
+                      quickPrompts={[{ label: t("descriptiveStats.aiInterpretCrosstabLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích ý nghĩa bảng chéo (crosstab): tần số chéo của hai biến phân loại, mối liên hệ giữa hai biến. Gợi ý khi nào dùng kiểm định Chi-square. ${aiAnswerLangHint()}` }]}
+                      title={t("descriptiveStats.aiInterpretCrosstabTitle")}
                     />
                     <table className="w-full text-sm">
                       <thead>
@@ -2304,12 +2327,12 @@ function DescriptiveStatsView({
               })()}
             </div>
             <div>
-              <h3 className="font-medium mb-2">Thống kê văn bản (định tính)</h3>
+              <h3 className="font-medium mb-2">{t("descriptiveStats.textStatsTitle")}</h3>
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
-                  <label className="block text-sm mb-1">Cột văn bản</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.textColumnLabel")}</label>
                   <select value={textStatsCol} onChange={(e) => { setTextStatsCol(e.target.value); setTextStatsResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
@@ -2333,20 +2356,20 @@ function DescriptiveStatsView({
                   }}
                   className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
-                  {exploreLoading === "textstats" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Phân tích"}
+                  {exploreLoading === "textstats" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.analyzeButton")}
                 </button>
               </div>
               {textStatsResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm space-y-2">
                   <AIAssistPanel
                     context={`Thống kê văn bản cột "${textStatsResult.column}": ${textStatsResult.totalWords} từ, ${textStatsResult.uniqueWords} từ khác nhau, TB ${textStatsResult.avgWordsPerRow.toFixed(1)} từ/dòng. Dòng: ${textStatsResult.nRows}, trống: ${textStatsResult.nEmpty}. Top từ: ${textStatsResult.wordFreq.slice(0, 10).map((w) => `${w.word}(${w.count})`).join(", ")}.`}
-                    quickPrompts={[{ label: "Diễn giải thống kê văn bản", systemHint: "Bạn là chuyên gia phân tích định tính. Giải thích ý nghĩa: tổng số từ, số từ khác nhau, tần số từ — dùng trong nghiên cứu định tính/ngôn ngữ như thế nào. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về thống kê văn bản"
+                    quickPrompts={[{ label: t("descriptiveStats.aiInterpretTextStatsLabel"), systemHint: `Bạn là chuyên gia phân tích định tính. Giải thích ý nghĩa: tổng số từ, số từ khác nhau, tần số từ — dùng trong nghiên cứu định tính/ngôn ngữ như thế nào. ${aiAnswerLangHint()}` }]}
+                    title={t("descriptiveStats.aiInterpretTextStatsTitle")}
                   />
-                  <p><strong>Từng số từ:</strong> {textStatsResult.totalWords} | <strong>Từ khác nhau:</strong> {textStatsResult.uniqueWords} | <strong>TB từ/dòng:</strong> {textStatsResult.avgWordsPerRow.toFixed(1)} (min–max: {textStatsResult.minWordsPerRow}?{textStatsResult.maxWordsPerRow})</p>
-                  <p><strong>Dòng:</strong> {textStatsResult.nRows} | <strong>Dòng trống:</strong> {textStatsResult.nEmpty}</p>
-                  <p className="font-medium mt-2">Tần số từ (top 30):</p>
-                  <table className="w-full text-xs"><thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1">Từ</th><th className="text-right p-1">Số lần</th></tr></thead><tbody>
+                  <p><strong>{t("descriptiveStats.textStats.totalWordsLabel")}</strong> {textStatsResult.totalWords} | <strong>{t("descriptiveStats.textStats.uniqueWordsLabel")}</strong> {textStatsResult.uniqueWords} | <strong>{t("descriptiveStats.textStats.avgWordsLabel")}</strong> {textStatsResult.avgWordsPerRow.toFixed(1)} (min–max: {textStatsResult.minWordsPerRow}?{textStatsResult.maxWordsPerRow})</p>
+                  <p><strong>{t("descriptiveStats.textStats.rowsLabel")}</strong> {textStatsResult.nRows} | <strong>{t("descriptiveStats.textStats.emptyRowsLabel")}</strong> {textStatsResult.nEmpty}</p>
+                  <p className="font-medium mt-2">{t("descriptiveStats.textStats.topWordsTitle")}</p>
+                  <table className="w-full text-xs"><thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1">{t("descriptiveStats.textStats.wordHeader")}</th><th className="text-right p-1">{t("descriptiveStats.textStats.countHeader")}</th></tr></thead><tbody>
                     {textStatsResult.wordFreq.slice(0, 30).map(({ word, count }) => (
                       <tr key={word} className="border-b border-neutral-100 dark:border-neutral-700/50"><td className="p-1">{word}</td><td className="p-1 text-right">{count}</td></tr>
                     ))}</tbody></table>
@@ -2354,18 +2377,18 @@ function DescriptiveStatsView({
               )}
             </div>
             <div>
-              <h3 className="font-medium mb-2">Đếm từ khóa (mỗi)</h3>
+              <h3 className="font-medium mb-2">{t("descriptiveStats.keywordCountTitle")}</h3>
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
-                  <label className="block text-sm mb-1">Cột văn bản</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.textColumnLabel")}</label>
                   <select value={keywordCountsCol} onChange={(e) => { setKeywordCountsCol(e.target.value); setKeywordCountsResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="flex-1 min-w-[200px]">
-                  <label className="block text-sm mb-1">Từ khóa (mỗi dòng hoặc cách nhau dấu phẩy)</label>
-                  <textarea value={keywordCountsInput} onChange={(e) => { setKeywordCountsInput(e.target.value); setKeywordCountsResult(null); }} placeholder="ví dụ: tích cực, tiêu cực, trung tính" className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-h-[80px]" rows={3} />
+                  <label className="block text-sm mb-1">{t("descriptiveStats.keywordInputLabel")}</label>
+                  <textarea value={keywordCountsInput} onChange={(e) => { setKeywordCountsInput(e.target.value); setKeywordCountsResult(null); }} placeholder={t("descriptiveStats.keywordInputPlaceholder")} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-h-[80px]" rows={3} />
                 </div>
                 <button
                   type="button"
@@ -2389,18 +2412,18 @@ function DescriptiveStatsView({
                   }}
                   className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
-                  {exploreLoading === "keyword" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Đếm"}
+                  {exploreLoading === "keyword" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.countButton")}
                 </button>
               </div>
               {keywordCountsResult && keywordCountsResult.counts.length > 0 && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm">
                   <AIAssistPanel
                     context={`Đếm từ khóa cột "${keywordCountsResult.column}": ${keywordCountsResult.counts.map((c) => `${c.keyword}: ${c.rowCount} dòng, ${c.totalOccurrences} lần`).join("; ")}.`}
-                    quickPrompts={[{ label: "Diễn giải Đếm từ khóa", systemHint: "Bạn là chuyên gia phân tích định tính. Giải thích ý nghĩa đếm từ khóa: số dòng chứa từ khóa, tổng lần xuất hiện — dùng để đo mức độ xuất hiện chủ đề trong dữ liệu văn bản. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về đếm từ khóa"
+                    quickPrompts={[{ label: t("descriptiveStats.aiInterpretKeywordLabel"), systemHint: `Bạn là chuyên gia phân tích định tính. Giải thích ý nghĩa đếm từ khóa: số dòng chứa từ khóa, tổng lần xuất hiện — dùng để đo mức độ xuất hiện chủ đề trong dữ liệu văn bản. ${aiAnswerLangHint()}` }]}
+                    title={t("descriptiveStats.aiInterpretKeywordTitle")}
                   />
-                  <p className="font-medium mb-2">Cột: {keywordCountsResult.column}</p>
-                  <table className="w-full text-xs"><thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1">Từ khóa</th><th className="text-right p-1">Số dòng chứa</th><th className="text-right p-1">Tổng lần xuất hiện</th></tr></thead><tbody>
+                  <p className="font-medium mb-2">{t("descriptiveStats.keywordResult.columnLabel")} {keywordCountsResult.column}</p>
+                  <table className="w-full text-xs"><thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1">{t("descriptiveStats.keywordResult.keywordHeader")}</th><th className="text-right p-1">{t("descriptiveStats.keywordResult.rowCountHeader")}</th><th className="text-right p-1">{t("descriptiveStats.keywordResult.totalOccurHeader")}</th></tr></thead><tbody>
                     {keywordCountsResult.counts.map(({ keyword, rowCount, totalOccurrences }) => (
                       <tr key={keyword} className="border-b border-neutral-100 dark:border-neutral-700/50"><td className="p-1">{keyword}</td><td className="p-1 text-right">{rowCount}</td><td className="p-1 text-right">{totalOccurrences}</td></tr>
                     ))}</tbody></table>
@@ -2408,20 +2431,20 @@ function DescriptiveStatsView({
               )}
             </div>
             <div>
-              <h3 className="font-medium mb-2">Tần số cụm từ (n-gram)</h3>
+              <h3 className="font-medium mb-2">{t("descriptiveStats.ngramTitle")}</h3>
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
-                  <label className="block text-sm mb-1">Cột văn bản</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.textColumnLabel")}</label>
                   <select value={ngramCol} onChange={(e) => { setNgramCol(e.target.value); setNgramResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm mb-1">n (gram)</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.ngramNLabel")}</label>
                   <select value={ngramN} onChange={(e) => { setNgramN(Number(e.target.value)); setNgramResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value={2}>2 (bigram)</option>
-                    <option value={3}>3 (trigram)</option>
+                    <option value={2}>{t("descriptiveStats.ngramBigramOption")}</option>
+                    <option value={3}>{t("descriptiveStats.ngramTrigramOption")}</option>
                   </select>
                 </div>
                 <button
@@ -2443,18 +2466,18 @@ function DescriptiveStatsView({
                   }}
                   className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
-                  {exploreLoading === "ngram" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Phân tích"}
+                  {exploreLoading === "ngram" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.analyzeButton")}
                 </button>
               </div>
               {ngramResult && ngramResult.ngramFreq.length > 0 && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm">
                   <AIAssistPanel
                     context={`N-gram (n=${ngramResult.n}) cột "${ngramResult.column}": tổng ${ngramResult.totalNgrams} cụm, ${ngramResult.uniqueNgrams} khác nhau. Top: ${ngramResult.ngramFreq.slice(0, 8).map((x) => `${x.ngram}(${x.count})`).join(", ")}.`}
-                    quickPrompts={[{ label: "Diễn giải n-gram", systemHint: "Bạn là chuyên gia phân tích văn bản. Giải thích ý nghĩa n-gram (bigram/trigram): tần số cụm từ phản ánh cụm từ hay đi cùng nhau trong dữ liệu, dùng trong nghiên cứu định tính. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về n-gram"
+                    quickPrompts={[{ label: t("descriptiveStats.aiInterpretNgramLabel"), systemHint: `Bạn là chuyên gia phân tích văn bản. Giải thích ý nghĩa n-gram (bigram/trigram): tần số cụm từ phản ánh cụm từ hay đi cùng nhau trong dữ liệu, dùng trong nghiên cứu định tính. ${aiAnswerLangHint()}` }]}
+                    title={t("descriptiveStats.aiInterpretNgramTitle")}
                   />
-                  <p className="font-medium mb-2">Cột: {ngramResult.column} · n = {ngramResult.n} ? Tổng cụm: {ngramResult.totalNgrams} ? Khác nhau: {ngramResult.uniqueNgrams}</p>
-                  <table className="w-full text-xs"><thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1">Cụm từ</th><th className="text-right p-1">Số lần</th></tr></thead><tbody>
+                  <p className="font-medium mb-2">{`${t("descriptiveStats.ngramResult.columnPrefix")} ${ngramResult.column} ${t("descriptiveStats.ngramResult.nPrefix")} ${ngramResult.n} ${t("descriptiveStats.ngramResult.totalPrefix")} ${ngramResult.totalNgrams} ${t("descriptiveStats.ngramResult.uniquePrefix")} ${ngramResult.uniqueNgrams}`}</p>
+                  <table className="w-full text-xs"><thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1">{t("descriptiveStats.ngramResult.phraseHeader")}</th><th className="text-right p-1">{t("descriptiveStats.textStats.countHeader")}</th></tr></thead><tbody>
                     {ngramResult.ngramFreq.slice(0, 30).map(({ ngram, count }) => (
                       <tr key={ngram} className="border-b border-neutral-100 dark:border-neutral-700/50"><td className="p-1">{ngram}</td><td className="p-1 text-right">{count}</td></tr>
                     ))}</tbody></table>
@@ -2465,16 +2488,16 @@ function DescriptiveStatsView({
               <h3 className="font-medium mb-2">Cohen&apos;s Kappa</h3>
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
-                  <label className="block text-sm mb-1">Cột coder 1</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.coder1Label")}</label>
                   <select value={kappaCol1} onChange={(e) => { setKappaCol1(e.target.value); setKappaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm mb-1">Cột coder 2</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.coder2Label")}</label>
                   <select value={kappaCol2} onChange={(e) => { setKappaCol2(e.target.value); setKappaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
@@ -2497,28 +2520,28 @@ function DescriptiveStatsView({
                   }}
                   className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
-                  {exploreLoading === "kappa" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính Kappa"}
+                  {exploreLoading === "kappa" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.calculateKappaButton")}
                 </button>
               </div>
               {kappaResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm space-y-2">
                   <AIAssistPanel
                     context={`Cohen's Kappa: ${kappaResult.col1} và ${kappaResult.col2}, κ = ${kappaResult.kappa.toFixed(4)}, n = ${kappaResult.n}.`}
-                    quickPrompts={[{ label: "Diễn giải Kappa", systemHint: "Bạn là chuyên gia thống kê. Giải thích Cohen's Kappa: đo độ đồng nhất/đồng thuận giữa hai người mã hóa (coder). Nêu thang diễn giải (ví dụ <0 kém, 0.21–0.40 khá, 0.61–0.80 tốt, >0.81 rất tốt). Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về Kappa"
+                    quickPrompts={[{ label: t("descriptiveStats.aiInterpretKappaLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích Cohen's Kappa: đo độ đồng nhất/đồng thuận giữa hai người mã hóa (coder). Nêu thang diễn giải (ví dụ <0 kém, 0.21–0.40 khá, 0.61–0.80 tốt, >0.81 rất tốt). ${aiAnswerLangHint()}` }]}
+                    title={t("descriptiveStats.aiInterpretKappaTitle")}
                   />
-                  <p><strong>κ = {kappaResult.kappa}</strong> – đồng nhất quan sát: {kappaResult.observedAgreement}; Kỳ vọng ngẫu nhiên: {kappaResult.expectedAgreement} · n = {kappaResult.n}</p>
-                  <p className="text-neutral-600 dark:text-neutral-400 text-xs">Giải thích: &lt;0 không đồng nhất, 0.01–0.20 nhỏ, 0.21–0.40 khá, 0.41–0.60 trung bình, 0.61–0.80 tốt, 0.81–1.00 rất tốt.</p>
+                  <p><strong>κ = {kappaResult.kappa}</strong>{` ${t("descriptiveStats.kappaResult.observedAgreementPrefix")} ${kappaResult.observedAgreement}${t("descriptiveStats.kappaResult.expectedAgreementPrefix")} ${kappaResult.expectedAgreement} · n = ${kappaResult.n}`}</p>
+                  <p className="text-neutral-600 dark:text-neutral-400 text-xs">{t("descriptiveStats.kappaResult.legend")}</p>
                 </div>
               )}
             </div>
             <div>
-              <h3 className="font-medium mb-2">điểm ngoại lai (IQR)</h3>
+              <h3 className="font-medium mb-2">{t("descriptiveStats.outlierTitle")}</h3>
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
-                  <label className="block text-sm mb-1">Cột số</label>
+                  <label className="block text-sm mb-1">{t("descriptiveStats.numericColumnLabel")}</label>
                   <select value={outlierCol} onChange={(e) => { setOutlierCol(e.target.value); setOutlierResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {stats.filter((s) => s.type === "numeric").map((s) => (
                       <option key={s.column} value={s.column}>{s.column}</option>
                     ))}
@@ -2546,19 +2569,19 @@ function DescriptiveStatsView({
                   }}
                   className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
-                  {exploreLoading === "outlier" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Kiểm tra"}
+                  {exploreLoading === "outlier" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.checkButton")}
                 </button>
               </div>
               {outlierResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm">
                   <AIAssistPanel
                     context={`điểm ngoại lai IQR: cột số, số điểm = ${outlierResult.outlierCount}. Q1 = ${outlierResult.q1 ?? "?"}, Q3 = ${outlierResult.q3 ?? "?"}, IQR = ${outlierResult.iqr ?? "?"}, ngưỡng [${outlierResult.lower ?? "?"}, ${outlierResult.upper ?? "?"}].`}
-                    quickPrompts={[{ label: "Diễn giải điểm ngoại lai", systemHint: "Bạn là chuyên gia thống kê. Giải thích điểm ngoại lai theo phương pháp IQR (1.5×IQR): ý nghĩa số điểm, Q1/Q3/ngưỡng. Gợi ý khi nào nên loại bỏ hay giữ lại (kiểm tra lỗi đo, ảnh hưởng phân tích). Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về điểm ngoại lai"
+                    quickPrompts={[{ label: t("descriptiveStats.aiInterpretOutlierLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích điểm ngoại lai theo phương pháp IQR (1.5×IQR): ý nghĩa số điểm, Q1/Q3/ngưỡng. Gợi ý khi nào nên loại bỏ hay giữ lại (kiểm tra lỗi đo, ảnh hưởng phân tích). ${aiAnswerLangHint()}` }]}
+                    title={t("descriptiveStats.aiInterpretOutlierTitle")}
                   />
-                  <p><strong>Số điểm ngoại lai:</strong> {outlierResult.outlierCount}</p>
+                  <p><strong>{t("descriptiveStats.outlierResult.countLabel")}</strong> {outlierResult.outlierCount}</p>
                   {outlierResult.q1 != null && outlierResult.q3 != null && outlierResult.iqr != null && (
-                    <p className="mt-1 text-neutral-600 dark:text-neutral-400">Q1 = {outlierResult.q1.toFixed(2)}, Q3 = {outlierResult.q3.toFixed(2)}, IQR = {outlierResult.iqr.toFixed(2)}. Ngưỡng: [{outlierResult.lower != null ? outlierResult.lower.toFixed(2) : "—"}, {outlierResult.upper != null ? outlierResult.upper.toFixed(2) : "—"}].</p>
+                    <p className="mt-1 text-neutral-600 dark:text-neutral-400">Q1 = {outlierResult.q1.toFixed(2)}, Q3 = {outlierResult.q3.toFixed(2)}, IQR = {outlierResult.iqr.toFixed(2)}. {t("descriptiveStats.outlierResult.thresholdLabel")} [{outlierResult.lower != null ? outlierResult.lower.toFixed(2) : "—"}, {outlierResult.upper != null ? outlierResult.upper.toFixed(2) : "—"}].</p>
                   )}
                 </div>
               )}
@@ -2566,7 +2589,7 @@ function DescriptiveStatsView({
           </div>
         </>
       ) : (
-        <p className="text-neutral-500">Dataset không có đủ dữ liệu.</p>
+        <p className="text-neutral-500">{t("descriptiveStats.notEnoughData")}</p>
       )}
     </div>
   );
@@ -2601,7 +2624,7 @@ function DataView({
   }
   if (tab === "import") {
     // Tab import: hiển thị giống "Xem dữ liệu" để luôn có nội dung
-    if (!selectedDs) return <div className="w-full max-w-full"><h2 className="text-xl font-semibold mb-2">Khám phá dữ liệu</h2><p className="text-neutral-500">Chọn một bộ dữ liệu ở panel trái (hoặc dùng Tải file / Thêm dataset mẫu) để xem và phân tích.</p><p className="text-sm text-neutral-500 mt-2">Dùng tab <strong>AI hướng dẫn</strong> để hỏi gợi ý bước tiếp theo hoặc phương pháp phù hợp.</p></div>;
+    if (!selectedDs) return <div className="w-full max-w-full"><h2 className="text-xl font-semibold mb-2">{t("dataView.exploreDataTitle")}</h2><p className="text-neutral-500">{t("dataView.selectDatasetImportPrompt")}</p><p className="text-sm text-neutral-500 mt-2">{t("dataView.aiGuideHintPrefix")} <strong>{t("dataView.aiGuideHintLabel")}</strong> {t("dataView.importAiGuideHintSuffix")}</p></div>;
     return <PreviewTable selectedDs={selectedDs} />;
   }
   if (tab === "profiling") {
@@ -2618,23 +2641,23 @@ function DataView({
     return (
       <div className="w-full max-w-full">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <h2 className="text-xl font-semibold">Phân tích sơ bộ dữ liệu</h2>
+          <h2 className="text-xl font-semibold">{t("dataView.profiling.title")}</h2>
           {aiContextProfiling ? (
             <AIAssistPanel
               context={aiContextProfiling}
-              quickPrompts={[{ label: "Giải thích phân tích sơ bộ", systemHint: "Bạn là chuyên gia thống kê. Giải thích ý nghĩa bảng phân tích sơ bộ: missing (thiếu), kiểu cột, mean/std/min/max, skewness, số điểm ngoại lai — dùng để nắm nhanh chất lượng và phân bố từng biến trước khi phân tích sâu. Trả lời ngắn gọn bằng tiếng Việt." }]}
-              title="Hỏi AI về phân tích sơ bộ"
+              quickPrompts={[{ label: t("dataView.profiling.aiExplainLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích ý nghĩa bảng phân tích sơ bộ: missing (thiếu), kiểu cột, mean/std/min/max, skewness, số điểm ngoại lai — dùng để nắm nhanh chất lượng và phân bố từng biến trước khi phân tích sâu. ${aiAnswerLangHint()}` }]}
+              title={t("dataView.profiling.aiAskTitle")}
             />
           ) : null}
         </div>
-        <p className="text-neutral-600 dark:text-neutral-400 mb-4">Missing, kiểu cột, thống kê cơ bản, skewness, outlier (IQR 1.5). <span className="text-neutral-500 dark:text-neutral-500" title="Các chỉ số Min, Max, Mean, Std, Skew, Outlier không áp dụng cho biến phân loại (categorical).">— = không áp dụng (biến phân loại).</span></p>
+        <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("dataView.profiling.subtitle")} <span className="text-neutral-500 dark:text-neutral-500" title={t("dataView.profiling.naTooltip")}>{t("dataView.profiling.naLabel")}</span></p>
         {selectedDs && profiles.length > 0 ? (
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                  <th className="text-left p-2">Cột</th>
-                  <th className="text-left p-2">Kiểu</th>
+                  <th className="text-left p-2">{t("dataView.profiling.table.column")}</th>
+                  <th className="text-left p-2">{t("dataView.profiling.table.type")}</th>
                   <th className="text-right p-2">Missing</th>
                   <th className="text-right p-2">%</th>
                   <th className="text-right p-2">Unique</th>
@@ -2654,23 +2677,23 @@ function DataView({
                     <td className="p-2 text-right">{p?.missing ?? "—"}</td>
                     <td className="p-2 text-right">{typeof p?.missingPct === "number" ? p.missingPct.toFixed(1) : "—"}%</td>
                     <td className="p-2 text-right">{p?.unique ?? "—"}</td>
-                    <td className="p-2 text-right" title={p?.type === "categorical" ? "Không áp dụng cho biến phân loại" : undefined}>{p?.min != null ? Number(p.min).toFixed(2) : "—"}</td>
-                    <td className="p-2 text-right" title={p?.type === "categorical" ? "Không áp dụng cho biến phân loại" : undefined}>{p?.max != null ? Number(p.max).toFixed(2) : "—"}</td>
-                    <td className="p-2 text-right" title={p?.type === "categorical" ? "Không áp dụng cho biến phân loại" : undefined}>{p?.mean != null ? Number(p.mean).toFixed(2) : "—"}</td>
-                    <td className="p-2 text-right" title={p?.type === "categorical" ? "Không áp dụng cho biến phân loại" : undefined}>{p?.std != null ? Number(p.std).toFixed(2) : "—"}</td>
-                    <td className="p-2 text-right" title={p?.type === "categorical" ? "Không áp dụng cho biến phân loại" : undefined}>{p?.skew != null ? Number(p.skew).toFixed(3) : "—"}</td>
-                    <td className="p-2 text-right" title={p?.type === "categorical" ? "Không áp dụng cho biến phân loại" : undefined}>{p?.outlierCount != null ? p.outlierCount : "—"}</td>
+                    <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.min != null ? Number(p.min).toFixed(2) : "—"}</td>
+                    <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.max != null ? Number(p.max).toFixed(2) : "—"}</td>
+                    <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.mean != null ? Number(p.mean).toFixed(2) : "—"}</td>
+                    <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.std != null ? Number(p.std).toFixed(2) : "—"}</td>
+                    <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.skew != null ? Number(p.skew).toFixed(3) : "—"}</td>
+                    <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.outlierCount != null ? p.outlierCount : "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : selectedDs ? (
-          <p className="text-neutral-500">Dataset không có đủ dữ liệu. Tải file hoặc dùng nút <strong>Thêm dataset mẫu</strong> để thêm.</p>
+          <p className="text-neutral-500">{t("dataView.profiling.notEnoughDataPrefix")} <strong>{t("dataView.profiling.addSampleDatasetLabel")}</strong> {t("dataView.profiling.notEnoughDataSuffix")}</p>
         ) : (
           <>
-            <p className="text-neutral-500">Chọn dataset ở mục Import hoặc Workflow. Bấm <strong>Thêm dataset mẫu</strong> (tab Dữ liệu) để tải sẵn và thử phân tích.</p>
-            <p className="text-sm text-neutral-500 mt-2">Dùng tab <strong>AI hướng dẫn</strong> (trên thanh tab) để hỏi gợi ý bước tiếp theo hoặc phương pháp phù hợp.</p>
+            <p className="text-neutral-500">{t("dataView.profiling.noDatasetPrefix")} <strong>{t("dataView.profiling.addSampleDatasetLabel")}</strong> {t("dataView.profiling.noDatasetSuffix")}</p>
+            <p className="text-sm text-neutral-500 mt-2">{t("dataView.aiGuideHintPrefix")} <strong>{t("dataView.aiGuideHintLabel")}</strong> {t("dataView.profiling.aiGuideHintSuffix")}</p>
           </>
         )}
       </div>
@@ -2680,7 +2703,7 @@ function DataView({
     return <TransformTab selectedDs={selectedDs} setDatasets={setDatasets} onSelectDataset={onSelectDataset} onWorkflowDatasetAdd={onWorkflowDatasetAdd} />;
   }
   if (tab === "preview") {
-    if (!selectedDs) return <div className="w-full max-w-full"><h2 className="text-xl font-semibold mb-2">Xem dữ liệu</h2><p className="text-neutral-500">Chọn dataset ở mục Import.</p><p className="text-sm text-neutral-500 mt-2">Dùng tab <strong>AI hướng dẫn</strong> để hỏi gợi ý import hoặc bước tiếp theo.</p></div>;
+    if (!selectedDs) return <div className="w-full max-w-full"><h2 className="text-xl font-semibold mb-2">{t("dataView.preview.title")}</h2><p className="text-neutral-500">{t("dataView.preview.selectDatasetPrompt")}</p><p className="text-sm text-neutral-500 mt-2">{t("dataView.aiGuideHintPrefix")} <strong>{t("dataView.aiGuideHintLabel")}</strong> {t("dataView.previewAiGuideHintSuffix")}</p></div>;
     return <PreviewTable selectedDs={selectedDs} />;
   }
   return null;
@@ -2748,17 +2771,17 @@ function PreviewTable({ selectedDs }: { selectedDs: Dataset }) {
   return (
     <div className="w-full max-w-full">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 className="text-xl font-semibold">Xem dữ liệu</h2>
+        <h2 className="text-xl font-semibold">{t("previewTable.title")}</h2>
         {aiContext ? (
           <AIAssistPanel
             context={aiContext}
-            quickPrompts={[{ label: "Giải thích dữ liệu", systemHint: "Bạn là chuyên gia phân tích dữ liệu. Tóm tắt bộ dữ liệu: tên, số hàng/số cột, tên các biến, và mẫu vài hàng đầu. Nêu ý nghĩa tổng quan để người dùng nắm nhanh nội dung dataset. Trả lời ngắn gọn bằng tiếng Việt." }]}
-            title="Hỏi AI về bộ dữ liệu"
+            quickPrompts={[{ label: t("previewTable.aiExplainLabel"), systemHint: `Bạn là chuyên gia phân tích dữ liệu. Tóm tắt bộ dữ liệu: tên, số hàng/số cột, tên các biến, và mẫu vài hàng đầu. Nêu ý nghĩa tổng quan để người dùng nắm nhanh nội dung dataset. ${aiAnswerLangHint()}` }]}
+            title={t("previewTable.aiAskTitle")}
           />
         ) : null}
       </div>
       <p className="text-neutral-600 dark:text-neutral-400 mb-2">
-        {dataRows.length} hàng × {headers.length} cột.
+        {`${dataRows.length} ${t("previewTable.rowsUnit")} × ${headers.length} ${t("previewTable.colsUnit")}.`}
       </p>
 
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto max-h-[28rem] overflow-y-auto">
@@ -2771,11 +2794,11 @@ function PreviewTable({ selectedDs }: { selectedDs: Dataset }) {
                     type="button"
                     onClick={() => handleSort(ci)}
                     className="w-full text-left font-medium whitespace-nowrap hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded px-2 py-1.5 flex items-center gap-1 -mx-2 -my-1.5"
-                    title="Bấm để sắp xếp"
+                    title={t("previewTable.sortTooltip")}
                   >
                     {h}
                     {sortColIndex === ci && (
-                      <span className="text-brand" aria-label={sortDir === "asc" ? "Tăng dần" : "Giảm dần"}>{sortDir === "asc" ? " ↑" : " ↓"}</span>
+                      <span className="text-brand" aria-label={sortDir === "asc" ? t("previewTable.sortAscLabel") : t("previewTable.sortDescLabel")}>{sortDir === "asc" ? " ↑" : " ↓"}</span>
                     )}
                   </button>
                 </th>
@@ -2795,19 +2818,19 @@ function PreviewTable({ selectedDs }: { selectedDs: Dataset }) {
       </div>
       <div className="flex items-center justify-between gap-4 px-2 py-2 border border-t-0 border-neutral-200 dark:border-neutral-700 rounded-b-lg bg-neutral-50 dark:bg-neutral-800/80 text-sm">
         <span className="text-neutral-600 dark:text-neutral-400">
-          Hiển thị {sortedRows.length === 0 ? "0" : start + 1}–{Math.min(start + pageSize, sortedRows.length)} / {sortedRows.length} bản ghi
+          {`${t("previewTable.showingPrefix")} ${sortedRows.length === 0 ? "0" : start + 1}–${Math.min(start + pageSize, sortedRows.length)} / ${sortedRows.length} ${t("previewTable.recordsUnit")}`}
         </span>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
-            Số dòng/trang:
+            {t("previewTable.rowsPerPageLabel")}
             <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} className="rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1 text-sm">
-              {PREVIEW_PAGE_SIZES.map((n) => <option key={n} value={n}>{n} dòng</option>)}
+              {PREVIEW_PAGE_SIZES.map((n) => <option key={n} value={n}>{n} {t("previewTable.rowsOptionSuffix")}</option>)}
             </select>
           </label>
           <div className="flex items-center gap-2">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50">‹ Trước</button>
-          <span className="min-w-[5rem] text-center tabular-nums">Trang {page} / {totalPages}</span>
-          <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50">Sau ›</button>
+          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50">‹ {t("previewTable.prevButton")}</button>
+          <span className="min-w-[5rem] text-center tabular-nums">{`${t("previewTable.pagePrefix")} ${page} / ${totalPages}`}</span>
+          <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-2 py-1 rounded border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50">{t("previewTable.nextButton")} ›</button>
         </div>
         </div>
       </div>
@@ -2828,7 +2851,7 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
   const [recodeRules, setRecodeRules] = useState<{ from: string; to: string }[]>([{ from: "", to: "" }]);
   const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(false);
   const [lastTransformResult, setLastTransformResult] = useState<{ before: string[][]; after: string[][]; actionLabel: string } | null>(null);
-  if (!selectedDs) return <div className="w-full max-w-full"><h2 className="text-xl font-semibold mb-2">Biến đổi</h2><p className="text-neutral-500">Chọn dataset ở mục Import.</p><p className="text-sm text-neutral-500 mt-2">Dùng tab <strong>AI hướng dẫn</strong> để hỏi gợi ý làm sạch dữ liệu hoặc bước tiếp theo.</p></div>;
+  if (!selectedDs) return <div className="w-full max-w-full"><h2 className="text-xl font-semibold mb-2">{t("transformTab.noDatasetTitle")}</h2><p className="text-neutral-500">{t("transformTab.selectDatasetHint")}</p><p className="text-sm text-neutral-500 mt-2">{t("transformTab.useAiGuidePrefix")} <strong>{t("transformTab.aiGuideTabName")}</strong> {t("transformTab.useAiGuideSuffix")}</p></div>;
   const dataRows = getDataRows(selectedDs);
   const cols = selectedDs.columnNames || [];
   const header = dataRows[0] || [];
@@ -2945,7 +2968,7 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
       }
     }
     const now = new Date().toISOString();
-    const suffix = transformAction === "filter" ? " (để lọc)" : transformAction === "sort" ? " (để sắp xếp)" : transformAction === "recode" ? " (để recode)" : transformAction === "z_score" ? " (z-score)" : transformAction === "min_max" ? " (min-max)" : " (để biến đổi)";
+    const suffix = transformAction === "filter" ? t("transformTab.suffixFilter") : transformAction === "sort" ? t("transformTab.suffixSort") : transformAction === "recode" ? t("transformTab.suffixRecode") : transformAction === "z_score" ? " (z-score)" : transformAction === "min_max" ? " (min-max)" : t("transformTab.suffixDefault");
     const beforeSnapshot = dataRows.map((r) => [...r]);
     setLastTransformResult({ before: beforeSnapshot, after: newRows, actionLabel: suffix });
 
@@ -2971,32 +2994,32 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
   return (
     <div className="w-full max-w-full">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 className="text-xl font-semibold">Biến đổi &amp; pipeline</h2>
+        <h2 className="text-xl font-semibold">{t("transformTab.pipelineTitle")}</h2>
         <AIAssistPanel
           context={aiContextTransform}
-          quickPrompts={[{ label: "Hướng dẫn biến đổi", systemHint: "Bạn là chuyên gia tiền xử lý dữ liệu. Dựa trên cấu trúc và mô tả bộ dữ liệu, gợi ý ngắn gọn: xử lý missing (bỏ/điền mean/median/mode), lọc theo điều kiện, chuẩn hóa (z-score, min-max), sắp xếp, recode biến. Chỉ nêu các bước phù hợp. Trả lời bằng tiếng Việt." }]}
-          title="Hỏi AI về biến đổi dữ liệu"
+          quickPrompts={[{ label: t("transformTab.aiPromptGuideLabel"), systemHint: `Bạn là chuyên gia tiền xử lý dữ liệu. Dựa trên cấu trúc và mô tả bộ dữ liệu, gợi ý ngắn gọn: xử lý missing (bỏ/điền mean/median/mode), lọc theo điều kiện, chuẩn hóa (z-score, min-max), sắp xếp, recode biến. Chỉ nêu các bước phù hợp. ${aiAnswerLangHint("Trả lời bằng tiếng Việt.", "Answer in English.")}` }]}
+          title={t("transformTab.aiAssistTitle")}
         />
       </div>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Làm sạch (missing), lọc, sắp xếp, recode. Tạo dataset mới.</p>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("transformTab.description")}</p>
       <div>
-        <label className="block text-sm font-medium mb-1">Hành động</label>
+        <label className="block text-sm font-medium mb-1">{t("transformTab.actionLabel")}</label>
         <select value={transformAction} onChange={(e) => setTransformAction(e.target.value as typeof transformAction)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 mb-3">
-          <option value="drop_missing">Loại bỏ dòng thiếu (một hoặc nhiều cột)</option>
-          <option value="fill_mean">Thay missing bằng mean</option>
-          <option value="fill_median">Thay missing bằng median</option>
-          <option value="fill_mode">Thay missing bằng mode (giá trị xuất hiện nhiều nhất)</option>
-          <option value="z_score">Chuẩn hóa z-score (mean=0, std=1)</option>
-          <option value="min_max">Chuẩn hóa min-max (về [0, 1])</option>
-          <option value="filter">Lọc dòng theo điều kiện</option>
-          <option value="sort">Sắp xếp theo cột</option>
-          <option value="recode">Recode (gán lại giá trị)</option>
+          <option value="drop_missing">{t("transformTab.actionDropMissing")}</option>
+          <option value="fill_mean">{t("transformTab.actionFillMean")}</option>
+          <option value="fill_median">{t("transformTab.actionFillMedian")}</option>
+          <option value="fill_mode">{t("transformTab.actionFillMode")}</option>
+          <option value="z_score">{t("transformTab.actionZScore")}</option>
+          <option value="min_max">{t("transformTab.actionMinMax")}</option>
+          <option value="filter">{t("transformTab.actionFilter")}</option>
+          <option value="sort">{t("transformTab.actionSort")}</option>
+          <option value="recode">{t("transformTab.actionRecode")}</option>
         </select>
       </div>
       {(transformAction === "drop_missing" || transformAction === "fill_mean" || transformAction === "fill_median" || transformAction === "fill_mode" || transformAction === "z_score" || transformAction === "min_max") && (
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Cột (có thể chọn nhiều)</label>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.columnsMultiLabel")}</label>
             <div className="flex flex-wrap gap-x-4 gap-y-1 max-h-32 overflow-y-auto rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2">
               {cols.map((c) => (
                 <label key={c} className="flex items-center gap-1.5 text-sm cursor-pointer">
@@ -3005,51 +3028,51 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
                 </label>
               ))}
             </div>
-            <p className="text-xs text-neutral-500 mt-1">Chọn ít nhất một cột. Với &quot;Loại bỏ dòng thiếu&quot;: xóa dòng nếu bất kỳ cột chọn nào thiếu.</p>
+            <p className="text-xs text-neutral-500 mt-1">{t("transformTab.columnsMultiHint")}</p>
           </div>
         </div>
       )}
       {transformAction === "filter" && (
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Cột</label>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.columnLabel")}</label>
             <select value={filterCol} onChange={(e) => setFilterCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
+              <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">điều kiện</label>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.conditionLabel")}</label>
             <select value={filterOp} onChange={(e) => setFilterOp(e.target.value as typeof filterOp)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="==">= (bằng)</option>
-              <option value="!=">≠ (khác)</option>
+              <option value="==">{t("transformTab.opEquals")}</option>
+              <option value="!=">{t("transformTab.opNotEquals")}</option>
               <option value=">">&gt;</option>
               <option value="<">&lt;</option>
-              <option value=">=">≥ (lớn hơn hoặc bằng)</option>
-              <option value="<=">≤ (nhỏ hơn hoặc bằng)</option>
-              <option value="contains">Chứa (text)</option>
+              <option value=">=">{t("transformTab.opGte")}</option>
+              <option value="<=">{t("transformTab.opLte")}</option>
+              <option value="contains">{t("transformTab.opContains")}</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Giá trị</label>
-            <input type="text" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder="Nhập giá trị" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
+            <label className="block text-sm font-medium mb-1">{t("transformTab.valueLabel")}</label>
+            <input type="text" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={t("transformTab.valuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
           </div>
         </div>
       )}
       {transformAction === "sort" && (
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Sắp xếp theo cột</label>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.sortByColumnLabel")}</label>
             <select value={sortCol} onChange={(e) => setSortCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
+              <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Thứ tự</label>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.orderLabel")}</label>
             <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="asc">Tăng dần</option>
-              <option value="desc">Giảm dần</option>
+              <option value="asc">{t("transformTab.orderAsc")}</option>
+              <option value="desc">{t("transformTab.orderDesc")}</option>
             </select>
           </div>
         </div>
@@ -3057,44 +3080,44 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
       {transformAction === "recode" && (
         <div className="mb-3">
           <div className="mb-2">
-            <label className="block text-sm font-medium mb-1">Cột cần recode</label>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.recodeColumnLabel")}</label>
             <select value={recodeCol} onChange={(e) => setRecodeCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
+              <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <p className="text-sm text-neutral-500 mb-2">Giá trị cũ → Giá trị mới (để trống →Giá trị cũ = bỏ qua)</p>
+          <p className="text-sm text-neutral-500 mb-2">{t("transformTab.recodeRuleHint")}</p>
           {recodeRules.map((r, i) => (
             <div key={i} className="flex gap-2 items-center mb-2">
-              <input type="text" value={r.from} onChange={(e) => setRecodeRule(i, "from", e.target.value)} placeholder="Giá trị cũ" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
+              <input type="text" value={r.from} onChange={(e) => setRecodeRule(i, "from", e.target.value)} placeholder={t("transformTab.oldValuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
               <span className="text-neutral-500" aria-hidden="true">→</span>
-              <input type="text" value={r.to} onChange={(e) => setRecodeRule(i, "to", e.target.value)} placeholder="Giá trị mới" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
+              <input type="text" value={r.to} onChange={(e) => setRecodeRule(i, "to", e.target.value)} placeholder={t("transformTab.newValuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
             </div>
           ))}
-          <button type="button" onClick={addRecodeRule} className="text-sm text-brand hover:underline">+ Thêm quy tắc</button>
+          <button type="button" onClick={addRecodeRule} className="text-sm text-brand hover:underline">{t("transformTab.addRuleButton")}</button>
         </div>
       )}
-      <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Áp dụng</button>
+      <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("transformTab.applyButton")}</button>
       {showTransformChoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowTransformChoiceModal(false)}>
           <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-              <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Biến đổi dữ liệu</h3>
-              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t("transformTab.modalTitle")}</h3>
+              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("transformTab.closeAriaLabel")}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
-            <p className="text-neutral-600 dark:text-neutral-400">Bạn muốn biến đổi dữ liệu gốc hay sinh ra file (dataset) mới?</p>
+            <p className="text-neutral-600 dark:text-neutral-400">{t("transformTab.modalQuestion")}</p>
             <div className="flex flex-col gap-2">
               <button type="button" onClick={() => applyTransform(true)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
-                Biến đổi dữ liệu gốc
+                {t("transformTab.overwriteOriginalButton")}
               </button>
               <button type="button" onClick={() => applyTransform(false)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
-                Sinh file mới (dataset mới)
+                {t("transformTab.createNewButton")}
               </button>
               <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
-                Hủy
+                {t("transformTab.cancelButton")}
               </button>
             </div>
             </div>
@@ -3103,16 +3126,16 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
       )}
       {lastTransformResult && (
         <div className="mt-6 space-y-4 rounded-xl border border-neutral-200 dark:border-neutral-600 bg-neutral-50/50 dark:bg-neutral-800/50 p-4">
-          <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Kết quả biến đổi {lastTransformResult.actionLabel}</h3>
+          <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("transformTab.transformResultTitle")} {lastTransformResult.actionLabel}</h3>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Trước: <strong>{lastTransformResult.before.length - 1}</strong> hàng × <strong>{lastTransformResult.before[0]?.length ?? 0}</strong> cột
+            {t("transformTab.beforeLabel")} <strong>{lastTransformResult.before.length - 1}</strong> {t("transformTab.rowsUnit")} × <strong>{lastTransformResult.before[0]?.length ?? 0}</strong> {t("transformTab.columnsUnit")}
             {" → "}
-            Sau: <strong>{lastTransformResult.after.length - 1}</strong> hàng × <strong>{lastTransformResult.after[0]?.length ?? 0}</strong> cột
+            {t("transformTab.afterLabel")} <strong>{lastTransformResult.after.length - 1}</strong> {t("transformTab.rowsUnit")} × <strong>{lastTransformResult.after[0]?.length ?? 0}</strong> {t("transformTab.columnsUnit")}
           </p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20 overflow-hidden">
               <div className="px-3 py-2 border-b border-amber-200 dark:border-amber-800 bg-amber-100/80 dark:bg-amber-900/40 font-medium text-amber-900 dark:text-amber-100 text-sm">
-                Dữ liệu trước biến đổi
+                {t("transformTab.beforeDataHeader")}
               </div>
               <div className="overflow-x-auto max-h-64 overflow-y-auto">
                 <table className="w-full text-sm">
@@ -3136,13 +3159,13 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
               </div>
               {lastTransformResult.before.length > 16 && (
                 <p className="px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200 bg-amber-100/60 dark:bg-amber-900/30">
-                  Chỉ hiển thị 15 hàng đầu. Tổng {lastTransformResult.before.length - 1} hàng.
+                  {t("transformTab.rowsTruncatedPrefix")} {lastTransformResult.before.length - 1} {t("transformTab.rowsTruncatedSuffix")}
                 </p>
               )}
             </div>
             <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/20 overflow-hidden">
               <div className="px-3 py-2 border-b border-emerald-200 dark:border-emerald-800 bg-emerald-100/80 dark:bg-emerald-900/40 font-medium text-emerald-900 dark:text-emerald-100 text-sm">
-                Dữ liệu sau biến đổi
+                {t("transformTab.afterDataHeader")}
               </div>
               <div className="overflow-x-auto max-h-64 overflow-y-auto">
                 <table className="w-full text-sm">
@@ -3166,13 +3189,13 @@ function TransformTab({ selectedDs, setDatasets, onSelectDataset, onWorkflowData
               </div>
               {lastTransformResult.after.length > 16 && (
                 <p className="px-3 py-1.5 text-xs text-emerald-800 dark:text-emerald-200 bg-emerald-100/60 dark:bg-emerald-900/30">
-                  Chỉ hiển thị 15 hàng đầu. Tổng {lastTransformResult.after.length - 1} hàng.
+                  {t("transformTab.rowsTruncatedPrefix")} {lastTransformResult.after.length - 1} {t("transformTab.rowsTruncatedSuffix")}
                 </p>
               )}
             </div>
           </div>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Dataset mới đã được thêm vào danh sách (hoặc đã cập nhật dataset gốc). Bạn có thể chuyển tab <strong>Xem dữ liệu</strong> để xem toàn bộ.
+            {t("transformTab.newDatasetAddedPrefix")} <strong>{t("transformTab.viewDataTabName")}</strong> {t("transformTab.newDatasetAddedSuffix")}
           </p>
         </div>
       )}
@@ -3205,15 +3228,15 @@ function AnalysisView({
 }) {
   const effectiveTab = tab === "descriptive" ? "hypothesis" : tab;
   const tabs: Record<AnalysisTab, { title: string; desc: string }> = {
-    descriptive: { title: "Thống kê mô tả", desc: "Thống kê mô tả, phân bố, effect size. AI diễn giải." },
-    hypothesis: { title: "Kiểm định giả thuyết", desc: "t-test, ANOVA, Chi-square, Mann-Whitney, Shapiro-Wilk, phân tích lực mẫu." },
-    regression: { title: "Hồi quy", desc: "OLS (Y liên tục), Logistic (Y nhị phân). VIF, kiểm tra đa cộng tuyến." },
-    sem: { title: "SEM", desc: "Mediation (X→M→Y, nhiều M), Moderation (tương tác X×M). Mô hình cấu trúc." },
-    correlation: { title: "Ma trận tương quan", desc: "Pearson hoặc Spearman giữa các cột số." },
-    reliability: { title: "Độ tin cậy Cronbach", desc: "Hệ số Cronbach's alpha cho thang đo (ví dụ Likert), đánh giá độ tin cậy nội tại." },
-    factor: { title: "Phân tích nhân tố (EFA)", desc: "Trích nhân tố PCA, xoay varimax. Kiểm tra cấu trúc thang đo." },
-    ml: { title: "Học máy", desc: "Phân loại, hồi quy ML, độ quan trọng biến, cross-validation." },
-    bayesian: { title: "Bayesian", desc: "Suy luận Bayesian, trực quan hóa posterior, so sánh mô hình." },
+    descriptive: { title: t("analysisView.tabDescriptiveTitle"), desc: t("analysisView.tabDescriptiveDesc") },
+    hypothesis: { title: t("analysisView.tabHypothesisTitle"), desc: t("analysisView.tabHypothesisDesc") },
+    regression: { title: t("analysisView.tabRegressionTitle"), desc: t("analysisView.tabRegressionDesc") },
+    sem: { title: t("analysisView.tabSemTitle"), desc: t("analysisView.tabSemDesc") },
+    correlation: { title: t("analysisView.tabCorrelationTitle"), desc: t("analysisView.tabCorrelationDesc") },
+    reliability: { title: t("analysisView.tabReliabilityTitle"), desc: t("analysisView.tabReliabilityDesc") },
+    factor: { title: t("analysisView.tabFactorTitle"), desc: t("analysisView.tabFactorDesc") },
+    ml: { title: t("analysisView.tabMlTitle"), desc: t("analysisView.tabMlDesc") },
+    bayesian: { title: t("analysisView.tabBayesianTitle"), desc: t("analysisView.tabBayesianDesc") },
   };
   const { title, desc } = tabs[effectiveTab] ??{ title: effectiveTab, desc: "" };
   const [partialCol1, setPartialCol1] = useState("");
@@ -3229,25 +3252,25 @@ function AnalysisView({
     const corr = (analysisBackendAvailable ? correlationBackendResult : null) ?? computeCorrelationMatrix(rows, correlationMethod);
     if (!corr || corr.matrix.length < 2) return (
       <div className="w-full max-w-full">
-        <h2 className="text-xl font-semibold mb-2">Ma trận tương quan</h2>
-        <p className="text-neutral-500">Cần ít nhất 2 cột số và đủ dữ liệu.</p>
+        <h2 className="text-xl font-semibold mb-2">{t("analysisView.correlationTitle")}</h2>
+        <p className="text-neutral-500">{t("analysisView.correlationInsufficientData")}</p>
       </div>
     );
     return (
       <div className="w-full max-w-full">
-        <h2 className="text-xl font-semibold mb-2">Ma trận tương quan</h2>
-        <p className="text-neutral-600 dark:text-neutral-400 mb-4">Hệ số tương quan giữa các cột số. Pearson: quan hệ tuyến tính; Spearman: hạng (ordinal); Kendall: tau-b (ordinal, ưu tiên cặp gần).</p>
+        <h2 className="text-xl font-semibold mb-2">{t("analysisView.correlationTitle")}</h2>
+        <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("analysisView.correlationDesc")}</p>
         {corr && corr.columnNames.length > 0 && (
           <AIAssistPanel
             context={`Ma trận tương quan (${correlationMethod}). Cột: ${corr.columnNames.join(", ")}. Mẫu hệ số: ${corr.matrix.slice(0, 4).map((row, i) => `${corr.columnNames[i]}: ${row.slice(0, 4).map((v) => v.toFixed(2)).join(", ")}`).join("; ")}.`}
-            quickPrompts={[{ label: "Giải thích ma trận tương quan", systemHint: "Bạn là chuyên gia thống kê. Giải thích ma trận tương quan: ý nghĩa hệ số Pearson/Spearman/Kendall (cường độ, hướng), mối quan hệ giữa các cặp biến. Gợi ý khi nào cần kiểm định ý nghĩa (test r=0). Trả lời ngắn gọn bằng tiếng Việt." }]}
-            title="Hỏi AI về ma trận tương quan"
+            quickPrompts={[{ label: t("analysisView.explainCorrelationLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích ma trận tương quan: ý nghĩa hệ số Pearson/Spearman/Kendall (cường độ, hướng), mối quan hệ giữa các cặp biến. Gợi ý khi nào cần kiểm định ý nghĩa (test r=0). ${aiAnswerLangHint()}` }]}
+            title={t("analysisView.askAiCorrelationTitle")}
           />
         )}
         {analysisBackendAvailable && correlationLoading && (
           <p className="flex items-center gap-2 text-sm text-brand mb-2">
             <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden />
-            Đang tải ma trận tương quan…
+            {t("analysisView.loadingCorrelation")}
           </p>
         )}
         <div className="flex gap-2 mb-3">
@@ -3277,7 +3300,7 @@ function AnalysisView({
             </tbody>
           </table>
         </div>
-        <p className="text-sm font-medium mb-2">Heatmap (màu theo hệ số: -1 ? 1)</p>
+        <p className="text-sm font-medium mb-2">{t("analysisView.heatmapCaption")}</p>
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto inline-block">
           <table className="text-sm border-collapse">
             <thead>
@@ -3303,14 +3326,14 @@ function AnalysisView({
           </table>
         </div>
         <div className="mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-          <p className="text-sm font-semibold mb-2">Ma trận hiệp phương sai (Covariance)</p>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">Hiệp phương sai giữa các cột số. Population: chia N; Sample: chia N-1.</p>
+          <p className="text-sm font-semibold mb-2">{t("analysisView.covarianceTitle")}</p>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">{t("analysisView.covarianceDesc")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-2">
             <div>
-              <label className="block text-xs font-medium mb-1">Cách tính</label>
+              <label className="block text-xs font-medium mb-1">{t("analysisView.methodLabel")}</label>
               <select value={covarianceMethod} onChange={(e) => { setCovarianceMethod(e.target.value as "population" | "sample"); setCovarianceResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
-                <option value="sample">Sample (N-1)</option>
-                <option value="population">Population (N)</option>
+                <option value="sample">{t("analysisView.covarianceSample")}</option>
+                <option value="population">{t("analysisView.covariancePopulation")}</option>
               </select>
             </div>
             <button
@@ -3328,15 +3351,15 @@ function AnalysisView({
               }}
               className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {covarianceLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính Covariance"}
+              {covarianceLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("analysisView.processingLabel")}</> : t("analysisView.computeCovarianceButton")}
             </button>
           </div>
           {covarianceResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto mt-2">
               <AIAssistPanel
                 context={`Ma trận hiệp phương sai (${covarianceMethod}): ${covarianceResult.columnNames.join(", ")}. Mẫu: ${covarianceResult.matrix.slice(0, 3).map((row, i) => `${covarianceResult.columnNames[i]}: [${row.slice(0, 4).map((v) => v.toFixed(2)).join(", ")}${row.length > 4 ? "…" : ""}]`).join("; ")}.`}
-                quickPrompts={[{ label: "Diễn giải ma trận hiệp phương sai", systemHint: "Bạn là chuyên gia thống kê. Giải thích ma trận hiệp phương sai (covariance): ý nghĩa đường chéo (phương sai từng biến), ngoài đường chéo (hiệp phương sai cặp biến). So sánh với tương quan. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về ma trận hiệp phương sai"
+                quickPrompts={[{ label: t("analysisView.explainCovarianceLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích ma trận hiệp phương sai (covariance): ý nghĩa đường chéo (phương sai từng biến), ngoài đường chéo (hiệp phương sai cặp biến). So sánh với tương quan. ${aiAnswerLangHint()}` }]}
+                title={t("analysisView.askAiCovarianceTitle")}
               />
               <table className="w-full text-sm">
                 <thead>
@@ -3362,25 +3385,25 @@ function AnalysisView({
           )}
         </div>
         <div className="mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-700">
-          <p className="text-sm font-semibold mb-2">Tương quan từng phần (kiểm soát biến)</p>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">r(x, y | Z): tương quan giữa x và y khi kiểm soát Z. Chọn 2 biến và tùy chọn biến kiểm soát.</p>
+          <p className="text-sm font-semibold mb-2">{t("analysisView.partialCorrelationTitle")}</p>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-3">{t("analysisView.partialCorrelationDesc")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-2">
             <div>
-              <label className="block text-xs font-medium mb-1">Biến 1</label>
+              <label className="block text-xs font-medium mb-1">{t("analysisView.variable1Label")}</label>
               <select value={partialCol1} onChange={(e) => { setPartialCol1(e.target.value); setPartialResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {corr.columnNames.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Biến 2</label>
+              <label className="block text-xs font-medium mb-1">{t("analysisView.variable2Label")}</label>
               <select value={partialCol2} onChange={(e) => { setPartialCol2(e.target.value); setPartialResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {corr.columnNames.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Kiểm soát (tùy chọn)</label>
+              <label className="block text-xs font-medium mb-1">{t("analysisView.controlVariablesLabel")}</label>
               <div className="flex flex-wrap gap-1">
                 {corr.columnNames.filter((c) => c !== partialCol1 && c !== partialCol2).map((c) => (
                   <label key={c} className="inline-flex items-center gap-1 text-sm">
@@ -3390,17 +3413,17 @@ function AnalysisView({
                 ))}
               </div>
             </div>
-            <button type="button" onClick={() => { const res = partialCol1 && partialCol2 ? computePartialCorrelation(rows, partialCol1, partialCol2, partialControls) : null; setPartialResult(res ?? null); }} disabled={!partialCol1 || !partialCol2} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">Tính r từng phần</button>
+            <button type="button" onClick={() => { const res = partialCol1 && partialCol2 ? computePartialCorrelation(rows, partialCol1, partialCol2, partialControls) : null; setPartialResult(res ?? null); }} disabled={!partialCol1 || !partialCol2} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">{t("analysisView.computePartialRButton")}</button>
           </div>
           {partialResult && (
             <div className="mt-2">
               <AIAssistPanel
                 context={`Tương quan từng phần: r(${partialCol1}, ${partialCol2} | ${partialControls.length ? partialControls.join(", ") : "—"}) = ${partialResult.r.toFixed(4)}, n = ${partialResult.n}.`}
-                quickPrompts={[{ label: "Diễn giải tương quan từng phần", systemHint: "Bạn là chuyên gia thống kê. Giải thích tương quan từng phần (partial correlation): mối liên hệ giữa hai biến khi đã kiểm soát (loại trừ ảnh hưởng) các biến khác. Nêu ý nghĩa hệ số và cách đọc. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về tương quan từng phần"
+                quickPrompts={[{ label: t("analysisView.explainPartialCorrelationLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích tương quan từng phần (partial correlation): mối liên hệ giữa hai biến khi đã kiểm soát (loại trừ ảnh hưởng) các biến khác. Nêu ý nghĩa hệ số và cách đọc. ${aiAnswerLangHint()}` }]}
+                title={t("analysisView.askAiPartialCorrelationTitle")}
               />
               <p className="text-sm">r({partialCol1}, {partialCol2} | {partialControls.length ? partialControls.join(", ") : "—"}) = <strong>{partialResult.r.toFixed(4)}</strong>, n = {partialResult.n}</p>
-              {(() => { const ci = computeCorrelationCI(partialResult.r, partialResult.n); return ci ? <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">Khoảng tin cậy 95% cho r (Fisher z): [{ci.ciLower.toFixed(4)}, {ci.ciUpper.toFixed(4)}]</p> : null; })()}
+              {(() => { const ci = computeCorrelationCI(partialResult.r, partialResult.n); return ci ? <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">{t("analysisView.confidenceIntervalPrefix")} [{ci.ciLower.toFixed(4)}, {ci.ciUpper.toFixed(4)}]</p> : null; })()}
             </div>
           )}
         </div>
@@ -3444,7 +3467,7 @@ function AnalysisView({
       <h2 className="text-xl font-semibold mb-2">{title}</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{desc}</p>
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm text-neutral-500">
-        Tính năng sẽ được bổ sung trong bản cập nhật tới.
+        {t("analysisView.featureComingSoon")}
       </div>
     </div>
   );
@@ -3477,20 +3500,20 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
   };
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">Phân tích nhân tố khám phá (EFA)</h2>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Trích xuất nhân tố bằng PCA, xoay varimax. Kiểm tra cấu trúc thang đo (Likert).</p>
+      <h2 className="text-xl font-semibold mb-2">{t("factorTab.title")}</h2>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("factorTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}.` : undefined}
           context="Phân tích nhân tố khám phá (EFA): trích xuất nhân tố (PCA), xoay varimax. Chọn ít nhất 2 biến (item), có thể chỉ định số nhân tố hoặc để eigenvalue > 1."
-          quickPrompts={[{ label: "Gợi ý số nhân tố và diễn giải EFA", systemHint: "Bạn là chuyên gia EFA. Gợi ý cách chọn số nhân tố (eigenvalue > 1, scree plot), ý nghĩa loadings và đặt tên nhân tố. Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về EFA"
+          quickPrompts={[{ label: t("factorTab.aiPromptSuggestFactorsLabel"), systemHint: `Bạn là chuyên gia EFA. Gợi ý cách chọn số nhân tố (eigenvalue > 1, scree plot), ý nghĩa loadings và đặt tên nhân tố. ${aiAnswerLangHint()}` }]}
+          title={t("factorTab.askAiTitle")}
         />
       </div>
       {numericCols.length >= 2 ? (
         <>
           <div className="flex flex-wrap gap-2 mb-3">
-            <span className="text-sm font-medium">Chọn biến (item):</span>
+            <span className="text-sm font-medium">{t("factorTab.selectItemsLabel")}</span>
             {numericCols.map((c) => (
               <label key={c} className="flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" checked={selectedCols.includes(c)} onChange={() => toggleCol(c)} className="rounded" />
@@ -3500,24 +3523,24 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
           </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Số nhân tố (để trống = eigenvalue &gt; 1)</label>
+              <label className="block text-sm font-medium mb-1">{t("factorTab.numFactorsLabel")}</label>
               <input type="number" min={1} max={selectedCols.length} value={nFactors} onChange={(e) => { const v = e.target.value; setNFactors(v === "" ? "" : Math.max(1, parseInt(v, 10) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28" placeholder="Auto" />
             </div>
             <button type="button" onClick={runEFA} disabled={efaLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {efaLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy EFA"}
+              {efaLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("factorTab.processingLabel")}</> : t("factorTab.runEfaButton")}
             </button>
           </div>
           {result && (
             <div className="space-y-4">
               <AIAssistPanel
                 context={`EFA: ${result.nFactors} nhân tố. Eigenvalues: ${result.eigenvalues.slice(0, result.nFactors).map((e) => e.toFixed(2)).join(", ")}. Phương sai giải thích: ${result.varianceExplained?.slice(0, result.nFactors).map((v) => v?.toFixed(1) + "%").join(", ") ?? "—"}. Loadings (varimax) cho các biến: ${result.columnNames.slice(0, 6).join(", ")}${result.columnNames.length > 6 ? "..." : ""}.`}
-                quickPrompts={[{ label: "Diễn giải kết quả EFA", systemHint: "Bạn là chuyên gia phân tích nhân tố (EFA). Giải thích: số nhân tố trích, eigenvalue (>1), % phương sai giải thích, loadings (trọng số từng biến trên từng nhân tố). Gợi ý cách đặt tên nhân tố dựa trên biến có loading cao. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về EFA"
+                quickPrompts={[{ label: t("factorTab.explainResultsLabel"), systemHint: `Bạn là chuyên gia phân tích nhân tố (EFA). Giải thích: số nhân tố trích, eigenvalue (>1), % phương sai giải thích, loadings (trọng số từng biến trên từng nhân tố). Gợi ý cách đặt tên nhân tố dựa trên biến có loading cao. ${aiAnswerLangHint()}` }]}
+                title={t("factorTab.askAiTitle")}
               />
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-                <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">Eigenvalues &amp; phương sai giải thích</p>
+                <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">{t("factorTab.eigenvaluesHeader")}</p>
                 <table className="w-full">
-                  <thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-2">Nhân tố</th><th className="text-right p-2">Eigenvalue</th><th className="text-right p-2">% phương sai</th></tr></thead>
+                  <thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-2">{t("factorTab.factorColumnHeader")}</th><th className="text-right p-2">Eigenvalue</th><th className="text-right p-2">{t("factorTab.varianceExplainedHeader")}</th></tr></thead>
                   <tbody>
                     {result.eigenvalues.slice(0, result.nFactors).map((e, i) => (
                       <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -3530,11 +3553,11 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
                 </table>
               </div>
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-                <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">Ma trận nhân tố (loadings, varimax)</p>
+                <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">{t("factorTab.loadingsMatrixHeader")}</p>
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-600">
-                      <th className="text-left p-2">Biến</th>
+                      <th className="text-left p-2">{t("factorTab.variableColumnHeader")}</th>
                       {Array.from({ length: result.nFactors }, (_, i) => <th key={i} className="text-right p-2">F{i + 1}</th>)}
                     </tr>
                   </thead>
@@ -3554,7 +3577,7 @@ function FactorTab({ selectedDataset, analysisBackendAvailable = false, showToas
           )}
         </>
       ) : (
-        <p className="text-neutral-500">Cần ít nhất 2 cột số.</p>
+        <p className="text-neutral-500">{t("factorTab.insufficientColumns")}</p>
       )}
     </div>
   );
@@ -3626,32 +3649,32 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
 
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">Hồi quy</h2>
+      <h2 className="text-xl font-semibold mb-2">{t("regressionExplainer.title")}</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
-        Hồi quy tuyến tính (OLS) khi Y liên tục, Hồi quy Logistic khi Y nhị phân (0/1), Hồi quy Poisson khi Y đếm (số nguyên ≥ 0), Hồi quy Ridge (L2) khi nhiều biến/đa cộng tuyến. VIF kiểm tra đa cộng tuyến.
+        {t("regressionExplainer.description")}
       </p>
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows}, số cột: ${selectedDataset.columns}. Cột số: ${numericCols.slice(0, 15).join(", ")}${numericCols.length > 15 ? "…" : ""}.` : undefined}
           context="Hồi quy: OLS khi Y liên tục, Logistic khi Y nhị phân (0/1). VIF kiểm tra đa cộng tuyến. Chọn Y và các biến X rồi Chạy."
-          quickPrompts={[{ label: "Khi nào dùng OLS vs Logistic", systemHint: "Bạn là chuyên gia hồi quy. So sánh OLS (Y liên tục) và Logistic (Y nhị phân 0/1). Giải thích hệ số, R², VIF. Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về hồi quy"
+          quickPrompts={[{ label: t("regressionExplainer.whenToUseOlsVsLogisticLabel"), systemHint: `Bạn là chuyên gia hồi quy. So sánh OLS (Y liên tục) và Logistic (Y nhị phân 0/1). Giải thích hệ số, R², VIF. ${aiAnswerLangHint()}` }]}
+          title={t("regressionExplainer.askAiTitle")}
         />
       </div>
 
       {selectedDataset && numericCols.length >= 2 && (
         <section className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Hồi quy tuyến tính (OLS)</h3>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("regressionExplainer.olsSectionTitle")}</h3>
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (Y)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.dependentVariableLabel")}</label>
               <select value={olsYCol} onChange={(e) => { setOlsYCol(e.target.value); setOlsResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn Y —</option>
+                <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến độc lập (X) – chọn ít nhất 1</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.independentVariablesLabel")}</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {numericCols.filter((c) => c !== olsYCol).map((c) => (
                   <label key={c} className="flex items-center gap-1.5 cursor-pointer">
@@ -3662,26 +3685,26 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               </div>
             </div>
             <button type="button" onClick={runOLS} disabled={regressionLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {regressionLoading === "ols" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy OLS"}
+              {regressionLoading === "ols" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("regressionExplainer.processingLabel")}</> : t("regressionExplainer.runOlsButton")}
             </button>
           </div>
           {olsResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
               <div className="flex items-center justify-end gap-2 p-2 border-b border-neutral-100">
-                <button type="button" onClick={() => { const headers = ["Biến","Hệ số","SE","t","p-value"]; const rows = [["(Hàng số)", olsResult.intercept.toFixed(4), olsResult.se["(Intercept)"]?.toFixed(4) ??"", olsResult.tStat["(Intercept)"]?.toFixed(4) ??"", olsResult.pValue["(Intercept)"] != null ? (olsResult.pValue["(Intercept)"] < 0.001 ? "< .001" : olsResult.pValue["(Intercept)"].toFixed(4)) : ""], ...olsResult.xNames.map((name) => [name, olsResult.coefficients[name]?.toFixed(4) ??"", olsResult.se[name]?.toFixed(4) ??"", olsResult.tStat[name]?.toFixed(4) ??"", olsResult.pValue[name] != null ? (olsResult.pValue[name]! < 0.001 ? "< .001" : olsResult.pValue[name]!.toFixed(4)) : ""])]; const tsv = [headers.join("\t"), ...rows.map((r) => r.join("\t")), `R2 = ${olsResult.r2.toFixed(4)}, Adj R2 = ${olsResult.adjR2.toFixed(4)}, n = ${olsResult.n}`].join("\n"); void navigator.clipboard.writeText(tsv); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> Sao chép bảng</button>
+                <button type="button" onClick={() => { const headers = [t("regressionExplainer.tableVariable"),t("regressionExplainer.tableCoefficient"),"SE","t","p-value"]; const rows = [[t("regressionExplainer.interceptLabel"), olsResult.intercept.toFixed(4), olsResult.se["(Intercept)"]?.toFixed(4) ??"", olsResult.tStat["(Intercept)"]?.toFixed(4) ??"", olsResult.pValue["(Intercept)"] != null ? (olsResult.pValue["(Intercept)"] < 0.001 ? "< .001" : olsResult.pValue["(Intercept)"].toFixed(4)) : ""], ...olsResult.xNames.map((name) => [name, olsResult.coefficients[name]?.toFixed(4) ??"", olsResult.se[name]?.toFixed(4) ??"", olsResult.tStat[name]?.toFixed(4) ??"", olsResult.pValue[name] != null ? (olsResult.pValue[name]! < 0.001 ? "< .001" : olsResult.pValue[name]!.toFixed(4)) : ""])]; const tsv = [headers.join("\t"), ...rows.map((r) => r.join("\t")), `R2 = ${olsResult.r2.toFixed(4)}, Adj R2 = ${olsResult.adjR2.toFixed(4)}, n = ${olsResult.n}`].join("\n"); void navigator.clipboard.writeText(tsv); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("regressionExplainer.copyTableButton")}</button>
               </div>
               <AIAssistPanel
                 metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows ?? rows.length}, số cột: ${selectedDataset.columns ?? (rows[0]?.length ?? 0)}. Các cột: ${(selectedDataset.columnNames || rows[0] || []).slice(0, 25).join(", ")}${(selectedDataset.columnNames?.length ?? rows[0]?.length ?? 0) > 25 ? "..." : ""}.` : undefined}
                 process={`Phương pháp: Hồi quy OLS (bình phương tối thiểu). Biến phụ thuộc Y: ${olsYCol}. Biến độc lập X: ${olsResult.xNames.join(", ")}.`}
                 context={`Hồi quy OLS: Y và ${olsResult.xNames.join(", ")}. R² = ${olsResult.r2.toFixed(3)}, R² điều chỉnh = ${olsResult.adjR2.toFixed(3)}, n = ${olsResult.n}. Hệ số: (Intercept) = ${olsResult.intercept.toFixed(3)}; ${olsResult.xNames.map((n) => `${n} = ${olsResult.coefficients[n]?.toFixed(3)} (p = ${olsResult.pValue[n] != null ? (olsResult.pValue[n]! < 0.001 ? "<.001" : olsResult.pValue[n]!.toFixed(3)) : "—"})`).join("; ")}.`}
-                quickPrompts={[{ label: "Diễn giải hồi quy OLS", systemHint: "Bạn là chuyên gia hồi quy tuyến tính (OLS). Giải thích ý nghĩa: hệ số hồi quy (beta), sai số chuẩn, t, p-value; R² và R² hiệu chỉnh; biến nào có ảnh hưởng có ý nghĩa thống kê. Gợi ý cách trình bày trong báo cáo. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về hồi quy OLS"
+                quickPrompts={[{ label: t("regressionExplainer.explainOlsLabel"), systemHint: `Bạn là chuyên gia hồi quy tuyến tính (OLS). Giải thích ý nghĩa: hệ số hồi quy (beta), sai số chuẩn, t, p-value; R² và R² hiệu chỉnh; biến nào có ảnh hưởng có ý nghĩa thống kê. Gợi ý cách trình bày trong báo cáo. ${aiAnswerLangHint()}` }]}
+                title={t("regressionExplainer.askAiOlsTitle")}
               />
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                    <th className="text-left p-2">Biến</th>
-                    <th className="text-right p-2">Hệ số</th>
+                    <th className="text-left p-2">{t("regressionExplainer.tableVariable")}</th>
+                    <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}</th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">t</th>
                     <th className="text-right p-2">p-value</th>
@@ -3692,7 +3715,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 </thead>
                 <tbody>
                   <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                    <td className="p-2 font-medium">(Hàng số)</td>
+                    <td className="p-2 font-medium">{t("regressionExplainer.interceptLabel")}</td>
                     <td className="p-2 text-right">{olsResult.intercept.toFixed(4)}</td>
                     <td className="p-2 text-right">{olsResult.se["(Intercept)"]?.toFixed(4) ?? "—"}</td>
                     <td className="p-2 text-right">{olsResult.tStat["(Intercept)"]?.toFixed(3) ?? "—"}</td>
@@ -3720,14 +3743,14 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 </tbody>
               </table>
               <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t border-neutral-100">
-                R² = {olsResult.r2.toFixed(4)}, R² điều chỉnh = {olsResult.adjR2.toFixed(4)}, n = {olsResult.n}, df = {olsResult.df}.
+                R² = {olsResult.r2.toFixed(4)}{t("regressionExplainer.adjRSquaredLabel")}{olsResult.adjR2.toFixed(4)}, n = {olsResult.n}, df = {olsResult.df}.
               </p>
               {vifResult && Object.keys(vifResult).length > 0 && (
                 <div className="p-2 border-t border-neutral-100">
-                  <p className="font-medium mb-1">VIF (đa cộng tuyến):</p>
+                  <p className="font-medium mb-1">{t("regressionExplainer.vifLabel")}</p>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(vifResult).map(([name, v]) => (
-                      <span key={name} className={`text-xs px-2 py-0.5 rounded ${v > 5 ? "bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100" : "bg-neutral-100 dark:bg-neutral-700"}`} title={v > 5 ? "VIF &gt; 5: cảnh báo đa cộng tuyến" : ""}>{name}: {v.toFixed(2)}</span>
+                      <span key={name} className={`text-xs px-2 py-0.5 rounded ${v > 5 ? "bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100" : "bg-neutral-100 dark:bg-neutral-700"}`} title={v > 5 ? t("regressionExplainer.vifWarningTooltip") : ""}>{name}: {v.toFixed(2)}</span>
                     ))}
                   </div>
                 </div>
@@ -3739,17 +3762,17 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
 
       {selectedDataset && numericCols.length >= 2 && yBinaryOptions.length > 0 && (
         <section className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Hồi quy Logistic (Y nhị phân 0/1)</h3>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("regressionExplainer.logisticSectionTitle")}</h3>
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (Y: 0 hoặc 1)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.logisticDependentVariableLabel")}</label>
               <select value={logYCol} onChange={(e) => { setLogYCol(e.target.value); setLogResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn Y —</option>
+                <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {yBinaryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến độc lập (X)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.independentVariablesShortLabel")}</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {numericCols.filter((c) => c !== logYCol).map((c) => (
                   <label key={c} className="flex items-center gap-1.5 cursor-pointer">
@@ -3760,7 +3783,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               </div>
             </div>
             <button type="button" onClick={runLogistic} disabled={regressionLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {regressionLoading === "logistic" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Logistic"}
+              {regressionLoading === "logistic" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("regressionExplainer.processingLabel")}</> : t("regressionExplainer.runLogisticButton")}
             </button>
           </div>
           {logResult && (
@@ -3769,14 +3792,14 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows ?? rows.length}, số cột: ${selectedDataset.columns ?? (rows[0]?.length ?? 0)}. Các cột: ${(selectedDataset.columnNames || rows[0] || []).slice(0, 25).join(", ")}${(selectedDataset.columnNames?.length ?? rows[0]?.length ?? 0) > 25 ? "..." : ""}.` : undefined}
                 process={`Phương pháp: Hồi quy Logistic (Y nhị phân). Biến phụ thuộc Y: ${logYCol}. Biến độc lập X: ${logResult.xNames.join(", ")}.`}
                 context={`Hồi quy Logistic: Y nhị phân, biến X: ${logResult.xNames.join(", ")}. AIC = ${logResult.aic.toFixed(2)}, n = ${logResult.n}. Hệ số & OR: ${logResult.xNames.map((n) => `${n} = ${logResult.coefficients[n]?.toFixed(3)} (OR=${logResult.oddsRatios[n]?.toFixed(3)}, p=${logResult.pValue[n] != null ? (logResult.pValue[n]! < 0.001 ? "<.001" : logResult.pValue[n]!.toFixed(3)) : "—"})`).join("; ")}.`}
-                quickPrompts={[{ label: "Diễn giải hồi quy logistic", systemHint: "Bạn là chuyên gia hồi quy logistic. Giải thích ý nghĩa: hệ số (log-odds), odds ratio (OR), p-value; biến nào làm tăng/giảm xác suất biến phụ thuộc nhị phân. Gợi ý cách báo cáo OR và khoảng tin cậy. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về hồi quy logistic"
+                quickPrompts={[{ label: t("regressionExplainer.explainLogisticLabel"), systemHint: `Bạn là chuyên gia hồi quy logistic. Giải thích ý nghĩa: hệ số (log-odds), odds ratio (OR), p-value; biến nào làm tăng/giảm xác suất biến phụ thuộc nhị phân. Gợi ý cách báo cáo OR và khoảng tin cậy. ${aiAnswerLangHint()}` }]}
+                title={t("regressionExplainer.askAiLogisticTitle")}
               />
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                    <th className="text-left p-2">Biến</th>
-                    <th className="text-right p-2">Hệ số</th>
+                    <th className="text-left p-2">{t("regressionExplainer.tableVariable")}</th>
+                    <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}</th>
                     <th className="text-right p-2">OR</th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">z</th>
@@ -3785,7 +3808,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 </thead>
                 <tbody>
                   <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                    <td className="p-2 font-medium">(Hàng số)</td>
+                    <td className="p-2 font-medium">{t("regressionExplainer.interceptLabel")}</td>
                     <td className="p-2 text-right">{logResult.intercept.toFixed(4)}</td>
                     <td className="p-2 text-right">—</td>
                     <td className="p-2 text-right">{logResult.se["(Intercept)"]?.toFixed(4) ?? "—"}</td>
@@ -3805,7 +3828,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 </tbody>
               </table>
               <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t border-neutral-100">
-                Log-likelihood = {logResult.logLikelihood.toFixed(2)}, AIC = {logResult.aic.toFixed(2)}, n = {logResult.n}. Lớp Y: 0 = {logResult.classCounts["0"]}, 1 = {logResult.classCounts["1"]}.
+                Log-likelihood = {logResult.logLikelihood.toFixed(2)}, AIC = {logResult.aic.toFixed(2)}, n = {logResult.n}. {t("regressionExplainer.classYLabel")} 0 = {logResult.classCounts["0"]}, 1 = {logResult.classCounts["1"]}.
               </p>
             </div>
           )}
@@ -3814,18 +3837,18 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
 
       {selectedDataset && numericCols.length >= 2 && analysisBackendAvailable && (
         <section className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Hồi quy Poisson (Y đếm: số nguyên ≥ 0)</h3>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">Dùng khi Y là biến đếm (số lần, số sự kiện...). IRR = Incidence Rate Ratio = exp(β).</p>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("regressionExplainer.poissonSectionTitle")}</h3>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">{t("regressionExplainer.poissonDescription")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (Y: đếm)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.poissonDependentVariableLabel")}</label>
               <select value={poissonYCol} onChange={(e) => { setPoissonYCol(e.target.value); setPoissonResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn Y —</option>
+                <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến độc lập (X)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.independentVariablesShortLabel")}</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {numericCols.filter((c) => c !== poissonYCol).map((c) => (
                   <label key={c} className="flex items-center gap-1.5 cursor-pointer">
@@ -3851,7 +3874,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               }}
               className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {regressionLoading === "poisson" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Poisson"}
+              {regressionLoading === "poisson" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("regressionExplainer.processingLabel")}</> : t("regressionExplainer.runPoissonButton")}
             </button>
           </div>
           {poissonResult && (
@@ -3859,8 +3882,8 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                    <th className="text-left p-2">Biến</th>
-                    <th className="text-right p-2">Hệ số</th>
+                    <th className="text-left p-2">{t("regressionExplainer.tableVariable")}</th>
+                    <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}</th>
                     <th className="text-right p-2">IRR</th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">z</th>
@@ -3869,7 +3892,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
                 </thead>
                 <tbody>
                   <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                    <td className="p-2 font-medium">(Hàng số)</td>
+                    <td className="p-2 font-medium">{t("regressionExplainer.interceptLabel")}</td>
                     <td className="p-2 text-right">{poissonResult.intercept.toFixed(4)}</td>
                     <td className="p-2 text-right">—</td>
                     <td className="p-2 text-right">{poissonResult.se["(Intercept)"]?.toFixed(4) ?? "—"}</td>
@@ -3898,18 +3921,18 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
 
       {selectedDataset && numericCols.length >= 2 && analysisBackendAvailable && (
         <section className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/30 dark:bg-sky-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Hồi quy Ridge (L2 regularized)</h3>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">Hồi quy Ridge với penalty L2 (alpha). Phù hợp khi nhiều biến hoặc đa cộng tuyến. Alpha càng lớn hệ số càng co về 0.</p>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("regressionExplainer.ridgeSectionTitle")}</h3>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">{t("regressionExplainer.ridgeDescription")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (Y)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.dependentVariableLabel")}</label>
               <select value={ridgeYCol} onChange={(e) => { setRidgeYCol(e.target.value); setRidgeResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn Y —</option>
+                <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến độc lập (X)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.independentVariablesShortLabel")}</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {numericCols.filter((c) => c !== ridgeYCol).map((c) => (
                   <label key={c} className="flex items-center gap-1.5 cursor-pointer">
@@ -3920,7 +3943,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Alpha (λ)</label>
+              <label className="block text-sm font-medium mb-1">{t("regressionExplainer.alphaLabel")}</label>
               <input type="number" min={0.01} step={0.1} value={ridgeAlpha} onChange={(e) => { setRidgeAlpha(Math.max(0.01, parseFloat(e.target.value) || 1)); setRidgeResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
             <button
@@ -3939,7 +3962,7 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               }}
               className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {regressionLoading === "ridge" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Ridge"}
+              {regressionLoading === "ridge" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("regressionExplainer.processingLabel")}</> : t("regressionExplainer.runRidgeButton")}
             </button>
           </div>
           {ridgeResult && (
@@ -3947,13 +3970,13 @@ function RegressionExplainerView({ selectedDataset, analysisBackendAvailable = f
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                    <th className="text-left p-2">Biến</th>
-                    <th className="text-right p-2">Hệ số</th>
+                    <th className="text-left p-2">{t("regressionExplainer.tableVariable")}</th>
+                    <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                    <td className="p-2 font-medium">(Hàng số)</td>
+                    <td className="p-2 font-medium">{t("regressionExplainer.interceptLabel")}</td>
                     <td className="p-2 text-right">{ridgeResult.intercept.toFixed(4)}</td>
                   </tr>
                   {ridgeResult.xNames.map((name) => (
@@ -4097,47 +4120,47 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
 
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">SEM — Mô hình cấu trúc (AMOS / SmartPLS)</h2>
+      <h2 className="text-xl font-semibold mb-2">{t("semExplainer.title")}</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
-        Mediation (một hoặc nhiều M song song), Moderation, Path analysis (biến quan sát), CFA (Confirmatory Factor Analysis), PLS-SEM (mô hình phương trình cấu trúc theo phương pháp bình phương tối thiểu từng phần).
+        {t("semExplainer.subtitle")}
       </p>
       {analysisBackendAvailable && (
         <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-1">
-          <Cpu className="w-3.5 h-3.5" /> Backend Python: Mediation, Moderation, Path analysis, CFA (semopy), PLS-SEM
+          <Cpu className="w-3.5 h-3.5" /> {t("semExplainer.backendNote")}
         </p>
       )}
       <div className="mb-4">
         <AIAssistPanel
-          metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}.` : undefined}
+          metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. ${t("semExplainer.numericColsLabel")}: ${numericCols.length}.` : undefined}
           context="SEM: Mediation (X → M → Y; có thể nhiều M song song) và Moderation (tương tác X×M ảnh hưởng lên Y). Chọn X, một hoặc nhiều M, Y rồi chạy phân tích."
-          quickPrompts={[{ label: "Giải thích Mediation vs Moderation", systemHint: "Bạn là chuyên gia SEM. So sánh Mediation (M nằm giữa X và Y) và Moderation (M điều tiết ảnh hưởng của X lên Y). Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về SEM"
+          quickPrompts={[{ label: t("semExplainer.quickPromptMediationVsModeration"), systemHint: `Bạn là chuyên gia SEM. So sánh Mediation (M nằm giữa X và Y) và Moderation (M điều tiết ảnh hưởng của X lên Y). ${aiAnswerLangHint()}` }]}
+          title={t("semExplainer.aiTitleSem")}
         />
       </div>
 
       {selectedDataset && numericCols.length >= 3 && (
         <section className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/30 dark:bg-sky-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">Phân tích trung gian (Mediation: X → M → Y)</h3>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">Nhiều M: mô hình trung gian song song (parallel); Y ~ X + M₁ + …; hiệu ứng gián tiếp tổng = Σ aᵢbᵢ. Không hỗ trợ chuỗi M₁→M₂→Y trong ô này — dùng Path analysis.</p>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">{t("semExplainer.mediationHeading")}</h3>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-3">{t("semExplainer.mediationDesc")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <select value={mediationX} onChange={(e) => { const v = e.target.value; setMediationX(v); setMediationMs((ms) => ms.filter((m) => m !== v)); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">X (độc lập)</option>
+              <option value="">{t("semExplainer.xIndependent")}</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <span className="text-neutral-500 self-center" aria-hidden="true">→</span>
             <select value={mediationY} onChange={(e) => { const v = e.target.value; setMediationY(v); setMediationMs((ms) => ms.filter((m) => m !== v)); setMediationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">Y (phụ thuộc)</option>
+              <option value="">{t("semExplainer.yDependent")}</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <button type="button" onClick={runMediation} disabled={semLoading !== null || mediationMs.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {semLoading === "mediation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Mediation"}
+              {semLoading === "mediation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("semExplainer.processing")}</> : t("semExplainer.runMediation")}
             </button>
           </div>
           <div className="mb-3">
-            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">M (trung gian) — chọn một hoặc nhiều cột</p>
+            <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">{t("semExplainer.mediatorSelectLabel")}</p>
             <div className="flex flex-wrap gap-x-4 gap-y-2 max-h-40 overflow-y-auto rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white/80 dark:bg-neutral-800/80 p-2">
               {numericCols.filter((c) => c !== mediationX && c !== mediationY).length === 0 ? (
-                <span className="text-sm text-neutral-500">Chọn X và Y (khác nhau) để chọn các cột trung gian.</span>
+                <span className="text-sm text-neutral-500">{t("semExplainer.selectXYFirst")}</span>
               ) : (
                 numericCols.filter((c) => c !== mediationX && c !== mediationY).map((c) => (
                   <label key={c} className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -4160,11 +4183,11 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm mt-3">
               <AIAssistPanel
                 context={`Mediation (Baron–Kenny, ${mediationResult.paths.length} M song song). ${mediationResult.paths.map((p) => `${p.mCol}: a=${p.a.toFixed(3)} (p ${p.aP < 0.001 ? "<.001" : p.aP.toFixed(3)}), b=${p.b.toFixed(3)} (p ${p.bP < 0.001 ? "<.001" : p.bP.toFixed(3)}), gián tiếp riêng=${p.indirect.toFixed(3)}`).join(" | ")}. c=${mediationResult.c.toFixed(3)}, c'=${mediationResult.cPrime.toFixed(3)}, gián tiếp tổng=${mediationResult.indirectEffect.toFixed(3)}, % trung gian=${mediationResult.pctMediated.toFixed(1)}%, n=${mediationResult.n}.`}
-                quickPrompts={[{ label: "Diễn giải mediation", systemHint: "Bạn là chuyên gia phân tích trung gian (mediation). Giải thích đường a (X→M), b (M→Y trong mô hình đa M), c (tổng X→Y), c' (trực tiếp); hiệu ứng gián tiếp từng M và tổng; % trung gian. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về mediation"
+                quickPrompts={[{ label: t("semExplainer.quickPromptInterpretMediation"), systemHint: `Bạn là chuyên gia phân tích trung gian (mediation). Giải thích đường a (X→M), b (M→Y trong mô hình đa M), c (tổng X→Y), c' (trực tiếp); hiệu ứng gián tiếp từng M và tổng; % trung gian. ${aiAnswerLangHint()}` }]}
+                title={t("semExplainer.aiTitleMediation")}
               />
               <p className="font-medium mb-2">
-                Tổng quan: c (X→Y tổng) = {mediationResult.c.toFixed(4)} (p={mediationResult.cP < 0.001 ? "<.001" : mediationResult.cP.toFixed(3)}), c&apos; (trực tiếp) = {mediationResult.cPrime.toFixed(4)} (p={mediationResult.cPrimeP < 0.001 ? "<.001" : mediationResult.cPrimeP.toFixed(3)}). Hiệu ứng gián tiếp tổng = {mediationResult.indirectEffect.toFixed(4)}, % trung gian = {mediationResult.pctMediated.toFixed(1)}%, <span className="whitespace-nowrap">n = {mediationResult.n}</span>.
+                {t("semExplainer.overviewCLabel")} {mediationResult.c.toFixed(4)} (p={mediationResult.cP < 0.001 ? "<.001" : mediationResult.cP.toFixed(3)}), {t("semExplainer.overviewCPrimeLabel")} {mediationResult.cPrime.toFixed(4)} (p={mediationResult.cPrimeP < 0.001 ? "<.001" : mediationResult.cPrimeP.toFixed(3)}). {t("semExplainer.totalIndirectLabel")} {mediationResult.indirectEffect.toFixed(4)}, {t("semExplainer.pctMediatedLabel")} {mediationResult.pctMediated.toFixed(1)}%, <span className="whitespace-nowrap">{t("semExplainer.nLabel")} {mediationResult.n}</span>.
               </p>
               {mediationResult.paths.length > 0 && (
                 <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600 mt-2">
@@ -4173,7 +4196,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                       <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-left">M</th>
                       <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">a (X→M)</th>
                       <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">p(a)</th>
-                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">b (M→Y|X,M khác)</th>
+                      <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">{t("semExplainer.colBOther")}</th>
                       <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">p(b)</th>
                       <th className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-right">a×b</th>
                     </tr>
@@ -4199,36 +4222,36 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
 
       {selectedDataset && numericCols.length >= 3 && (
         <section className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Phân tích điều tiết (Moderation: Y ~ X + M + X×M)</h3>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("semExplainer.moderationHeading")}</h3>
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <select value={moderationX} onChange={(e) => { setModerationX(e.target.value); setModerationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">X (độc lập)</option>
+              <option value="">{t("semExplainer.xIndependent")}</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <select value={moderationM} onChange={(e) => { setModerationM(e.target.value); setModerationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">M (điều tiết)</option>
+              <option value="">{t("semExplainer.mediatorModerator")}</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <select value={moderationY} onChange={(e) => { setModerationY(e.target.value); setModerationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">Y (phụ thuộc)</option>
+              <option value="">{t("semExplainer.yDependent")}</option>
               {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <button type="button" onClick={runModeration} disabled={semLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {semLoading === "moderation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Moderation"}
+              {semLoading === "moderation" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("semExplainer.processing")}</> : t("semExplainer.runModeration")}
             </button>
           </div>
           {moderationResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
               <AIAssistPanel
                 context={`Moderation: R² = ${moderationResult.r2.toFixed(3)}, n = ${moderationResult.n}. Biến: ${moderationResult.xNames.join(", ")}. Hệ số tương tác p < 0.05 → có điều tiết.`}
-                quickPrompts={[{ label: "Diễn giải moderation", systemHint: "Bạn là chuyên gia phân tích điều tiết (moderation). Giải thích: tương tác giữa X và M (biến điều tiết) ảnh hưởng lên Y; khi nào điều tiết có ý nghĩa (hệ số tương tác p<0.05). Nêu cách đọc và báo cáo. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về moderation"
+                quickPrompts={[{ label: t("semExplainer.quickPromptInterpretModeration"), systemHint: `Bạn là chuyên gia phân tích điều tiết (moderation). Giải thích: tương tác giữa X và M (biến điều tiết) ảnh hưởng lên Y; khi nào điều tiết có ý nghĩa (hệ số tương tác p<0.05). Nêu cách đọc và báo cáo. ${aiAnswerLangHint()}` }]}
+                title={t("semExplainer.aiTitleModeration")}
               />
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                    <th className="text-left p-2">Biến</th>
-                    <th className="text-right p-2">Hệ số</th>
+                    <th className="text-left p-2">{t("semExplainer.colVariable")}</th>
+                    <th className="text-right p-2">{t("semExplainer.colCoefficient")}</th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">t</th>
                     <th className="text-right p-2">p-value</th>
@@ -4246,7 +4269,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                   ))}
                 </tbody>
               </table>
-              <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t border-neutral-100">R² = {moderationResult.r2.toFixed(4)}, n = {moderationResult.n}. Hệ số tương tác (X×M) p &lt; 0.05 → có điều tiết.</p>
+              <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t border-neutral-100">R² = {moderationResult.r2.toFixed(4)}, n = {moderationResult.n}. {t("semExplainer.interactionSignificantNote")}</p>
             </div>
           )}
         </section>
@@ -4254,24 +4277,24 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
 
       {!analysisBackendAvailable && selectedDataset && (
         <section className="rounded-lg border border-dashed border-amber-300/80 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-950/20 p-4 mb-6 text-sm">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Sao không thấy Path analysis, CFA, PLS-SEM?</h3>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("semExplainer.whyNotSeeHeading")}</h3>
           <p className="text-neutral-700 dark:text-neutral-300 mb-2">
-            Ba phần này chỉ hiện khi Quantis <strong>đã kết nối backend phân tích Python</strong> (semopy). Mediation và Moderation ở trên vẫn dùng được vì có thể chạy ngay trên trình duyệt.
+            {t("semExplainer.pythonBackendRequiredPrefix")} <strong>{t("semExplainer.pythonBackendRequiredStrong")}</strong> {t("semExplainer.pythonBackendRequiredSuffix")}
           </p>
           <p className="text-xs text-neutral-600 dark:text-neutral-400">
-            Kiểm tra menu <strong className="text-neutral-800 dark:text-neutral-200">⋮ → Cấu hình kết nối</strong> (mục Backend phân tích / Python). Trên máy chủ, service Node cần <code className="rounded bg-neutral-200/90 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">ANALYZE_PYTHON_URL</code> trỏ tới dịch vụ <code className="rounded bg-neutral-200/90 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">backend-python</code> của Quantis.
+            {t("semExplainer.checkMenuPrefix")} <strong className="text-neutral-800 dark:text-neutral-200">{t("semExplainer.checkMenuStrong")}</strong> {t("semExplainer.checkMenuMiddle")} <code className="rounded bg-neutral-200/90 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">ANALYZE_PYTHON_URL</code> {t("semExplainer.checkMenuPointTo")} <code className="rounded bg-neutral-200/90 dark:bg-neutral-800 px-1 py-0.5 text-[11px]">backend-python</code> {t("semExplainer.checkMenuOfQuantis")}
           </p>
         </section>
       )}
 
       {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
         <section className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">Path analysis (AMOS-style — biến quan sát)</h3>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Định nghĩa từng phương trình: Y ~ X1 + X2 + ... (biến phụ thuộc và các biến dự đoán).</p>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("semExplainer.pathAnalysisHeading")}</h3>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">{t("semExplainer.pathAnalysisDesc")}</p>
           {pathEquations.map((eq, idx) => (
             <div key={idx} className="flex flex-wrap gap-2 items-center mb-2">
               <select value={eq.yCol} onChange={(e) => { const next = [...pathEquations]; next[idx] = { ...next[idx], yCol: e.target.value }; setPathEquations(next); setPathResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
-                <option value="">Y (phụ thuộc)</option>
+                <option value="">{t("semExplainer.yDependent")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
               <span className="text-neutral-500">~</span>
@@ -4283,18 +4306,18 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                   </label>
                 ))}
               </div>
-              {pathEquations.length > 1 && <button type="button" onClick={() => { setPathEquations(pathEquations.filter((_, i) => i !== idx)); setPathResult(null); }} className="text-red-600 text-sm">Xóa</button>}
+              {pathEquations.length > 1 && <button type="button" onClick={() => { setPathEquations(pathEquations.filter((_, i) => i !== idx)); setPathResult(null); }} className="text-red-600 text-sm">{t("semExplainer.delete")}</button>}
             </div>
           ))}
           <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => setPathEquations([...pathEquations, { yCol: "", xCols: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">+ Thêm phương trình</button>
-            <button type="button" onClick={runPathAnalysis} disabled={pathRunning || pathEquations.every((e) => !e.yCol || e.xCols.length === 0)} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{pathRunning ? "Đang chạy..." : "Chạy Path analysis"}</button>
+            <button type="button" onClick={() => setPathEquations([...pathEquations, { yCol: "", xCols: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">{t("semExplainer.addEquation")}</button>
+            <button type="button" onClick={runPathAnalysis} disabled={pathRunning || pathEquations.every((e) => !e.yCol || e.xCols.length === 0)} className="rounded-lg bg-violet-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{pathRunning ? t("semExplainer.running") : t("semExplainer.runPathAnalysis")}</button>
           </div>
           {pathResult && (
             <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-              <p className="p-2 font-medium">Hệ số đường path (n = {pathResult.n})</p>
+              <p className="p-2 font-medium">{t("semExplainer.pathCoefficientsLabel")} (n = {pathResult.n})</p>
               <table className="w-full">
-                <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">From</th><th className="text-left p-2">To</th><th className="text-right p-2">Hệ số</th><th className="text-right p-2">SE</th><th className="text-right p-2">t</th><th className="text-right p-2">p</th></tr></thead>
+                <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">From</th><th className="text-left p-2">To</th><th className="text-right p-2">{t("semExplainer.colCoefficient")}</th><th className="text-right p-2">SE</th><th className="text-right p-2">t</th><th className="text-right p-2">p</th></tr></thead>
                 <tbody>
                   {pathResult.pathCoefficients.map((p, i) => (
                     <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -4304,7 +4327,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                   ))}
                 </tbody>
               </table>
-              <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t">R² theo phương trình: {pathResult.equationsR2.map((e) => `${e.yCol}=${e.r2.toFixed(3)}`).join(", ")}</p>
+              <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t">{t("semExplainer.r2ByEquationLabel")}: {pathResult.equationsR2.map((e) => `${e.yCol}=${e.r2.toFixed(3)}`).join(", ")}</p>
             </div>
           )}
         </section>
@@ -4312,12 +4335,12 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
 
       {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
         <section className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-900/10 p-4 mb-6">
-          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">CFA — Confirmatory Factor Analysis (AMOS/SmartPLS)</h3>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Định nghĩa từng nhân tố (latent) và các chỉ báo (indicators).</p>
+          <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">{t("semExplainer.cfaHeading")}</h3>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">{t("semExplainer.cfaDesc")}</p>
           {cfaFactors.map((f, idx) => (
             <div key={idx} className="mb-3">
               <div className="flex flex-wrap gap-2 items-center mb-1">
-                <input type="text" value={f.name} onChange={(e) => { const next = [...cfaFactors]; next[idx] = { ...next[idx], name: e.target.value }; setCfaFactors(next); setCfaResult(null); }} placeholder="Tên nhân tố (vd F1)" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-24" />
+                <input type="text" value={f.name} onChange={(e) => { const next = [...cfaFactors]; next[idx] = { ...next[idx], name: e.target.value }; setCfaFactors(next); setCfaResult(null); }} placeholder={t("semExplainer.factorNamePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-24" />
                 <span className="text-neutral-500">=~</span>
                 {numericCols.map((col) => (
                   <label key={col} className="flex items-center gap-1 text-sm">
@@ -4325,13 +4348,13 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                     {col}
                   </label>
                 ))}
-                {cfaFactors.length > 1 && <button type="button" onClick={() => { setCfaFactors(cfaFactors.filter((_, i) => i !== idx)); setCfaResult(null); }} className="text-red-600 text-sm">Xóa</button>}
+                {cfaFactors.length > 1 && <button type="button" onClick={() => { setCfaFactors(cfaFactors.filter((_, i) => i !== idx)); setCfaResult(null); }} className="text-red-600 text-sm">{t("semExplainer.delete")}</button>}
               </div>
             </div>
           ))}
           <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => setCfaFactors([...cfaFactors, { name: `F${cfaFactors.length + 1}`, indicators: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">+ Thêm nhân tố</button>
-            <button type="button" onClick={runCFA} disabled={cfaRunning || cfaFactors.every((f) => !f.name || f.indicators.length === 0)} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{cfaRunning ? "Đang chạy..." : "Chạy CFA"}</button>
+            <button type="button" onClick={() => setCfaFactors([...cfaFactors, { name: `F${cfaFactors.length + 1}`, indicators: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">{t("semExplainer.addFactor")}</button>
+            <button type="button" onClick={runCFA} disabled={cfaRunning || cfaFactors.every((f) => !f.name || f.indicators.length === 0)} className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{cfaRunning ? t("semExplainer.running") : t("semExplainer.runCfa")}</button>
           </div>
           {cfaResult && (
             <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
@@ -4340,7 +4363,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                   <p className="p-2 font-medium">Loadings (n = {cfaResult.n ?? "—"})</p>
                   {cfaResult.loadings && cfaResult.loadings.length > 0 && (
                     <table className="w-full">
-                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Nhân tố</th><th className="text-left p-2">Chỉ báo</th><th className="text-right p-2">Estimate</th><th className="text-right p-2">SE</th><th className="text-right p-2">z</th><th className="text-right p-2">p</th></tr></thead>
+                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">{t("semExplainer.colFactor")}</th><th className="text-left p-2">{t("semExplainer.colIndicator")}</th><th className="text-right p-2">Estimate</th><th className="text-right p-2">SE</th><th className="text-right p-2">z</th><th className="text-right p-2">p</th></tr></thead>
                       <tbody>
                         {cfaResult.loadings.map((l, i) => (
                           <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -4364,11 +4387,8 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
       {analysisBackendAvailable && selectedDataset && numericCols.length >= 2 && (
         <section className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/30 dark:bg-orange-900/10 p-4 mb-6">
           <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">PLS-SEM (SmartPLS-style)</h3>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Mô hình ngoại (construct → chỉ báo), mô hình trong (đường path giữa các construct).</p>
-          <p className="text-xs text-amber-800/90 dark:text-amber-200/90 mb-2 rounded border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/80 dark:bg-amber-950/30 px-2 py-1.5">
-            Quantis ước lượng latent bằng trung bình chỉ báo đã chuẩn hóa và loading = tương quan chỉ báo–composite (không phải vòng lặp PLS đầy đủ như SmartPLS). Vì vậy hệ số path, R², AVE, CR, Fornell–Larcker và HTMT có thể khác SmartPLS dù cùng dữ liệu; nên thống nhất một công cụ khi báo cáo chính thức.
-          </p>
-          <p className="text-xs text-neutral-500 mb-2">Ngoại: mỗi construct gắn với các biến chỉ báo. Trong: thêm đường from → to.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">{t("semExplainer.plsDesc")}</p>
+          <p className="text-xs text-neutral-500 mb-2">{t("semExplainer.plsDesc2")}</p>
           {plsOuter.map((o, idx) => (
             <div key={idx} className="flex flex-wrap gap-2 items-center mb-2">
               <input type="text" value={o.lv} onChange={(e) => { const next = [...plsOuter]; next[idx] = { ...next[idx], lv: e.target.value }; setPlsOuter(next); setPlsResult(null); }} placeholder="Construct" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-24" />
@@ -4379,12 +4399,12 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                   {col}
                 </label>
               ))}
-              {plsOuter.length > 1 && <button type="button" onClick={() => { setPlsOuter(plsOuter.filter((_, i) => i !== idx)); setPlsResult(null); }} className="text-red-600 text-sm">Xóa</button>}
+              {plsOuter.length > 1 && <button type="button" onClick={() => { setPlsOuter(plsOuter.filter((_, i) => i !== idx)); setPlsResult(null); }} className="text-red-600 text-sm">{t("semExplainer.delete")}</button>}
             </div>
           ))}
           <div className="flex flex-wrap gap-2 items-center mt-2 mb-2">
-            <button type="button" onClick={() => setPlsOuter([...plsOuter, { lv: `LV${plsOuter.length + 1}`, indicators: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">+ Thêm construct</button>
-            <span className="text-neutral-500 text-sm">Đường trong:</span>
+            <button type="button" onClick={() => setPlsOuter([...plsOuter, { lv: `LV${plsOuter.length + 1}`, indicators: [] }])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">{t("semExplainer.addConstruct")}</button>
+            <span className="text-neutral-500 text-sm">{t("semExplainer.innerPathLabel")}</span>
             {plsInner.map((p, idx) => (
               <span key={idx} className="flex items-center gap-1">
                 <select value={p.from} onChange={(e) => { const next = [...plsInner]; next[idx] = { ...next[idx], from: e.target.value }; setPlsInner(next); setPlsResult(null); }} className="rounded border px-1.5 py-0.5 text-sm">
@@ -4396,9 +4416,9 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                 <button type="button" onClick={() => setPlsInner(plsInner.filter((_, i) => i !== idx))} className="text-red-600 text-xs">x</button>
               </span>
             ))}
-            <button type="button" onClick={() => setPlsInner([...plsInner, { from: plsOuter[0]?.lv ?? "", to: plsOuter[1]?.lv ?? "" }])} className="rounded border border-neutral-300 px-2 py-0.5 text-sm">+ Đường</button>
+            <button type="button" onClick={() => setPlsInner([...plsInner, { from: plsOuter[0]?.lv ?? "", to: plsOuter[1]?.lv ?? "" }])} className="rounded border border-neutral-300 px-2 py-0.5 text-sm">{t("semExplainer.addPath")}</button>
           </div>
-          <button type="button" onClick={runPLSSEM} disabled={plsRunning || plsOuter.every((o) => !o.lv || o.indicators.length === 0) || plsInner.length === 0} className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{plsRunning ? "Đang chạy..." : "Chạy PLS-SEM"}</button>
+          <button type="button" onClick={runPLSSEM} disabled={plsRunning || plsOuter.every((o) => !o.lv || o.indicators.length === 0) || plsInner.length === 0} className="rounded-lg bg-orange-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50">{plsRunning ? t("semExplainer.running") : t("semExplainer.runPlsSem")}</button>
           {plsResult && (
             <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
               <p className="p-2 font-medium">Path coefficients (n = {plsResult.n}, bootstrap)</p>
@@ -4418,7 +4438,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
               <p className="p-2 border-t text-neutral-600 dark:text-neutral-400">R²: {Object.entries(plsResult.r2).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>
               {plsResult.ave && Object.keys(plsResult.ave).length > 0 && (
                 <div className="p-2 border-t">
-                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">AVE và độ tin cậy tổng hợp (CR, ρ_c)</p>
+                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">{t("semExplainer.aveCompositeReliabilityHeading")}</p>
                   <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600">
                     <thead>
                       <tr className="bg-neutral-100 dark:bg-neutral-900">
@@ -4445,7 +4465,10 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
               )}
               {plsResult.fornellLarckerConstructs && plsResult.fornellLarckerMatrix && plsResult.fornellLarckerConstructs.length > 0 && (
                 <div className="p-2 border-t overflow-x-auto">
-                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">Fornell–Larcker (đường chéo = √AVE; còn lại = tương quan composite)</p>
+                  <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">Fornell–Larcker</p>
+                  <p className="text-neutral-500 text-xs mb-1">
+                    {t("semExplainer.fornellLarckerNote")}
+                  </p>
                   <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600">
                     <thead>
                       <tr className="bg-neutral-100 dark:bg-neutral-900">
@@ -4459,11 +4482,20 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                       {plsResult.fornellLarckerConstructs.map((rowLv, i) => (
                         <tr key={rowLv}>
                           <td className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 font-medium">{rowLv}</td>
-                          {plsResult.fornellLarckerConstructs!.map((_, j) => (
-                            <td key={`${i}-${j}`} className="border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-center tabular-nums">
-                              {j > i ? "" : (plsResult.fornellLarckerMatrix![i][j] != null ? plsResult.fornellLarckerMatrix![i][j].toFixed(3) : "—")}
-                            </td>
-                          ))}
+                          {plsResult.fornellLarckerConstructs!.map((_, j) => {
+                            const M = plsResult.fornellLarckerMatrix!;
+                            const v = M[i]?.[j];
+                            const show = v != null && !Number.isNaN(v);
+                            const isDiag = i === j;
+                            return (
+                              <td
+                                key={`${i}-${j}`}
+                                className={`border border-neutral-200 dark:border-neutral-600 px-2 py-1 text-center tabular-nums ${isDiag ? "bg-neutral-100/80 dark:bg-neutral-800/80 font-medium" : j < i ? "text-neutral-700 dark:text-neutral-300" : ""}`}
+                              >
+                                {show ? v.toFixed(3) : "—"}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
@@ -4473,7 +4505,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
               {plsResult.htmtConstructs && plsResult.htmtMatrix && plsResult.htmtConstructs.length > 1 && (
                 <div className="p-2 border-t overflow-x-auto">
                   <p className="font-medium text-neutral-800 dark:text-neutral-200 mb-1">HTMT (Heterotrait–Monotrait)</p>
-                  <p className="text-neutral-500 text-xs mb-1">Cần ≥2 chỉ báo mỗi construct để đủ cặp monotrait; ô trống = không tính được.</p>
+                  <p className="text-neutral-500 text-xs mb-1">{t("semExplainer.htmtNote")}</p>
                   <table className="w-full text-xs border-collapse border border-neutral-200 dark:border-neutral-600">
                     <thead>
                       <tr className="bg-neutral-100 dark:bg-neutral-900">
@@ -4502,7 +4534,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
                 </div>
               )}
               {plsResult.fornellLarcker && Object.keys(plsResult.fornellLarcker).length > 0 && !plsResult.fornellLarckerMatrix && (
-                <p className="p-2 text-neutral-600 dark:text-neutral-400">Fornell-Larcker √AVE (chỉ đường chéo): {Object.entries(plsResult.fornellLarcker).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>
+                <p className="p-2 text-neutral-600 dark:text-neutral-400">{t("semExplainer.fornellLarckerDiagOnlyLabel")}: {Object.entries(plsResult.fornellLarcker).map(([k, v]) => `${k}=${v.toFixed(3)}`).join(", ")}</p>
               )}
               {plsResult.loadings && plsResult.loadings.length > 0 && <p className="p-2 text-neutral-500 text-xs">Loadings: {plsResult.loadings.slice(0, 8).map((l) => `${l.indicator}→${l.latent}=${l.loading.toFixed(2)}`).join("; ")}{plsResult.loadings.length > 8 ? " ..." : ""}</p>}
             </div>
@@ -4511,7 +4543,7 @@ function SEMExplainerView({ selectedDataset, analysisBackendAvailable = false, s
       )}
 
       {(!selectedDataset || numericCols.length < 3) && (
-        <p className="text-neutral-500">Chọn bộ dữ liệu có ít nhất 3 cột số để chạy Mediation và Moderation. Path analysis, CFA, PLS-SEM cần backend Python và ít nhất 2 cột số.</p>
+        <p className="text-neutral-500">{t("semExplainer.selectDatasetPrompt")}</p>
       )}
     </div>
   );
@@ -4586,21 +4618,21 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
 
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">Học máy</h2>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Phân cụm (K-means), phân loại đa lớp (One-vs-Rest logistic), đánh giá mô hình (confusion matrix, precision/recall/F1), và giải thích (feature importance, permutation importance).</p>
+      <h2 className="text-xl font-semibold mb-2">{t("mlTab.title")}</h2>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("mlTab.subtitle")}</p>
       <div className="mb-4">
         <AIAssistPanel
-          metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Cột số: ${numericCols.length}, cột phân loại: ${categoricalCols.length}.` : undefined}
+          metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. ${t("mlTab.numericColsLabel")}: ${numericCols.length}, ${t("mlTab.categoricalColsLabel")}: ${categoricalCols.length}.` : undefined}
           context="Học máy: K-means (phân cụm), Phân loại đa lớp (One-vs-Rest logistic), Feature importance và Permutation importance (giải thích mô hình)."
-          quickPrompts={[{ label: "Gợi ý chọn K (K-means) và diễn giải", systemHint: "Bạn là chuyên gia ML. Gợi ý cách chọn số cụm K (elbow, silhouette), diễn giải centroid và phân loại. Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về học máy"
+          quickPrompts={[{ label: t("mlTab.quickPromptKSuggestion"), systemHint: `Bạn là chuyên gia ML. Gợi ý cách chọn số cụm K (elbow, silhouette), diễn giải centroid và phân loại. ${aiAnswerLangHint()}` }]}
+          title={t("mlTab.aiTitleMl")}
         />
       </div>
 
       <div className="flex gap-2 mb-4 border-b border-neutral-200 dark:border-neutral-700 pb-2">
-        <button type="button" onClick={() => setMlSubTab("clustering")} className={`rounded-lg px-3 py-1.5 text-sm ${mlSubTab === "clustering" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>K-means (phân cụm)</button>
-        <button type="button" onClick={() => setMlSubTab("classification")} className={`rounded-lg px-3 py-1.5 text-sm ${mlSubTab === "classification" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Phân loại đa lớp</button>
-        <button type="button" onClick={() => setMlSubTab("explainability")} className={`rounded-lg px-3 py-1.5 text-sm ${mlSubTab === "explainability" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Feature importance / Giải thích</button>
+        <button type="button" onClick={() => setMlSubTab("clustering")} className={`rounded-lg px-3 py-1.5 text-sm ${mlSubTab === "clustering" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("mlTab.tabClustering")}</button>
+        <button type="button" onClick={() => setMlSubTab("classification")} className={`rounded-lg px-3 py-1.5 text-sm ${mlSubTab === "classification" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("mlTab.tabClassification")}</button>
+        <button type="button" onClick={() => setMlSubTab("explainability")} className={`rounded-lg px-3 py-1.5 text-sm ${mlSubTab === "explainability" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("mlTab.tabExplainability")}</button>
       </div>
 
       {mlSubTab === "clustering" && (
@@ -4608,7 +4640,7 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
           {numericCols.length >= 2 ? (
             <>
               <div className="flex flex-wrap gap-2 mb-3">
-                <span className="text-sm font-medium">Cột (biến):</span>
+                <span className="text-sm font-medium">{t("mlTab.colVariablesLabel")}</span>
                 {numericCols.map((c) => (
                   <label key={c} className="flex items-center gap-1.5 cursor-pointer">
                     <input type="checkbox" checked={selectedCols.includes(c)} onChange={() => toggleCol(c)} className="rounded" />
@@ -4618,21 +4650,21 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
               </div>
               <div className="flex flex-wrap gap-4 items-end mb-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Số cụm (K)</label>
+                  <label className="block text-sm font-medium mb-1">{t("mlTab.numClustersLabel")}</label>
                   <input type="number" min={2} max={20} value={K} onChange={(e) => { setK(Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 2))); setKmeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <button type="button" onClick={runKMeans} disabled={kmeansLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-                  {kmeansLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy K-means"}
+                  {kmeansLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("mlTab.processing")}</> : t("mlTab.runKMeans")}
                 </button>
               </div>
               {kmeansResult && (
                 <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
                   {kmeansScatterData && selectedCols.length >= 2 && (
                     <div className="mb-6">
-                      <p className="font-medium mb-3">Biểu đồ phân tán (2D: {kmeansScatterData.colX} × {kmeansScatterData.colY})</p>
+                      <p className="font-medium mb-3">{t("mlTab.scatterPlotLabel")} (2D: {kmeansScatterData.colX} × {kmeansScatterData.colY})</p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2">Trước K-Means</p>
+                          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2">{t("mlTab.beforeKMeans")}</p>
                           <div className="aspect-square max-w-md w-full rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800/50 p-2">
                             <ResponsiveContainer width="100%" height="100%">
                               <ScatterChart margin={{ top: 12, right: 12, bottom: 24, left: 24 }}>
@@ -4640,13 +4672,13 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                                 <XAxis dataKey="x" name={kmeansScatterData.colX} type="number" />
                                 <YAxis dataKey="y" name={kmeansScatterData.colY} type="number" />
                                 <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-                                <Scatter data={kmeansScatterData.pointsBefore} fill="#16a34a" name="Điểm" />
+                                <Scatter data={kmeansScatterData.pointsBefore} fill="#16a34a" name={t("mlTab.pointLabel")} />
                               </ScatterChart>
                             </ResponsiveContainer>
                           </div>
                         </div>
                         <div>
-                          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2">Sau K-Means</p>
+                          <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2">{t("mlTab.afterKMeans")}</p>
                           <div className="aspect-square max-w-md w-full rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800/50 p-2">
                             <ResponsiveContainer width="100%" height="100%">
                               <ScatterChart margin={{ top: 12, right: 12, bottom: 24, left: 24 }}>
@@ -4659,14 +4691,14 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                                     key={k}
                                     data={kmeansScatterData.pointsAfter.filter((p) => p.cluster === k)}
                                     fill={KMEANS_CLUSTER_COLORS[k % KMEANS_CLUSTER_COLORS.length]}
-                                    name={`Cụm ${k + 1}`}
+                                    name={`${t("mlTab.clusterLabel")} ${k + 1}`}
                                   />
                                 ))}
                                 <Scatter
                                   data={kmeansScatterData.centroidPoints}
                                   fill="#b91c1c"
                                   shape="diamond"
-                                  name="Tâm cụm"
+                                  name={t("mlTab.centroidLabel")}
                                 />
                                 <Legend />
                               </ScatterChart>
@@ -4678,13 +4710,13 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                   )}
                   <AIAssistPanel
                     context={`K-means: ${kmeansResult.centroids.length} cụm, ${kmeansResult.iterations} lần lặp, Within-SS = ${kmeansResult.withinSS.toFixed(2)}. Centroids từng cụm: ${kmeansResult.centroids.map((c, i) => `Cụm ${i + 1}: [${c.map((v) => v.toFixed(2)).join(", ")}]`).join("; ")}.`}
-                    quickPrompts={[{ label: "Diễn giải K-means", systemHint: "Bạn là chuyên gia phân cụm (clustering). Giải thích kết quả K-means: số cụm, tâm (centroid) từng cụm trên từng biến, Within-SS. Gợi ý cách đặt tên/đặc trưng từng cụm dựa trên centroid. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về K-means"
+                    quickPrompts={[{ label: t("mlTab.quickPromptInterpretKMeans"), systemHint: `Bạn là chuyên gia phân cụm (clustering). Giải thích kết quả K-means: số cụm, tâm (centroid) từng cụm trên từng biến, Within-SS. Gợi ý cách đặt tên/đặc trưng từng cụm dựa trên centroid. ${aiAnswerLangHint()}` }]}
+                    title={t("mlTab.aiTitleKMeans")}
                   />
-                  <p className="font-medium mb-2">Kết quả K-means (sau {kmeansResult.iterations} lần lặp, Within-SS = {kmeansResult.withinSS.toFixed(2)})</p>
+                  <p className="font-medium mb-2">{t("mlTab.kmeansResultPrefix")} {kmeansResult.iterations} {t("mlTab.iterationsSuffix")} {kmeansResult.withinSS.toFixed(2)})</p>
                   <p className="text-neutral-600 dark:text-neutral-400 mb-2">Centroids:</p>
                   <table className="w-full">
-                    <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Cụm</th>{selectedCols.map((c) => <th key={c} className="text-right p-2">{c}</th>)}</tr></thead>
+                    <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">{t("mlTab.colCluster")}</th>{selectedCols.map((c) => <th key={c} className="text-right p-2">{c}</th>)}</tr></thead>
                     <tbody>
                       {kmeansResult.centroids.map((cent, k) => (
                         <tr key={k} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -4694,12 +4726,12 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                       ))}
                     </tbody>
                   </table>
-                  <p className="mt-2 text-neutral-500">Số điểm theo cụm: {Array.from({ length: K }, (_, k) => kmeansResult.assignments.filter((a) => a === k).length).join(", ")}</p>
+                  <p className="mt-2 text-neutral-500">{t("mlTab.pointsPerClusterLabel")}: {Array.from({ length: K }, (_, k) => kmeansResult.assignments.filter((a) => a === k).length).join(", ")}</p>
                 </div>
               )}
             </>
           ) : (
-            <p className="text-neutral-500">Cần ít nhất 2 cột số. Chọn dataset có cột số.</p>
+            <p className="text-neutral-500">{t("mlTab.needNumericColsMsg")}</p>
           )}
         </>
       )}
@@ -4709,16 +4741,16 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
           {categoricalCols.length >= 1 && numericCols.length >= 1 ? (
             <>
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Biến mục tiêu (nhãn phân loại)</label>
+                <label className="block text-sm font-medium mb-1">{t("mlTab.targetVariableLabel")}</label>
                 <select value={classTargetCol} onChange={(e) => { setClassTargetCol(e.target.value); setMulticlassResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                  <option value="">— Chọn cột nhãn —</option>
+                  <option value="">{t("mlTab.selectLabelColPlaceholder")}</option>
                   {categoricalCols.map((c) => (
-                    <option key={c} value={c}>{c} ({getUniqueValues(rows, c).length} lớp)</option>
+                    <option key={c} value={c}>{c} ({getUniqueValues(rows, c).length} {t("mlTab.classesLabel")})</option>
                   ))}
                 </select>
               </div>
               <div className="flex flex-wrap gap-2 mb-4">
-                <span className="text-sm font-medium w-full">Biến dự đoán (số, chọn ít nhất 1):</span>
+                <span className="text-sm font-medium w-full">{t("mlTab.predictorVariablesLabel")}</span>
                 {numericCols.filter((c) => c !== classTargetCol).map((c) => (
                   <label key={c} className="flex items-center gap-1.5 cursor-pointer">
                     <input type="checkbox" checked={classFeatureCols.includes(c)} onChange={() => { toggleClassFeature(c); setMulticlassResult(null); }} className="rounded" />
@@ -4726,19 +4758,19 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                   </label>
                 ))}
               </div>
-              <button type="button" onClick={runClassification} disabled={!classTargetCol || classFeatureCols.length < 1} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy phân loại (One-vs-Rest logistic)</button>
+              <button type="button" onClick={runClassification} disabled={!classTargetCol || classFeatureCols.length < 1} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("mlTab.runClassification")}</button>
               {multiclassResult && (
                 <div className="mt-6 space-y-6">
                   <AIAssistPanel
                     context={`Phân loại đa lớp: Accuracy ${(multiclassResult.metrics.accuracy * 100).toFixed(2)}%, Macro F1 = ${multiclassResult.metrics.macroF1.toFixed(3)}, Weighted F1 = ${multiclassResult.metrics.weightedF1.toFixed(3)}. Theo lớp: ${multiclassResult.metrics.perClass.map((p) => `${p.label}: P=${p.precision.toFixed(2)}, R=${p.recall.toFixed(2)}, F1=${p.f1.toFixed(2)}`).join("; ")}.`}
-                    quickPrompts={[{ label: "Diễn giải phân loại đa lớp", systemHint: "Bạn là chuyên gia học máy. Giải thích kết quả phân loại đa lớp: accuracy tổng thể, macro/weighted F1, precision/recall/F1 theo từng lớp; ma trận nhầm lẫn. Nêu lớp nào được dự đoán tốt/kém. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về phân loại đa lớp"
+                    quickPrompts={[{ label: t("mlTab.quickPromptInterpretClassification"), systemHint: `Bạn là chuyên gia học máy. Giải thích kết quả phân loại đa lớp: accuracy tổng thể, macro/weighted F1, precision/recall/F1 theo từng lớp; ma trận nhầm lẫn. Nêu lớp nào được dự đoán tốt/kém. ${aiAnswerLangHint()}` }]}
+                    title={t("mlTab.aiTitleClassification")}
                   />
                   <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-                    <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">Báo cáo phân loại</p>
+                    <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">{t("mlTab.classificationReportLabel")}</p>
                     <p className="p-2 text-neutral-600 dark:text-neutral-400">Accuracy: {(multiclassResult.metrics.accuracy * 100).toFixed(2)}% ? Macro F1: {multiclassResult.metrics.macroF1.toFixed(4)} ? Weighted F1: {multiclassResult.metrics.weightedF1.toFixed(4)}</p>
                     <table className="w-full">
-                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Lớp</th><th className="text-right p-2">Precision</th><th className="text-right p-2">Recall</th><th className="text-right p-2">F1</th><th className="text-right p-2">Support</th></tr></thead>
+                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">{t("mlTab.colClass")}</th><th className="text-right p-2">Precision</th><th className="text-right p-2">Recall</th><th className="text-right p-2">F1</th><th className="text-right p-2">Support</th></tr></thead>
                       <tbody>
                         {multiclassResult.metrics.perClass.map((p) => (
                           <tr key={p.label} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -4753,7 +4785,7 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
                     </table>
                   </div>
                   <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-                    <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">Ma trận nhóm lần (hàng = thực tế, cột = dự đoán)</p>
+                    <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">{t("mlTab.confusionMatrixLabel")}</p>
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-neutral-200 dark:border-neutral-700">
@@ -4775,29 +4807,29 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
               )}
             </>
           ) : (
-            <p className="text-neutral-500">Cần ít nhất 1 cột phân loại (2–20 giá trị) và 1 cột số để làm biến dự đoán.</p>
+            <p className="text-neutral-500">{t("mlTab.needClassificationColsMsg")}</p>
           )}
         </>
       )}
 
       {mlSubTab === "explainability" && (
         <>
-          <p className="text-neutral-600 dark:text-neutral-400 mb-4">Độ quan trọng biến (feature importance): từ hệ số hồi quy One-vs-Rest hoặc permutation importance (shuffle từng cột, đo độ giảm accuracy). Chạy phân loại trước để có mô hình.</p>
+          <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("mlTab.explainabilityDesc")}</p>
           {multiclassResult ? (
             <div className="space-y-6">
               <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-900/10 p-4">
-                <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Feature importance (từ hệ số mô hình)</h3>
-                <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Trung bình |hệ số| theo từng lớp One-vs-Rest ? biến có importance cao ảnh hưởng mạnh tới dự đoán.</p>
+                <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("mlTab.featureImportanceCoefHeading")}</h3>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">{t("mlTab.featureImportanceCoefDesc")}</p>
                 {importanceFromCoeffs.length > 0 && (
                   <AIAssistPanel
                     context={`Feature importance từ hệ số: ${importanceFromCoeffs.map(({ feature, importance }) => `${feature}=${importance.toFixed(3)}`).join("; ")}.`}
-                    quickPrompts={[{ label: "Diễn giải feature importance", systemHint: "Bạn là chuyên gia học máy. Giải thích feature importance (từ hệ số mô hình): biến nào đóng góp nhiều/ít vào dự đoán phân loại; xếp hạng biến quan trọng. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                    title="Hỏi AI về feature importance"
+                    quickPrompts={[{ label: t("mlTab.quickPromptInterpretFeatureImportance"), systemHint: `Bạn là chuyên gia học máy. Giải thích feature importance (từ hệ số mô hình): biến nào đóng góp nhiều/ít vào dự đoán phân loại; xếp hạng biến quan trọng. ${aiAnswerLangHint()}` }]}
+                    title={t("mlTab.aiTitleFeatureImportance")}
                   />
                 )}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Biến</th><th className="text-right p-2">Importance</th></tr></thead>
+                    <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">{t("mlTab.colVariable")}</th><th className="text-right p-2">Importance</th></tr></thead>
                     <tbody>
                       {importanceFromCoeffs.map(({ feature, importance }) => (
                         <tr key={feature} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -4824,20 +4856,20 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
               </div>
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
                 <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Permutation importance</h3>
-                <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">Shuffle từng cột rồi dự đoán lại; importance = độ giảm accuracy. Số lần shuffle:</p>
+                <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">{t("mlTab.permutationDesc")}</p>
                 <div className="flex flex-wrap gap-4 items-end mb-3">
                   <input type="number" min={1} max={20} value={permutationN} onChange={(e) => { setPermutationN(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1))); setPermutationResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
-                  <button type="button" onClick={runPermutationImportance} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Từnh permutation importance</button>
+                  <button type="button" onClick={runPermutationImportance} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">{t("mlTab.runPermutationImportance")}</button>
                 </div>
                 {permutationResult && (
                   <div className="overflow-x-auto mt-2">
                     <AIAssistPanel
                       context={`Permutation importance (độ giảm accuracy khi shuffle): ${permutationResult.map(({ feature, importance }) => `${feature}=${importance.toFixed(3)}`).join("; ")}.`}
-                      quickPrompts={[{ label: "Diễn giải permutation importance", systemHint: "Bạn là chuyên gia học máy. Giải thích permutation importance: độ giảm accuracy khi xáo trộn từng biến — biến nào quan trọng nhất cho dự đoán. So sánh với feature importance từ hệ số nếu có. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                      title="Hỏi AI về permutation importance"
+                      quickPrompts={[{ label: t("mlTab.quickPromptInterpretPermutation"), systemHint: `Bạn là chuyên gia học máy. Giải thích permutation importance: độ giảm accuracy khi xáo trộn từng biến — biến nào quan trọng nhất cho dự đoán. So sánh với feature importance từ hệ số nếu có. ${aiAnswerLangHint()}` }]}
+                      title={t("mlTab.aiTitlePermutation")}
                     />
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">Biến</th><th className="text-right p-2">Importance (? accuracy)</th><th className="text-right p-2">Std</th></tr></thead>
+                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="text-left p-2">{t("mlTab.colVariable")}</th><th className="text-right p-2">Importance (? accuracy)</th><th className="text-right p-2">Std</th></tr></thead>
                       <tbody>
                         {permutationResult.map(({ feature, importance, std }) => (
                           <tr key={feature} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -4853,7 +4885,7 @@ function MLTab({ selectedDataset, analysisBackendAvailable = false, showToast: _
               </div>
             </div>
           ) : (
-            <p className="text-neutral-500">Chạy phân loại đa lớp trước (tab &quot;Phân loại đa lớp&quot;) để có mô hình và xem feature importance.</p>
+            <p className="text-neutral-500">{t("mlTab.runClassificationFirstMsg")}</p>
           )}
         </>
       )}
@@ -4885,52 +4917,52 @@ function BayesianTab({ selectedDataset, analysisBackendAvailable = false, showTo
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">Bayesian</h2>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">ước lượng tỉ lệ (proportion) với prior Beta: posterior Beta-Binomial, khoảng tin cậy 95%.</p>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("bayesianTab.subtitle")}</p>
       <div className="mb-4">
         <AIAssistPanel
           context="Bayesian: ước lượng tỉ lệ (proportion) với prior Beta, posterior Beta-Binomial. Nhập số lần thành công và tổng n, prior α và β (mặc định 1,1)."
-          quickPrompts={[{ label: "Giải thích prior và posterior Beta", systemHint: "Bạn là chuyên gia thống kê Bayesian. Giải thích prior Beta, posterior sau khi quan sát dữ liệu, khoảng tin cậy 95%. Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về Bayesian"
+          quickPrompts={[{ label: t("bayesianTab.quickPromptExplainPriorPosterior"), systemHint: `Bạn là chuyên gia thống kê Bayesian. Giải thích prior Beta, posterior sau khi quan sát dữ liệu, khoảng tin cậy 95%. ${aiAnswerLangHint()}` }]}
+          title={t("bayesianTab.aiTitleBayesian")}
         />
       </div>
       <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-900/20 p-4 mb-4">
-        <h3 className="font-medium text-sky-800 dark:text-sky-200 mb-3">Beta-Binomial: tỉ lệ (proportion)</h3>
+        <h3 className="font-medium text-sky-800 dark:text-sky-200 mb-3">{t("bayesianTab.betaBinomialHeading")}</h3>
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Số lần thành công</label>
+            <label className="block text-sm font-medium mb-1">{t("bayesianTab.successesLabel")}</label>
             <input type="number" min={0} value={successes} onChange={(e) => { setSuccesses(Math.max(0, parseInt(e.target.value, 10) || 0)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Tổng số (n)</label>
+            <label className="block text-sm font-medium mb-1">{t("bayesianTab.totalNLabel")}</label>
             <input type="number" min={1} value={n} onChange={(e) => { setN(Math.max(1, parseInt(e.target.value, 10) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Prior ? (Beta)</label>
+            <label className="block text-sm font-medium mb-1">{t("bayesianTab.priorAlphaLabel")}</label>
             <input type="number" min={0.01} step={0.5} value={priorAlpha} onChange={(e) => { setPriorAlpha(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Prior ? (Beta)</label>
+            <label className="block text-sm font-medium mb-1">{t("bayesianTab.priorBetaLabel")}</label>
             <input type="number" min={0.01} step={0.5} value={priorBeta} onChange={(e) => { setPriorBeta(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
           </div>
           <button type="button" onClick={runBeta} disabled={bayesianLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-            {bayesianLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính posterior"}
+            {bayesianLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("bayesianTab.processing")}</> : t("bayesianTab.computePosterior")}
           </button>
         </div>
         {result && (
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3 text-sm mt-2">
             <AIAssistPanel
               context={`Posterior Beta(α=${result.postAlpha.toFixed(2)}, β=${result.postBeta.toFixed(2)}). Trung bình (tỉ lệ) = ${result.mean.toFixed(4)}, phương sai = ${result.variance.toFixed(6)}, 95% CI = [${result.ci95Lower.toFixed(4)}, ${result.ci95Upper.toFixed(4)}]. Dữ liệu: ${n} trials, ${successes} thành công.`}
-              quickPrompts={[{ label: "Diễn giải posterior Beta", systemHint: "Bạn là chuyên gia thống kê Bayesian. Giải thích: posterior Beta sau khi quan sát dữ liệu, trung bình (ước lượng tỉ lệ), khoảng tin cậy 95%; so sánh với prior. Trả lời ngắn gọn bằng tiếng Việt." }]}
-              title="Hỏi AI về Bayesian Beta"
+              quickPrompts={[{ label: t("bayesianTab.quickPromptInterpretPosterior"), systemHint: `Bạn là chuyên gia thống kê Bayesian. Giải thích: posterior Beta sau khi quan sát dữ liệu, trung bình (ước lượng tỉ lệ), khoảng tin cậy 95%; so sánh với prior. ${aiAnswerLangHint()}` }]}
+              title={t("bayesianTab.aiTitleBayesianBeta")}
             />
             <p className="font-medium mb-1">Posterior Beta(? = {result.postAlpha.toFixed(2)}, ? = {result.postBeta.toFixed(2)})</p>
-            <p>Trung bình (tỉ lệ đọc lượng) = {result.mean.toFixed(4)}</p>
-            <p>Pướng sai = {result.variance.toFixed(6)}</p>
-            <p>Khoảng tin cậy 95%: [{result.ci95Lower.toFixed(4)}, {result.ci95Upper.toFixed(4)}]</p>
+            <p>{t("bayesianTab.meanProportionLabel")} {result.mean.toFixed(4)}</p>
+            <p>{t("bayesianTab.varianceLabel")} {result.variance.toFixed(6)}</p>
+            <p>{t("bayesianTab.ci95Label")} [{result.ci95Lower.toFixed(4)}, {result.ci95Upper.toFixed(4)}]</p>
           </div>
         )}
       </div>
-      <p className="text-sm text-neutral-500">Các mô hình Bayesian nâng cao (MCMC, Bayes Factor) sẽ được bổ sung trong bản cập nhật tới.</p>
+      <p className="text-sm text-neutral-500">{t("bayesianTab.advancedModelsComingSoon")}</p>
     </div>
   );
 }
@@ -5157,7 +5189,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   };
   const runAncova = async () => {
     if (!ancovaFactorCol || !ancovaValueCol || ancovaCovariateCols.length === 0) {
-      showToast("Chọn nhân tố, biến phụ thuộc và ít nhất 1 covariate.");
+      showToast(t("hypothesisTab.toast.ancovaMissingFields"));
       return;
     }
     if (!analysisBackendAvailable) {
@@ -5174,7 +5206,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   };
   const runManova = async () => {
     if (!manovaFactorCol || manovaValueCols.length < 2) {
-      showToast("Chọn nhân tố và ít nhất 2 biến phụ thuộc.");
+      showToast(t("hypothesisTab.toast.manovaMissingFields"));
       return;
     }
     if (!analysisBackendAvailable) {
@@ -5191,7 +5223,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
   };
   const runMancova = async () => {
     if (!mancovaFactorCol || mancovaValueCols.length < 2 || mancovaCovariateCols.length === 0) {
-      showToast("Chọn nhân tố, ít nhất 2 biến phụ thuộc và ít nhất 1 covariate.");
+      showToast(t("hypothesisTab.toast.mancovaMissingFields"));
       return;
     }
     if (!analysisBackendAvailable) {
@@ -5324,13 +5356,13 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
 
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">Kiểm định giả thuyết</h2>
+      <h2 className="text-xl font-semibold mb-2">{t("hypothesisTab.title")}</h2>
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows}, số cột: ${selectedDataset.columns}. Cột: ${(selectedDataset.columnNames || []).slice(0, 20).join(", ")}${(selectedDataset.columnNames?.length || 0) > 20 ? "…" : ""}.` : undefined}
           context="Trang Kiểm định giả thuyết: t-test, ANOVA, Chi-square, Mann-Whitney, Wilcoxon, Kruskal-Wallis, Friedman, Levene, Shapiro-Wilk, Power analysis, v.v. Chọn kiểm định từ dropdown, chọn cột/nhóm, rồi bấm Chạy."
-          quickPrompts={[{ label: "Gợi ý chọn kiểm định phù hợp", systemHint: "Bạn là chuyên gia thống kê. Gợi ý loại kiểm định phù hợp theo: so sánh trung bình 2 nhóm (t-test) hay nhiều nhóm (ANOVA), dữ liệu không chuẩn (Mann-Whitney, Kruskal-Wallis), hai biến phân loại (Chi-square), dữ liệu cặp (t-test cặp, Wilcoxon), kiểm tra giả định (Shapiro-Wilk, Levene). Trả lời ngắn gọn bằng tiếng Việt." }, { label: "Cách đọc p-value và effect size", systemHint: "Bạn là chuyên gia thống kê. Giải thích p-value (α = 0.05), effect size (Cohen d, η², Cramér V…), cách trình bày kết quả trong báo cáo (APA). Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về kiểm định giả thuyết"
+          quickPrompts={[{ label: t("hypothesisTab.aiAssist.suggestTestLabel"), systemHint: `Bạn là chuyên gia thống kê. Gợi ý loại kiểm định phù hợp theo: so sánh trung bình 2 nhóm (t-test) hay nhiều nhóm (ANOVA), dữ liệu không chuẩn (Mann-Whitney, Kruskal-Wallis), hai biến phân loại (Chi-square), dữ liệu cặp (t-test cặp, Wilcoxon), kiểm tra giả định (Shapiro-Wilk, Levene). ${aiAnswerLangHint()}` }, { label: t("hypothesisTab.aiAssist.readPValueLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích p-value (α = 0.05), effect size (Cohen d, η², Cramér V…), cách trình bày kết quả trong báo cáo (APA). ${aiAnswerLangHint()}` }]}
+          title={t("hypothesisTab.aiAssist.askAboutTestTitle")}
         />
       </div>
       {hypothesisResultContext && (
@@ -5338,47 +5370,47 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
           metadata={hypothesisMetadata}
           process={hypothesisProcess}
           context={hypothesisResultContext}
-          quickPrompts={[{ label: "Giải thích kết quả kiểm định", systemHint: "Bạn là chuyên gia thống kê. Giải thích kết quả kiểm định giả thuyết: p-value (có ý nghĩa thống kê hay không), effect size (độ mạnh hiệu ứng), cỡ mẫu. Gợi ý cách trình bày trong báo cáo (ví dụ APA). Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về kết quả kiểm định"
+          quickPrompts={[{ label: t("hypothesisTab.aiAssist.explainResultLabel"), systemHint: `Bạn là chuyên gia thống kê. Giải thích kết quả kiểm định giả thuyết: p-value (có ý nghĩa thống kê hay không), effect size (độ mạnh hiệu ứng), cỡ mẫu. Gợi ý cách trình bày trong báo cáo (ví dụ APA). ${aiAnswerLangHint()}` }]}
+          title={t("hypothesisTab.aiAssist.askAboutResultTitle")}
         />
       )}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <label className="flex items-center gap-2 text-sm font-medium">
-          <span>Chọn kiểm định:</span>
+          <span>{t("hypothesisTab.common.selectTest")}</span>
           <select
             value={testKind}
             onChange={(e) => { setTestKind(e.target.value as typeof testKind); clearResults(); }}
             className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-w-[200px]"
           >
-            <optgroup label="So sánh trung bình">
-              <option value="ttest">t-test (hai nhóm độc lập)</option>
-              <option value="anova">ANOVA 1 nhân tố</option>
-              <option value="ancova">ANCOVA (kiểm soát covariate)</option>
-              <option value="manova">MANOVA (nhiều biến phụ thuộc)</option>
-              <option value="mancova">MANCOVA (nhiều DV + kiểm soát covariate)</option>
-              <option value="paired">t-test cặp</option>
-              <option value="onesample_ttest">t-test một mẫu</option>
-              <option value="ztest_means">z-Test 2 trung bình</option>
+            <optgroup label={t("hypothesisTab.optgroup.compareMeans")}>
+              <option value="ttest">{t("hypothesisTab.option.ttestIndependent")}</option>
+              <option value="anova">{t("hypothesisTab.option.anovaOneWay")}</option>
+              <option value="ancova">{t("hypothesisTab.option.ancova")}</option>
+              <option value="manova">{t("hypothesisTab.option.manova")}</option>
+              <option value="mancova">{t("hypothesisTab.option.mancova")}</option>
+              <option value="paired">{t("hypothesisTab.option.pairedTtest")}</option>
+              <option value="onesample_ttest">{t("hypothesisTab.option.onesampleTtest")}</option>
+              <option value="ztest_means">{t("hypothesisTab.option.ztestMeans")}</option>
             </optgroup>
-            <optgroup label="Phi tham số / Trung vị">
-              <option value="nonparametric">Mann-Whitney U (hai nhóm)</option>
-              <option value="wilcoxon_paired">Wilcoxon cặp</option>
-              <option value="kruskal">Kruskal-Wallis (nhiều nhóm)</option>
+            <optgroup label={t("hypothesisTab.optgroup.nonparametric")}>
+              <option value="nonparametric">{t("hypothesisTab.option.mannWhitney")}</option>
+              <option value="wilcoxon_paired">{t("hypothesisTab.option.wilcoxonPaired")}</option>
+              <option value="kruskal">{t("hypothesisTab.option.kruskalWallis")}</option>
               <option value="friedman">Friedman</option>
-              <option value="sign_test">Sign test (cặp)</option>
+              <option value="sign_test">{t("hypothesisTab.option.signTest")}</option>
             </optgroup>
-            <optgroup label="Phân loại & tỉ lệ">
-              <option value="chisquare">Chi-square (độc lập)</option>
-              <option value="mcnemar">McNemar (cặp nhị phân)</option>
-              <option value="fisher">Fisher exact (2×2)</option>
-              <option value="binomial">Kiểm định tỉ lệ (Binomial)</option>
-              <option value="twoprop">Z-test hai tỉ lệ</option>
+            <optgroup label={t("hypothesisTab.optgroup.categoricalProportions")}>
+              <option value="chisquare">{t("hypothesisTab.option.chisquareIndependence")}</option>
+              <option value="mcnemar">{t("hypothesisTab.option.mcnemar")}</option>
+              <option value="fisher">{t("hypothesisTab.option.fisherExact")}</option>
+              <option value="binomial">{t("hypothesisTab.option.binomialTest")}</option>
+              <option value="twoprop">{t("hypothesisTab.option.twoPropZtest")}</option>
             </optgroup>
-            <optgroup label="Chuẩn & công cụ">
-              <option value="normality">Shapiro-Wilk (chuẩn)</option>
-              <option value="levene">Levene (đồng phương sai)</option>
-              <option value="ftest">F-test 2 phương sai</option>
-              <option value="power">Power analysis</option>
+            <optgroup label={t("hypothesisTab.optgroup.normalityTools")}>
+              <option value="normality">{t("hypothesisTab.option.shapiroWilk")}</option>
+              <option value="levene">{t("hypothesisTab.option.levene")}</option>
+              <option value="ftest">{t("hypothesisTab.option.ftestTwoVariances")}</option>
+              <option value="power">{t("hypothesisTab.option.powerAnalysis")}</option>
             </optgroup>
           </select>
         </label>
@@ -5387,50 +5419,50 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       <>
       <div className="flex flex-wrap gap-4 items-end mb-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Biến nhóm</label>
+          <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
           <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-            <option value="">— Chọn —</option>
+            <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {cols.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Nhóm 1</label>
+          <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
           <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-            <option value="">— Chọn —</option>
+            <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Nhóm 2</label>
+          <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
           <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-            <option value="">— Chọn —</option>
+            <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Biến số</label>
+          <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
           <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-            <option value="">— Chọn —</option>
+            <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={ttestEqualVar} onChange={(e) => { setTtestEqualVar(e.target.checked); setTResult(null); }} className="rounded border-neutral-300" />
-          <span className="text-sm">Giả định phương sai bằng nhau (Equal variance)</span>
+          <span className="text-sm">{t("hypothesisTab.ttest.equalVarianceLabel")}</span>
         </label>
         <button type="button" onClick={runTTest} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-          {hypothesisLoading === "ttest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy t-test"}
+          {hypothesisLoading === "ttest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ttest.runButton")}
         </button>
       </div>
       {tResult && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="font-medium">Kết quả ({ttestEqualVar ? "Two-sample t-test (Equal variance)" : "Welch two-sample t-test"})</p>
-            <button type="button" onClick={() => navigator.clipboard.writeText(`t = ${tResult.t.toFixed(4)}, df = ${tResult.df.toFixed(1)}, p = ${tResult.pValue < 0.001 ? "< .001" : tResult.pValue.toFixed(4)}, Cohen's d = ${tResult.cohenD.toFixed(4)}\nMean nhóm 1 = ${tResult.mean1.toFixed(2)} (n = ${tResult.n1}), Mean nhóm 2 = ${tResult.mean2.toFixed(2)} (n = ${tResult.n2})`)} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> Sao chép</button>
+            <p className="font-medium">{t("hypothesisTab.common.resultLabel")} ({ttestEqualVar ? "Two-sample t-test (Equal variance)" : "Welch two-sample t-test"})</p>
+            <button type="button" onClick={() => navigator.clipboard.writeText(`t = ${tResult.t.toFixed(4)}, df = ${tResult.df.toFixed(1)}, p = ${tResult.pValue < 0.001 ? "< .001" : tResult.pValue.toFixed(4)}, Cohen's d = ${tResult.cohenD.toFixed(4)}\nMean nhóm 1 = ${tResult.mean1.toFixed(2)} (n = ${tResult.n1}), Mean nhóm 2 = ${tResult.mean2.toFixed(2)} (n = ${tResult.n2})`)} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
           </div>
           <p>t = {tResult.t.toFixed(4)}, df = {tResult.df.toFixed(1)}, p-value = {tResult.pValue < 0.001 ? "< 0.001" : tResult.pValue.toFixed(4)}</p>
           <p>Cohen's d = {tResult.cohenD.toFixed(4)}</p>
-          <p>Mean nhóm 1 = {tResult.mean1.toFixed(2)} (n = {tResult.n1}), Mean nhóm 2 = {tResult.mean2.toFixed(2)} (n = {tResult.n2})</p>
+          <p>{t("hypothesisTab.ttest.meanGroup1")} = {tResult.mean1.toFixed(2)} (n = {tResult.n1}), {t("hypothesisTab.ttest.meanGroup2")} = {tResult.mean2.toFixed(2)} (n = {tResult.n2})</p>
         </div>
       )}
       </>
@@ -5439,31 +5471,31 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
         <>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhân tố (nhóm)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorVariable")}</label>
               <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setAnovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số (phụ thuộc)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.dependentVariable")}</label>
               <select value={anovaValueCol} onChange={(e) => { setAnovaValueCol(e.target.value); setAnovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <button type="button" onClick={runANOVA} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "anova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy ANOVA"}
+              {hypothesisLoading === "anova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.anova.runButton")}
             </button>
           </div>
           {anovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="font-medium">Kết quả ANOVA một nhân tố</p>
-                <button type="button" onClick={() => { const lines = [`F(${anovaResult.dfBetween}, ${anovaResult.dfWithin}) = ${anovaResult.f.toFixed(4)}, p = ${anovaResult.pValue < 0.001 ? "< .001" : anovaResult.pValue.toFixed(4)}, η² = ${anovaResult.etaSq.toFixed(4)}${typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}`, "Nhóm\tM\tSD\tn", ...anovaResult.groupMeans.map((m) => `${m.group}\t${m.mean.toFixed(4)}\t${m.std.toFixed(4)}\t${m.n}`)]; const posthoc = analysisBackendAvailable && pairwisePosthocBackendResult ? pairwisePosthocBackendResult : pairwisePostHoc(anovaResult.groupMeans); if (posthoc.length) lines.push("", "Nhóm 1\tNhóm 2\tHiệu TB\tp (Bonferroni)", ...posthoc.map((r) => `${r.group1}\t${r.group2}\t${r.meanDiff.toFixed(4)}\t${r.pBonferroni < 0.001 ? "< .001" : r.pBonferroni.toFixed(4)}`)); navigator.clipboard.writeText(lines.join("\n")); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> Sao chép</button>
+                <p className="font-medium">{t("hypothesisTab.anova.resultTitle")}</p>
+                <button type="button" onClick={() => { const lines = [`F(${anovaResult.dfBetween}, ${anovaResult.dfWithin}) = ${anovaResult.f.toFixed(4)}, p = ${anovaResult.pValue < 0.001 ? "< .001" : anovaResult.pValue.toFixed(4)}, η² = ${anovaResult.etaSq.toFixed(4)}${typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}`, "Nhóm\tM\tSD\tn", ...anovaResult.groupMeans.map((m) => `${m.group}\t${m.mean.toFixed(4)}\t${m.std.toFixed(4)}\t${m.n}`)]; const posthoc = analysisBackendAvailable && pairwisePosthocBackendResult ? pairwisePosthocBackendResult : pairwisePostHoc(anovaResult.groupMeans); if (posthoc.length) lines.push("", "Nhóm 1\tNhóm 2\tHiệu TB\tp (Bonferroni)", ...posthoc.map((r) => `${r.group1}\t${r.group2}\t${r.meanDiff.toFixed(4)}\t${r.pBonferroni < 0.001 ? "< .001" : r.pBonferroni.toFixed(4)}`)); navigator.clipboard.writeText(lines.join("\n")); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
               </div>
               <p>F({anovaResult.dfBetween}, {anovaResult.dfWithin}) = {anovaResult.f.toFixed(4)}, p-value = {anovaResult.pValue < 0.001 ? "< 0.001" : anovaResult.pValue.toFixed(4)}, η² = {anovaResult.etaSq.toFixed(4)}{typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}</p>
-              <p className="text-neutral-600 dark:text-neutral-400">Trung bình theo nhóm:</p>
+              <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.common.meanByGroup")}</p>
               <ul className="list-disc list-inside">
                 {anovaResult.groupMeans.map((m) => (
                   <li key={m.group}>{m.group}: M = {m.mean.toFixed(2)}, SD = {m.std.toFixed(2)}, n = {m.n}</li>
@@ -5471,10 +5503,10 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               </ul>
               {anovaResult.groupMeans.length >= 2 && (
                 <>
-                  <p className="font-medium mt-2">Post-hoc (so sánh từng cặp, hiệu chỉnh Bonferroni)</p>
+                  <p className="font-medium mt-2">{t("hypothesisTab.anova.posthocTitle")}</p>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1.5">Nhóm 1</th><th className="text-left p-1.5">Nhóm 2</th><th className="text-right p-1.5">Hiệu TB</th><th className="text-right p-1.5">t</th><th className="text-right p-1.5">p (Bonferroni)</th></tr></thead>
+                      <thead><tr className="border-b border-neutral-200 dark:border-neutral-600"><th className="text-left p-1.5">{t("hypothesisTab.common.group1")}</th><th className="text-left p-1.5">{t("hypothesisTab.common.group2")}</th><th className="text-right p-1.5">{t("hypothesisTab.anova.meanDiffHeader")}</th><th className="text-right p-1.5">t</th><th className="text-right p-1.5">p (Bonferroni)</th></tr></thead>
                       <tbody>
                         {(analysisBackendAvailable && pairwisePosthocBackendResult ? pairwisePosthocBackendResult : pairwisePostHoc(anovaResult.groupMeans)).map((row, i) => (
                           <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -5496,41 +5528,41 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       )}
       {testKind === "ancova" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">ANCOVA: so sánh nhóm trên biến phụ thuộc sau khi kiểm soát (covariate). Cần backend Python.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.ancova.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Nhân tố (nhóm)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorGroup")}</label>
               <select value={ancovaFactorCol} onChange={(e) => { setAncovaFactorCol(e.target.value); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (DV)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.dependentVariableDV")}</label>
               <select value={ancovaValueCol} onChange={(e) => { setAncovaValueCol(e.target.value); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Covariate(s) — chọn nhiều</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.ancova.covariatesMultiLabel")}</label>
               <select multiple value={ancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setAncovaCovariateCols(sel); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.filter((c) => c !== ancovaValueCol).map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.common.multiSelectHint")}</p>
             </div>
             <button type="button" onClick={runAncova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "ancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy ANCOVA"}
+              {hypothesisLoading === "ancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ancova.runButton")}
             </button>
           </div>
           {ancovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
-              <p className="font-medium">Kết quả ANCOVA</p>
+              <p className="font-medium">{t("hypothesisTab.ancova.resultTitle")}</p>
               <p>F({ancovaResult.dfBetween}, {ancovaResult.dfWithin}) = {ancovaResult.f.toFixed(4)}, p-value = {ancovaResult.pValue < 0.001 ? "< 0.001" : ancovaResult.pValue.toFixed(4)}, η² = {ancovaResult.etaSq.toFixed(4)}</p>
-              <p className="text-neutral-600 dark:text-neutral-400">Covariate: {ancovaCovariateCols.join(", ")}</p>
-              <p className="text-neutral-600 dark:text-neutral-400">Trung bình theo nhóm (sau kiểm soát):</p>
+              <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.common.covariateLabel")}: {ancovaCovariateCols.join(", ")}</p>
+              <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.ancova.adjustedMeanByGroup")}</p>
               <ul className="list-disc list-inside">
                 {ancovaResult.groupMeans.map((m) => (
                   <li key={m.group}>{m.group}: M = {m.mean.toFixed(2)}, SD = {m.std.toFixed(2)}, n = {m.n}</li>
@@ -5542,34 +5574,34 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       )}
       {testKind === "manova" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">MANOVA: nhiều biến phụ thuộc (DV), một nhân tố (IV). Cần backend Python.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.manova.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Nhân tố (nhóm)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorGroup")}</label>
               <select value={manovaFactorCol} onChange={(e) => { setManovaFactorCol(e.target.value); setManovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (DV) — chọn từ 2 trở lên</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.manova.dvMultiLabel")}</label>
               <select multiple value={manovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setManovaValueCols(sel); setManovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột (tối thiểu 2)</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.manova.multiSelectHintMin2")}</p>
             </div>
             <button type="button" onClick={runManova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "manova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy MANOVA"}
+              {hypothesisLoading === "manova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.manova.runButton")}
             </button>
           </div>
           {manovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
-              <p className="font-medium">Kết quả MANOVA</p>
+              <p className="font-medium">{t("hypothesisTab.manova.resultTitle")}</p>
               {manovaResult.error && <p className="text-amber-600 dark:text-amber-400">{manovaResult.error}</p>}
-              <p>Nhân tố: {manovaResult.factorCol}, Biến phụ thuộc: {manovaResult.valueCols.join(", ")}, n = {manovaResult.n}</p>
-              {manovaResult.factorTest != null && <p className="font-medium">Kiểm định nhân tố: {String(manovaResult.factorTest)}</p>}
+              <p>{t("hypothesisTab.manova.factorPrefix")} {manovaResult.factorCol}, {t("hypothesisTab.manova.dvPrefix")} {manovaResult.valueCols.join(", ")}, n = {manovaResult.n}</p>
+              {manovaResult.factorTest != null && <p className="font-medium">{t("hypothesisTab.manova.factorTestPrefix")} {String(manovaResult.factorTest)}</p>}
               {manovaResult.summary && <pre className="text-xs whitespace-pre-wrap bg-neutral-100 dark:bg-neutral-900 p-2 rounded overflow-x-auto">{manovaResult.summary}</pre>}
             </div>
           )}
@@ -5577,43 +5609,43 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       )}
       {testKind === "mancova" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">MANCOVA: nhiều biến phụ thuộc (DV), một nhân tố (IV), kiểm soát covariate(s). Cần backend Python.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.mancova.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Nhân tố (nhóm)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorGroup")}</label>
               <select value={mancovaFactorCol} onChange={(e) => { setMancovaFactorCol(e.target.value); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến phụ thuộc (DV) — chọn từ 2 trở lên</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.manova.dvMultiLabel")}</label>
               <select multiple value={mancovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaValueCols(sel); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột (tối thiểu 2)</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.manova.multiSelectHintMin2")}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Covariate(s) — chọn ít nhất 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mancova.covariatesAtLeast1Label")}</label>
               <select multiple value={mancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaCovariateCols(sel); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.filter((c) => !mancovaValueCols.includes(c)).map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
-              <p className="text-xs text-neutral-500 mt-0.5">Giữ Ctrl/Cmd để chọn nhiều cột</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.common.multiSelectHint")}</p>
             </div>
             <button type="button" onClick={runMancova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "mancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy MANCOVA"}
+              {hypothesisLoading === "mancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.mancova.runButton")}
             </button>
           </div>
           {mancovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
-              <p className="font-medium">Kết quả MANCOVA</p>
+              <p className="font-medium">{t("hypothesisTab.mancova.resultTitle")}</p>
               {mancovaResult.error && <p className="text-amber-600 dark:text-amber-400">{mancovaResult.error}</p>}
-              <p>Nhân tố: {mancovaResult.factorCol}, DV: {mancovaResult.valueCols.join(", ")}, Covariate: {mancovaResult.covariateCols.join(", ")}, n = {mancovaResult.n}</p>
-              {mancovaResult.factorTest != null && <p className="font-medium">Kiểm định nhân tố: {String(mancovaResult.factorTest)}</p>}
+              <p>{t("hypothesisTab.manova.factorPrefix")} {mancovaResult.factorCol}, {t("hypothesisTab.mancova.dvShortPrefix")} {mancovaResult.valueCols.join(", ")}, {t("hypothesisTab.mancova.covariateShortPrefix")} {mancovaResult.covariateCols.join(", ")}, n = {mancovaResult.n}</p>
+              {mancovaResult.factorTest != null && <p className="font-medium">{t("hypothesisTab.manova.factorTestPrefix")} {String(mancovaResult.factorTest)}</p>}
               {mancovaResult.summary && <pre className="text-xs whitespace-pre-wrap bg-neutral-100 dark:bg-neutral-900 p-2 rounded overflow-x-auto">{mancovaResult.summary}</pre>}
             </div>
           )}
@@ -5623,28 +5655,28 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
         <>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhân tố (nhóm)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.kruskal.factorLabel")}</label>
               <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setKruskalResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số (phụ thuộc)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.kruskal.numericLabel")}</label>
               <select value={anovaValueCol} onChange={(e) => { setAnovaValueCol(e.target.value); setKruskalResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <button type="button" onClick={runKruskalWallis} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "kruskal" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Kruskal-Wallis"}
+              {hypothesisLoading === "kruskal" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.kruskal.runButton")}
             </button>
           </div>
           {kruskalResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
-              <p className="font-medium">Kết quả Kruskal-Wallis H (non-parametric, 3+ nhóm)</p>
+              <p className="font-medium">{t("hypothesisTab.kruskal.resultTitle")}</p>
               <p>H = {kruskalResult.h.toFixed(4)}, df = {kruskalResult.df}, p-value = {kruskalResult.pValue < 0.001 ? "< 0.001" : kruskalResult.pValue.toFixed(4)}</p>
-              <p className="text-neutral-600 dark:text-neutral-400">Trung vị theo nhóm:</p>
+              <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.kruskal.medianByGroupLabel")}</p>
               <ul className="list-disc list-inside">
                 {kruskalResult.groupMedians.map((m) => (
                   <li key={m.group}>{m.group}: Mdn = {m.median.toFixed(2)}, M = {m.mean.toFixed(2)}, n = {m.n}</li>
@@ -5658,32 +5690,32 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
         <>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến 1 (hàng)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.chisquare.col1Label")}</label>
               <select value={chiCol1} onChange={(e) => { setChiCol1(e.target.value); setChiResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến 2 (cột)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.chisquare.col2Label")}</label>
               <select value={chiCol2} onChange={(e) => { setChiCol2(e.target.value); setChiResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <button type="button" onClick={runChiSquare} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "chi2" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Chi-square"}
+              {hypothesisLoading === "chi2" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.chisquare.runButton")}
             </button>
           </div>
           {chiResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <p className="font-medium">Kết quả Chi-square (độc lập)</p>
-                <button type="button" onClick={() => { let t = `chi2 = ${chiResult.chi2.toFixed(4)}, df = ${chiResult.df}, p = ${chiResult.pValue < 0.001 ? "< .001" : chiResult.pValue.toFixed(4)}`; if (chiResult.phi != null) t += `, Phi = ${chiResult.phi.toFixed(4)}`; if (chiResult.cramersV != null) t += `, Cramer V = ${chiResult.cramersV.toFixed(4)}`; if (chiResult.rowLabels.length === 2 && chiResult.colLabels.length === 2) { const a = chiResult.table.find(x => x.row === chiResult.rowLabels[0] && x.col === chiResult.colLabels[0])?.count ?? 0; const b = chiResult.table.find(x => x.row === chiResult.rowLabels[0] && x.col === chiResult.colLabels[1])?.count ?? 0; const c = chiResult.table.find(x => x.row === chiResult.rowLabels[1] && x.col === chiResult.colLabels[0])?.count ?? 0; const d = chiResult.table.find(x => x.row === chiResult.rowLabels[1] && x.col === chiResult.colLabels[1])?.count ?? 0; const orRes = computeOddsRatio(a, b, c, d); if (orRes) t += `, OR = ${orRes.or.toFixed(4)} [${orRes.ci95Lower.toFixed(4)}, ${orRes.ci95Upper.toFixed(4)}]`; } void navigator.clipboard.writeText(t); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> Sao chép</button>
+                <p className="font-medium">{t("hypothesisTab.chisquare.resultTitle")}</p>
+                <button type="button" onClick={() => { let t = `chi2 = ${chiResult.chi2.toFixed(4)}, df = ${chiResult.df}, p = ${chiResult.pValue < 0.001 ? "< .001" : chiResult.pValue.toFixed(4)}`; if (chiResult.phi != null) t += `, Phi = ${chiResult.phi.toFixed(4)}`; if (chiResult.cramersV != null) t += `, Cramer V = ${chiResult.cramersV.toFixed(4)}`; if (chiResult.rowLabels.length === 2 && chiResult.colLabels.length === 2) { const a = chiResult.table.find(x => x.row === chiResult.rowLabels[0] && x.col === chiResult.colLabels[0])?.count ?? 0; const b = chiResult.table.find(x => x.row === chiResult.rowLabels[0] && x.col === chiResult.colLabels[1])?.count ?? 0; const c = chiResult.table.find(x => x.row === chiResult.rowLabels[1] && x.col === chiResult.colLabels[0])?.count ?? 0; const d = chiResult.table.find(x => x.row === chiResult.rowLabels[1] && x.col === chiResult.colLabels[1])?.count ?? 0; const orRes = computeOddsRatio(a, b, c, d); if (orRes) t += `, OR = ${orRes.or.toFixed(4)} [${orRes.ci95Lower.toFixed(4)}, ${orRes.ci95Upper.toFixed(4)}]`; } void navigator.clipboard.writeText(t); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
               </div>
               <p>χ² = {chiResult.chi2.toFixed(4)}, df = {chiResult.df}, p-value = {chiResult.pValue < 0.001 ? "< 0.001" : chiResult.pValue.toFixed(4)}</p>
-              {chiResult.phi != null && <p>φ (Phi) = {chiResult.phi.toFixed(4)} – effect size cho bảng 2×2</p>}
-              <p>Cramér's V = {chiResult.cramersV != null ? chiResult.cramersV.toFixed(4) : "—"} – cường độ liên hệ</p>
+              {chiResult.phi != null && <p>φ (Phi) = {chiResult.phi.toFixed(4)} {t("hypothesisTab.chisquare.effectSize2x2Suffix")}</p>}
+              <p>{t("hypothesisTab.chisquare.cramersVPrefix")} {chiResult.cramersV != null ? chiResult.cramersV.toFixed(4) : "—"} {t("hypothesisTab.chisquare.strengthSuffix")}</p>
             </div>
           )}
         </>
@@ -5692,61 +5724,61 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
         <>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
               <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
               <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 2</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
               <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
               <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <button type="button" onClick={runMannWhitney} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "mannwhitney" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Mann-Whitney U"}
+              {hypothesisLoading === "mannwhitney" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.mannwhitney.runButton")}
             </button>
           </div>
           {mannWhitneyResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Mann-Whitney U (non-parametric)</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.mannwhitney.resultTitle")}</p>
               <p>U = {mannWhitneyResult.u.toFixed(0)}, z = {mannWhitneyResult.z.toFixed(4)}, p-value = {mannWhitneyResult.pValue < 0.001 ? "< 0.001" : mannWhitneyResult.pValue.toFixed(4)}</p>
-              <p>Median nhóm 1 = {mannWhitneyResult.median1.toFixed(2)} (n = {mannWhitneyResult.n1}), Median nhóm 2 = {mannWhitneyResult.median2.toFixed(2)} (n = {mannWhitneyResult.n2})</p>
+              <p>{t("hypothesisTab.mannwhitney.medianGroup1Prefix")} {mannWhitneyResult.median1.toFixed(2)} (n = {mannWhitneyResult.n1}), {t("hypothesisTab.mannwhitney.medianGroup2Prefix")} {mannWhitneyResult.median2.toFixed(2)} (n = {mannWhitneyResult.n2})</p>
             </div>
           )}
         </>
       )}
       {testKind === "paired" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">t-test cặp: hai cột số tương ứng từng cặp (trước/sau, điều kiện A/B). Mỗi hàng = một đối tượng.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.paired.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 1 (ví dụ: trước)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.paired.col1Label")}</label>
               <select value={pairedCol1} onChange={(e) => { setPairedCol1(e.target.value); setPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 2 (ví dụ: sau)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.paired.col2Label")}</label>
               <select value={pairedCol2} onChange={(e) => { setPairedCol2(e.target.value); setPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -5770,54 +5802,54 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               }}
               className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {hypothesisLoading === "paired" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy t-test cặp"}
+              {hypothesisLoading === "paired" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.paired.runButton")}
             </button>
           </div>
           {pairedResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Paired t-test</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.paired.resultTitle")}</p>
               <p>t = {pairedResult.t.toFixed(4)}, df = {pairedResult.df}, p-value = {pairedResult.pValue < 0.001 ? "< 0.001" : pairedResult.pValue.toFixed(4)}</p>
-              <p>Cohen's d = {pairedResult.cohenD.toFixed(4)}, Mean hiệu = {pairedResult.meanDiff.toFixed(4)} (SD hiệu = {pairedResult.stdDiff.toFixed(4)}), n = {pairedResult.n}</p>
-              <p>Mean cột 1 = {pairedResult.mean1.toFixed(2)}, Mean cột 2 = {pairedResult.mean2.toFixed(2)}</p>
+              <p>Cohen's d = {pairedResult.cohenD.toFixed(4)}, {t("hypothesisTab.paired.meanDiffPrefix")} {pairedResult.meanDiff.toFixed(4)} ({t("hypothesisTab.paired.sdDiffLabel")} {pairedResult.stdDiff.toFixed(4)}), n = {pairedResult.n}</p>
+              <p>{t("hypothesisTab.paired.meanCol1Prefix")} {pairedResult.mean1.toFixed(2)}, {t("hypothesisTab.paired.meanCol2Prefix")} {pairedResult.mean2.toFixed(2)}</p>
             </div>
           )}
         </>
       )}
       {testKind === "wilcoxon_paired" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Wilcoxon signed-rank: phi tham số cho dữ liệu cặp (2 cột số tương ứng).</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.wilcoxon.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col1Label")}</label>
               <select value={pairedCol1} onChange={(e) => { setPairedCol1(e.target.value); setWilcoxonPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 2</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col2Label")}</label>
               <select value={pairedCol2} onChange={(e) => { setPairedCol2(e.target.value); setWilcoxonPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeWilcoxonSignedRank(rows, pairedCol1, pairedCol2); setWilcoxonPairedResult(res ?? null); }} disabled={!pairedCol1 || !pairedCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Wilcoxon cặp</button>
+            <button type="button" onClick={() => { const res = computeWilcoxonSignedRank(rows, pairedCol1, pairedCol2); setWilcoxonPairedResult(res ?? null); }} disabled={!pairedCol1 || !pairedCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.wilcoxon.runButton")}</button>
           </div>
           {wilcoxonPairedResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Wilcoxon signed-rank</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.wilcoxon.resultTitle")}</p>
               <p>W = {wilcoxonPairedResult.w.toFixed(0)}, z = {wilcoxonPairedResult.z.toFixed(4)}, p-value = {wilcoxonPairedResult.pValue < 0.001 ? "< 0.001" : wilcoxonPairedResult.pValue.toFixed(4)}</p>
-              <p>Median hiệu = {wilcoxonPairedResult.medianDiff.toFixed(4)}, n (cặp khác 0) = {wilcoxonPairedResult.n}</p>
+              <p>{t("hypothesisTab.wilcoxon.medianDiffPrefix")} {wilcoxonPairedResult.medianDiff.toFixed(4)}, {t("hypothesisTab.wilcoxon.nPairsLabel")} {wilcoxonPairedResult.n}</p>
             </div>
           )}
         </>
       )}
       {testKind === "friedman" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Friedman: repeated measures (phi tham số), ≥3 điều kiện. Chọn các cột số; mỗi hàng = một đối tượng, mỗi cột = một điều kiện.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.friedman.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div className="w-full">
-              <label className="block text-sm font-medium mb-1">Các cột điều kiện (số, thứ tự giữ nguyên)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.friedman.conditionsColsLabel")}</label>
               <div className="flex flex-wrap gap-2">
                 {numericCols.map((c) => (
                   <label key={c} className="inline-flex items-center gap-1.5">
@@ -5827,17 +5859,17 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                 ))}
               </div>
             </div>
-            <button type="button" onClick={() => { const res = friedmanCols.length >= 3 ? computeFriedmanTest(rows, friedmanCols) : null; setFriedmanResult(res ?? null); }} disabled={friedmanCols.length < 3} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Friedman</button>
+            <button type="button" onClick={() => { const res = friedmanCols.length >= 3 ? computeFriedmanTest(rows, friedmanCols) : null; setFriedmanResult(res ?? null); }} disabled={friedmanCols.length < 3} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.friedman.runButton")}</button>
           </div>
           {friedmanResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-2">
-              <p className="font-medium">Kết quả Friedman</p>
+              <p className="font-medium">{t("hypothesisTab.friedman.resultTitle")}</p>
               <p>χ² = {friedmanResult.chi2.toFixed(4)}, df = {friedmanResult.df}, p-value = {friedmanResult.pValue < 0.001 ? "< 0.001" : friedmanResult.pValue.toFixed(4)}</p>
-              <p>Khối (đối tượng) n = {friedmanResult.nBlocks}, Số điều kiện k = {friedmanResult.kConditions}</p>
-              <p className="text-neutral-600 dark:text-neutral-400">Mean rank theo điều kiện:</p>
+              <p>{t("hypothesisTab.friedman.blocksLabel")} {friedmanResult.nBlocks}, {t("hypothesisTab.friedman.conditionsCountLabel")} {friedmanResult.kConditions}</p>
+              <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.friedman.meanRankByConditionLabel")}</p>
               <ul className="list-disc list-inside">
                 {friedmanResult.meanRanks.map((m) => (
-                  <li key={m.condition}>{m.condition}: mean rank = {m.meanRank.toFixed(2)}</li>
+                  <li key={m.condition}>{m.condition}: {t("hypothesisTab.friedman.meanRankPrefix")} {m.meanRank.toFixed(2)}</li>
                 ))}
               </ul>
             </div>
@@ -5846,87 +5878,87 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       )}
       {testKind === "levene" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Levene: kiểm tra Đồng phương sai (homogeneity of variance) trước khi dòng ANOVA. p &gt; 0.05 có thể dòng ANOVA.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.levene.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
               <select value={leveneGroupCol} onChange={(e) => { setLeveneGroupCol(e.target.value); setLeveneResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
               <select value={leveneValueCol} onChange={(e) => { setLeveneValueCol(e.target.value); setLeveneResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeLeveneTest(rows, leveneGroupCol, leveneValueCol); setLeveneResult(res ?? null); }} disabled={!leveneGroupCol || !leveneValueCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Levene</button>
+            <button type="button" onClick={() => { const res = computeLeveneTest(rows, leveneGroupCol, leveneValueCol); setLeveneResult(res ?? null); }} disabled={!leveneGroupCol || !leveneValueCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.levene.runButton")}</button>
           </div>
           {leveneResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Levene (Đồng phương sai)</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.levene.resultTitle")}</p>
               <p>W = {leveneResult.w.toFixed(4)}, df1 = {leveneResult.df1}, df2 = {leveneResult.df2}, p-value = {leveneResult.pValue < 0.001 ? "< 0.001" : leveneResult.pValue.toFixed(4)}</p>
-              <p className="text-neutral-600 dark:text-neutral-400 mt-1">p &gt; 0.05 ? không bác bỏ H0 (phương sai đồng nhất)..</p>
+              <p className="text-neutral-600 dark:text-neutral-400 mt-1">{t("hypothesisTab.levene.interpretationNote")}</p>
             </div>
           )}
         </>
       )}
       {testKind === "mcnemar" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">McNemar: hai biến nhị phân (cùng đối tượng, 2 thời điểm). Mỗi cột có 2 giá trị (VD: Có/Không, 0/1).</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.mcnemar.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 1 (thời điểm 1)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mcnemar.col1Label")}</label>
               <select value={mcnemarCol1} onChange={(e) => { setMcNemarCol1(e.target.value); setMcNemarResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 2 (thời điểm 2)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mcnemar.col2Label")}</label>
               <select value={mcnemarCol2} onChange={(e) => { setMcNemarCol2(e.target.value); setMcNemarResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeMcNemar(rows, mcnemarCol1, mcnemarCol2); setMcNemarResult(res ?? null); }} disabled={!mcnemarCol1 || !mcnemarCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy McNemar</button>
+            <button type="button" onClick={() => { const res = computeMcNemar(rows, mcnemarCol1, mcnemarCol2); setMcNemarResult(res ?? null); }} disabled={!mcnemarCol1 || !mcnemarCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.mcnemar.runButton")}</button>
           </div>
           {mcnemarResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả McNemar (paired binary)</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.mcnemar.resultTitle")}</p>
               <p>χ² = {mcnemarResult.chi2.toFixed(4)}, p-value = {mcnemarResult.pValue < 0.001 ? "< 0.001" : mcnemarResult.pValue.toFixed(4)}</p>
-              <p>Cặp bất đồng nhất: b = {mcnemarResult.b}, c = {mcnemarResult.c}, n_discordant = {mcnemarResult.nDiscordant}</p>
+              <p>{t("hypothesisTab.mcnemar.discordantPairsLabel")} b = {mcnemarResult.b}, c = {mcnemarResult.c}, n_discordant = {mcnemarResult.nDiscordant}</p>
             </div>
           )}
         </>
       )}
       {testKind === "fisher" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Fisher exact: hai biến phân loại, mỗi biến có 2 nhóm (bảng 2×2).. Dùng khi ô kỳ vọng nhỏ (tương đương SPSS/R/Python).</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.fisher.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến hàng</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.fisher.rowVarLabel")}</label>
               <select value={fisherCol1} onChange={(e) => { setFisherCol1(e.target.value); setFisherResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến cột</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.fisher.colVarLabel")}</label>
               <select value={fisherCol2} onChange={(e) => { setFisherCol2(e.target.value); setFisherResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const chi = computeChiSquare(rows, fisherCol1, fisherCol2); if (chi && chi.rowLabels.length === 2 && chi.colLabels.length === 2) { const a = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[0])?.count ?? 0; const b = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[1])?.count ?? 0; const c = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[0])?.count ?? 0; const d = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[1])?.count ?? 0; setFisherResult(computeFisherExact(a, b, c, d) ?? null); } else setFisherResult(null); }} disabled={!fisherCol1 || !fisherCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Fisher exact</button>
+            <button type="button" onClick={() => { const chi = computeChiSquare(rows, fisherCol1, fisherCol2); if (chi && chi.rowLabels.length === 2 && chi.colLabels.length === 2) { const a = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[0])?.count ?? 0; const b = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[1])?.count ?? 0; const c = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[0])?.count ?? 0; const d = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[1])?.count ?? 0; setFisherResult(computeFisherExact(a, b, c, d) ?? null); } else setFisherResult(null); }} disabled={!fisherCol1 || !fisherCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.fisher.runButton")}</button>
           </div>
           {fisherResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Fisher exact (2?2)</p>
-              <p>Bảng: a={fisherResult.a}, b={fisherResult.b}, c={fisherResult.c}, d={fisherResult.d}, n={fisherResult.n}</p>
-              <p>p-value (hai phía) = {fisherResult.pValueTwoTailed < 0.001 ? "< 0.001" : fisherResult.pValueTwoTailed.toFixed(4)}</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.fisher.resultTitle")}</p>
+              <p>{t("hypothesisTab.fisher.tableLabel")} a={fisherResult.a}, b={fisherResult.b}, c={fisherResult.c}, d={fisherResult.d}, n={fisherResult.n}</p>
+              <p>{t("hypothesisTab.fisher.pValueTwoTailedLabel")} {fisherResult.pValueTwoTailed < 0.001 ? "< 0.001" : fisherResult.pValueTwoTailed.toFixed(4)}</p>
               {(() => { const orRes = computeOddsRatio(fisherResult.a, fisherResult.b, fisherResult.c, fisherResult.d); return orRes ? <p>Odds ratio (OR) = {orRes.or.toFixed(4)}, CI 95%: [{orRes.ci95Lower.toFixed(4)}, {orRes.ci95Upper.toFixed(4)}]</p> : null; })()}
             </div>
           )}
@@ -5934,159 +5966,159 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       )}
       {testKind === "onesample_ttest" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">So sánh trung bình mẫu với một giá trị hằng (μ₀) (R: t.test(x, mu=); Python: scipy.stats.ttest_1samp).</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.onesample.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
               <select value={onesampleCol} onChange={(e) => { setOnesampleCol(e.target.value); setOnesampleResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">để (giá trị so sánh)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.onesample.mu0Label")}</label>
               <input type="number" step="any" value={onesampleMu0} onChange={(e) => { setOnesampleMu0(e.target.value); setOnesampleResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28" placeholder="0" />
             </div>
-            <button type="button" onClick={() => { if (!onesampleCol || onesampleMu0 === "") return; const h = rows[0] || []; const idx = h.indexOf(onesampleCol); if (idx === -1) return; const vals = rows.slice(1).map(r => Number(r[idx])).filter(n => !Number.isNaN(n)); const res = computeOneSampleTTest(vals, parseFloat(onesampleMu0) || 0); setOnesampleResult(res ?? null); }} disabled={!onesampleCol || onesampleMu0 === ""} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy t-test một mẫu</button>
+            <button type="button" onClick={() => { if (!onesampleCol || onesampleMu0 === "") return; const h = rows[0] || []; const idx = h.indexOf(onesampleCol); if (idx === -1) return; const vals = rows.slice(1).map(r => Number(r[idx])).filter(n => !Number.isNaN(n)); const res = computeOneSampleTTest(vals, parseFloat(onesampleMu0) || 0); setOnesampleResult(res ?? null); }} disabled={!onesampleCol || onesampleMu0 === ""} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.onesample.runButton")}</button>
           </div>
           {onesampleResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả t-test một mẫu</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.onesample.resultTitle")}</p>
               <p>t = {onesampleResult.t.toFixed(4)}, df = {onesampleResult.df}, p-value = {onesampleResult.pValue < 0.001 ? "< 0.001" : onesampleResult.pValue.toFixed(4)}</p>
-              <p>Trung bình mẫu = {onesampleResult.mean.toFixed(4)}, μ₀ = {onesampleResult.mu0}, n = {onesampleResult.n}, SD = {onesampleResult.std.toFixed(4)}</p>
+              <p>{t("hypothesisTab.onesample.sampleMeanLabel")} {onesampleResult.mean.toFixed(4)}, μ₀ = {onesampleResult.mu0}, n = {onesampleResult.n}, SD = {onesampleResult.std.toFixed(4)}</p>
             </div>
           )}
         </>
       )}
       {testKind === "binomial" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Kiểm định tỉ lệ một mẫu (H₀: p = p₀). Chọn biến nhị phân (2 giá trị); &quot;thành công&quot; = số lần xuất hiện giá trị thứ nhất. R: binom.test; Python: scipy.stats.binomtest.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.binomial.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhị phân (2 giá trị)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.binaryVarLabel")}</label>
               <select value={binomialCol} onChange={(e) => { setBinomialCol(e.target.value); setBinomialResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">p₀ (tỉ lệ H₀)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.p0Label")}</label>
               <input type="number" step="0.01" min="0.01" max="0.99" value={binomialP0} onChange={(e) => { setBinomialP0(e.target.value); setBinomialResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
             </div>
-            <button type="button" onClick={() => { if (!binomialCol) return; const h = rows[0] || []; const idx = h.indexOf(binomialCol); if (idx === -1) return; const raw = rows.slice(1).map(r => String(r[idx] ?? "").trim()).filter(Boolean); const uniq = [...new Set(raw)].sort(); if (uniq.length !== 2) return; const successVal = uniq[0]; const successes = raw.filter(v => v === successVal).length; const n = raw.length; const p0 = Math.max(0.01, Math.min(0.99, parseFloat(binomialP0) || 0.5)); const res = computeBinomialTest(successes, n, p0); setBinomialResult(res ?? null); }} disabled={!binomialCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy kiểm định tỉ lệ</button>
+            <button type="button" onClick={() => { if (!binomialCol) return; const h = rows[0] || []; const idx = h.indexOf(binomialCol); if (idx === -1) return; const raw = rows.slice(1).map(r => String(r[idx] ?? "").trim()).filter(Boolean); const uniq = [...new Set(raw)].sort(); if (uniq.length !== 2) return; const successVal = uniq[0]; const successes = raw.filter(v => v === successVal).length; const n = raw.length; const p0 = Math.max(0.01, Math.min(0.99, parseFloat(binomialP0) || 0.5)); const res = computeBinomialTest(successes, n, p0); setBinomialResult(res ?? null); }} disabled={!binomialCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.binomial.runButton")}</button>
           </div>
           {binomialResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả kiểm định tỉ lệ (Binomial)</p>
-              <p>Tỉ lệ mẫu = {binomialResult.proportion.toFixed(4)} ({binomialResult.successes}/{binomialResult.n}), p₀ = {binomialResult.p0}</p>
-              <p>p-value (hai phía) = {binomialResult.pValueTwoTailed < 0.001 ? "< 0.001" : binomialResult.pValueTwoTailed.toFixed(4)}</p>
-              <p>Khoảng tin cậy 95%: [{binomialResult.ci95Lower.toFixed(4)}, {binomialResult.ci95Upper.toFixed(4)}]</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.binomial.resultTitle")}</p>
+              <p>{t("hypothesisTab.binomial.sampleProportionLabel")} {binomialResult.proportion.toFixed(4)} ({binomialResult.successes}/{binomialResult.n}), p₀ = {binomialResult.p0}</p>
+              <p>{t("hypothesisTab.fisher.pValueTwoTailedLabel")} {binomialResult.pValueTwoTailed < 0.001 ? "< 0.001" : binomialResult.pValueTwoTailed.toFixed(4)}</p>
+              <p>{t("hypothesisTab.binomial.ci95Label")} [{binomialResult.ci95Lower.toFixed(4)}, {binomialResult.ci95Upper.toFixed(4)}]</p>
             </div>
           )}
         </>
       )}
       {testKind === "twoprop" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">So sánh tỉ lệ giữa hai nhóm độc lập (Z-test hai tỉ lệ). Biến nhóm: 2 giá trị; Biến kết quả: nhị phân (2 giá trị, &quot;thành công&quot; = giá trị thứ nhất). R: prop.test; Python: proportions_ztest.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.twoprop.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
               <select value={twopropGroupCol} onChange={(e) => { setTwopropGroupCol(e.target.value); setTwopropGroupVal1(""); setTwopropGroupVal2(""); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
               <select value={twopropGroupVal1} onChange={(e) => { setTwopropGroupVal1(e.target.value); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {(twopropGroupCol ? getUniqueValues(rows, twopropGroupCol) : []).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 2</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
               <select value={twopropGroupVal2} onChange={(e) => { setTwopropGroupVal2(e.target.value); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {(twopropGroupCol ? getUniqueValues(rows, twopropGroupCol) : []).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến kết quả (nhị phân)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.twoprop.outcomeVarLabel")}</label>
               <select value={twopropOutcomeCol} onChange={(e) => { setTwopropOutcomeCol(e.target.value); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { if (!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol) return; const h = rows[0] || []; const gIdx = h.indexOf(twopropGroupCol); const oIdx = h.indexOf(twopropOutcomeCol); if (gIdx === -1 || oIdx === -1) return; const outVals = [...new Set(rows.slice(1).map(r => String(r[oIdx] ?? "").trim()).filter(Boolean))].sort(); if (outVals.length !== 2) return; const successVal = outVals[0]; const data = rows.slice(1); const g1 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal1); const g2 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal2); const success1 = g1.filter(r => String(r[oIdx]).trim() === successVal).length; const success2 = g2.filter(r => String(r[oIdx]).trim() === successVal).length; const res = computeTwoProportionZTest(success1, g1.length, success2, g2.length); setTwopropResult(res ?? null); }} disabled={!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Z-test hai tỉ lệ</button>
+            <button type="button" onClick={() => { if (!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol) return; const h = rows[0] || []; const gIdx = h.indexOf(twopropGroupCol); const oIdx = h.indexOf(twopropOutcomeCol); if (gIdx === -1 || oIdx === -1) return; const outVals = [...new Set(rows.slice(1).map(r => String(r[oIdx] ?? "").trim()).filter(Boolean))].sort(); if (outVals.length !== 2) return; const successVal = outVals[0]; const data = rows.slice(1); const g1 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal1); const g2 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal2); const success1 = g1.filter(r => String(r[oIdx]).trim() === successVal).length; const success2 = g2.filter(r => String(r[oIdx]).trim() === successVal).length; const res = computeTwoProportionZTest(success1, g1.length, success2, g2.length); setTwopropResult(res ?? null); }} disabled={!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.twoprop.runButton")}</button>
           </div>
           {twopropResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Z-test hai tỉ lệ</p>
-              <p>Tỉ lệ nhóm 1 = {twopropResult.p1.toFixed(4)} ({twopropResult.success1}/{twopropResult.n1}), Tỉ lệ nhóm 2 = {twopropResult.p2.toFixed(4)} ({twopropResult.success2}/{twopropResult.n2})</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.twoprop.resultTitle")}</p>
+              <p>{t("hypothesisTab.twoprop.proportionGroup1Prefix")} {twopropResult.p1.toFixed(4)} ({twopropResult.success1}/{twopropResult.n1}), {t("hypothesisTab.twoprop.proportionGroup2Prefix")} {twopropResult.p2.toFixed(4)} ({twopropResult.success2}/{twopropResult.n2})</p>
               <p>z = {twopropResult.z.toFixed(4)}, p-value = {twopropResult.pValue < 0.001 ? "< 0.001" : twopropResult.pValue.toFixed(4)}</p>
-              <p>Hiệu (p₁ − p₂) = {twopropResult.diff.toFixed(4)}, CI 95%: [{twopropResult.ci95Lower.toFixed(4)}, {twopropResult.ci95Upper.toFixed(4)}]</p>
+              <p>{t("hypothesisTab.twoprop.diffLabel")} {twopropResult.diff.toFixed(4)}, CI 95%: [{twopropResult.ci95Lower.toFixed(4)}, {twopropResult.ci95Upper.toFixed(4)}]</p>
             </div>
           )}
         </>
       )}
       {testKind === "sign_test" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Sign test (dữ liệu cặp): Đếm số chênh lệch dương/âm, kiểm định tỉ lệ = 0.5 (phi tham số). R: binom.test; thay thế t-test cặp khi chỉ quan tâm hướng.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.signtest.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col1Label")}</label>
               <select value={signTestCol1} onChange={(e) => { setSignTestCol1(e.target.value); setSignTestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Cột 2</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col2Label")}</label>
               <select value={signTestCol2} onChange={(e) => { setSignTestCol2(e.target.value); setSignTestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeSignTest(rows, signTestCol1, signTestCol2); setSignTestResult(res ?? null); }} disabled={!signTestCol1 || !signTestCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">Chạy Sign test</button>
+            <button type="button" onClick={() => { const res = computeSignTest(rows, signTestCol1, signTestCol2); setSignTestResult(res ?? null); }} disabled={!signTestCol1 || !signTestCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.signtest.runButton")}</button>
           </div>
           {signTestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Sign test</p>
-              <p>Số chênh lệch dương = {signTestResult.positiveCount}, âm = {signTestResult.negativeCount}, n = {signTestResult.n}</p>
-              <p>Tỉ lệ dương = {signTestResult.proportionPositive.toFixed(4)}, p-value (hai phía) = {signTestResult.pValueTwoTailed < 0.001 ? "< 0.001" : signTestResult.pValueTwoTailed.toFixed(4)}</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.signtest.resultTitle")}</p>
+              <p>{t("hypothesisTab.signtest.positiveCountPrefix")} {signTestResult.positiveCount}, {t("hypothesisTab.signtest.negativeSuffix")} {signTestResult.negativeCount}, n = {signTestResult.n}</p>
+              <p>{t("hypothesisTab.signtest.positiveProportionLabel")} {signTestResult.proportionPositive.toFixed(4)}, p-value (hai phía) = {signTestResult.pValueTwoTailed < 0.001 ? "< 0.001" : signTestResult.pValueTwoTailed.toFixed(4)}</p>
             </div>
           )}
         </>
       )}
       {testKind === "ftest" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">F-test hai mẫu cho phương sai (so sánh var nhóm 1 vs nhóm 2). Dùng trước khi chọn t-test Equal variance.</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.ftest.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
               <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
               <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 2</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
               <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
               <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -6101,7 +6133,7 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
                   const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol);
                   setFtestResult(res ?? null);
                 } catch (e) {
-                  showToast(e instanceof Error ? e.message : "F-test lỗi");
+                  showToast(e instanceof Error ? e.message : t("hypothesisTab.toast.ftestError"));
                   setFtestResult(null);
                 } finally {
                   setHypothesisLoading(null);
@@ -6109,56 +6141,56 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               }}
               className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {hypothesisLoading === "ftest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy F-test"}
+              {hypothesisLoading === "ftest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ftest.runButton")}
             </button>
           </div>
           {ftestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả F-test hai mẫu cho phương sai</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.ftest.resultTitle")}</p>
               <p>F = {ftestResult.f.toFixed(4)}, df1 = {ftestResult.df1}, df2 = {ftestResult.df2}, p-value = {ftestResult.pValue < 0.001 ? "< 0.001" : ftestResult.pValue.toFixed(4)}</p>
-              <p>Phương sai nhóm 1 = {ftestResult.var1.toFixed(4)} (n = {ftestResult.n1}), nhóm 2 = {ftestResult.var2.toFixed(4)} (n = {ftestResult.n2})</p>
+              <p>{t("hypothesisTab.ftest.varianceGroup1Prefix")} {ftestResult.var1.toFixed(4)} (n = {ftestResult.n1}), {t("hypothesisTab.ftest.varianceGroup2Prefix")} {ftestResult.var2.toFixed(4)} (n = {ftestResult.n2})</p>
             </div>
           )}
         </>
       )}
       {testKind === "ztest_means" && (
         <>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">z-Test hai mẫu cho trung bình khi đã biết phương sai tổng thể (known population variances).</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.ztestMeans.description")}</p>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
               <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 1</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
               <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Nhóm 2</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
               <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
               <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Phương sai tổng thể nhóm 1 (σ²₁)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.ztestMeans.knownVar1Label")}</label>
               <input type="number" step="any" min="0" value={ztestKnownVar1} onChange={(e) => { setZtestKnownVar1(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 4" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Phương sai tổng thể nhóm 2 (σ²₂)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.ztestMeans.knownVar2Label")}</label>
               <input type="number" step="any" min="0" value={ztestKnownVar2} onChange={(e) => { setZtestKnownVar2(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 9" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
             <button
@@ -6180,15 +6212,15 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
               }}
               className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {hypothesisLoading === "ztest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy z-Test"}
+              {hypothesisLoading === "ztest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ztestMeans.runButton")}
             </button>
           </div>
           {ztestMeansResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả z-Test hai mẫu cho trung bình</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.ztestMeans.resultTitle")}</p>
               <p>z = {ztestMeansResult.z.toFixed(4)}, p-value = {ztestMeansResult.pValue < 0.001 ? "< 0.001" : ztestMeansResult.pValue.toFixed(4)}</p>
-              <p>Mean nhóm 1 = {ztestMeansResult.mean1.toFixed(2)} (n = {ztestMeansResult.n1}), Mean nhóm 2 = {ztestMeansResult.mean2.toFixed(2)} (n = {ztestMeansResult.n2})</p>
-              <p className="text-neutral-600 dark:text-neutral-400 text-xs">Phương sai đã biết: σ²₁ = {ztestMeansResult.knownVar1}, σ²₂ = {ztestMeansResult.knownVar2}</p>
+              <p>{t("hypothesisTab.ttest.meanGroup1")} = {ztestMeansResult.mean1.toFixed(2)} (n = {ztestMeansResult.n1}), {t("hypothesisTab.ttest.meanGroup2")} = {ztestMeansResult.mean2.toFixed(2)} (n = {ztestMeansResult.n2})</p>
+              <p className="text-neutral-600 dark:text-neutral-400 text-xs">{t("hypothesisTab.ztestMeans.knownVarianceLabel")} σ²₁ = {ztestMeansResult.knownVar1}, σ²₂ = {ztestMeansResult.knownVar2}</p>
             </div>
           )}
         </>
@@ -6197,21 +6229,21 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
         <>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số (kiểm tra phân phối chuẩn)</label>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.normality.numericVarLabel")}</label>
               <select value={normalityCol} onChange={(e) => { setNormalityCol(e.target.value); setShapiroResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <button type="button" onClick={runShapiroWilk} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "shapiro" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Chạy Shapiro-Wilk"}
+              {hypothesisLoading === "shapiro" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.normality.runButton")}
             </button>
           </div>
           {shapiroResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Kết quả Shapiro-Wilk (kiểm tra phân phối chuẩn)</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.normality.resultTitle")}</p>
               <p>W = {shapiroResult.w.toFixed(4)}, p-value = {shapiroResult.pValue < 0.001 ? "< 0.001" : shapiroResult.pValue.toFixed(4)}, n = {shapiroResult.n}</p>
-              <p className="text-neutral-600 dark:text-neutral-400 mt-1">p &gt; 0.05: không đủ bằng chứng bác bỏ H0 (dữ liệu có thể chuẩn). p &lt; 0.05: dữ liệu có thể không chuẩn.</p>
+              <p className="text-neutral-600 dark:text-neutral-400 mt-1">{t("hypothesisTab.normality.interpretationNote")}</p>
             </div>
           )}
         </>
@@ -6219,27 +6251,27 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
       {testKind === "power" && (
         <>
           <div className="flex flex-wrap gap-2 mb-4">
-            <button type="button" onClick={() => { setSampleSizeKind("ttest"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "ttest" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>t-test</button>
-            <button type="button" onClick={() => { setSampleSizeKind("proportion"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "proportion" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Tỉ lệ</button>
-            <button type="button" onClick={() => { setSampleSizeKind("chisquare"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "chisquare" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Chi-square</button>
-            <button type="button" onClick={() => { setSampleSizeKind("anova"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "anova" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>ANOVA</button>
-            <button type="button" onClick={() => { setSampleSizeKind("regression"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "regression" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Hồi quy</button>
+            <button type="button" onClick={() => { setSampleSizeKind("ttest"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "ttest" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabTtest")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("proportion"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "proportion" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabProportion")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("chisquare"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "chisquare" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabChisquare")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("anova"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "anova" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabAnova")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("regression"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "regression" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabRegression")}</button>
           </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             {sampleSizeKind === "ttest" && (
               <div>
-                <label className="block text-sm font-medium mb-1">Effect size (Cohen d)</label>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.effectSizeDLabel")}</label>
                 <input type="number" step={0.05} min={0.1} max={2} value={effectSizeD} onChange={(e) => { setEffectSizeD(Math.max(0.1, Math.min(2, parseFloat(e.target.value) || 0.5))); setPowerResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
               </div>
             )}
             {sampleSizeKind === "proportion" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-1">p₀ (tỉ lệ H₀)</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.p0Label")}</label>
                   <input type="number" step={0.05} min={0.01} max={0.99} value={proportionP0} onChange={(e) => { setProportionP0(Math.max(0.01, Math.min(0.99, parseFloat(e.target.value) || 0.5))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">p₀ (tỉ lệ H₀)</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.p0Label")}</label>
                   <input type="number" step={0.05} min={0.01} max={0.99} value={proportionP1} onChange={(e) => { setProportionP1(Math.max(0.01, Math.min(0.99, parseFloat(e.target.value) || 0.65))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
               </>
@@ -6247,11 +6279,11 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
             {sampleSizeKind === "chisquare" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Effect size (Cohen w)</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.effectSizeWLabel")}</label>
                   <input type="number" step={0.05} min={0.1} max={1} value={chiEffectW} onChange={(e) => { setChiEffectW(Math.max(0.1, Math.min(1, parseFloat(e.target.value) || 0.3))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">df (bằng)</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.dfEqualLabel")}</label>
                   <input type="number" min={1} max={20} value={chiDf} onChange={(e) => { setChiDf(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-16" />
                 </div>
               </>
@@ -6259,11 +6291,11 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
             {sampleSizeKind === "anova" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Số nhóm (k)</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.groupCountKLabel")}</label>
                   <input type="number" min={2} max={20} value={anovaK} onChange={(e) => { setAnovaK(Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 3))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-16" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Effect size f</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.effectSizeFLabel")}</label>
                   <input type="number" step={0.05} min={0.1} max={1} value={anovaF} onChange={(e) => { setAnovaF(Math.max(0.1, Math.min(1, parseFloat(e.target.value) || 0.25))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
               </>
@@ -6271,50 +6303,50 @@ function HypothesisTab({ selectedDataset, onHypothesisResult, analysisBackendAva
             {sampleSizeKind === "regression" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Số biến độc lập</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.predictorCountLabel")}</label>
                   <input type="number" min={1} max={50} value={regressionP} onChange={(e) => { setRegressionP(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 5))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Quy tắc</label>
+                  <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.ruleLabel")}</label>
                   <select value={regressionRule} onChange={(e) => { setRegressionRule(e.target.value as "10" | "20"); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                    <option value="10">n ? 10 ? biến</option>
-                    <option value="20">n ? 20 ? biến</option>
+                    <option value="10">{t("hypothesisTab.power.rule10Option")}</option>
+                    <option value="20">{t("hypothesisTab.power.rule20Option")}</option>
                   </select>
                 </div>
               </>
             )}
             <button type="button" onClick={runPowerAnalysis} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
-              {hypothesisLoading === "power" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> Đang xử lý…</> : "Tính cỡ mẫu"}
+              {hypothesisLoading === "power" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.power.runButton")}
             </button>
           </div>
           {powerResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Power analysis (t-test hai mẫu độc lập)</p>
-              <p>Với d = {powerResult.effectSize.toFixed(2)}, ? = 0.05, power = 0.8: cần <strong>ít nhất {powerResult.nRequired} người</strong> (mỗi nhóm khoảng {Math.ceil(powerResult.nRequired / 2)}).</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.power.resultTitleTtest")}</p>
+              <p>{t("hypothesisTab.power.withPrefix")} d = {powerResult.effectSize.toFixed(2)}{t("hypothesisTab.power.alphaPowerNeedSuffix")} <strong>{t("hypothesisTab.power.atLeastLabel")} {powerResult.nRequired} {t("hypothesisTab.power.peopleUnit")}</strong> {t("hypothesisTab.power.perGroupAboutPrefix")} {Math.ceil(powerResult.nRequired / 2)} {t("hypothesisTab.power.perGroupAboutSuffix")}</p>
             </div>
           )}
           {sampleSizeExtra && sampleSizeKind === "proportion" && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Cỡ mẫu (kiểm định tỉ lệ)</p>
-              <p>Với p₀ = {(sampleSizeExtra as { p0: number }).p0.toFixed(2)}, p₁ = {(sampleSizeExtra as { p1: number }).p1.toFixed(2)}, α = 0.05, power = 0.8: cần <strong>ít nhất {(sampleSizeExtra as { nRequired: number }).nRequired} người</strong>.</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.power.resultTitleProportion")}</p>
+              <p>{t("hypothesisTab.power.withPrefix")} p₀ = {(sampleSizeExtra as { p0: number }).p0.toFixed(2)}, p₁ = {(sampleSizeExtra as { p1: number }).p1.toFixed(2)}{t("hypothesisTab.power.alphaPowerNeedSuffix")} <strong>{t("hypothesisTab.power.atLeastLabel")} {(sampleSizeExtra as { nRequired: number }).nRequired} {t("hypothesisTab.power.peopleUnit")}</strong>.</p>
             </div>
           )}
           {sampleSizeExtra && sampleSizeKind === "chisquare" && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Cỡ mẫu (Chi-square)</p>
-              <p>Với w = {(sampleSizeExtra as { effectSizeW: number }).effectSizeW.toFixed(2)}, df = {(sampleSizeExtra as { df: number }).df}, ? = 0.05, power = 0.8: cần <strong>ít nhất {(sampleSizeExtra as { nRequired: number }).nRequired} người</strong>.</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.power.resultTitleChisquare")}</p>
+              <p>{t("hypothesisTab.power.withPrefix")} w = {(sampleSizeExtra as { effectSizeW: number }).effectSizeW.toFixed(2)}, df = {(sampleSizeExtra as { df: number }).df}{t("hypothesisTab.power.alphaPowerNeedSuffix")} <strong>{t("hypothesisTab.power.atLeastLabel")} {(sampleSizeExtra as { nRequired: number }).nRequired} {t("hypothesisTab.power.peopleUnit")}</strong>.</p>
             </div>
           )}
           {sampleSizeExtra && sampleSizeKind === "anova" && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Cỡ mẫu (ANOVA một nhân tố)</p>
-              <p>Với k = {(sampleSizeExtra as { k: number }).k} nhóm, f = {(sampleSizeExtra as { effectSizeF: number }).effectSizeF.toFixed(2)}, ? = 0.05, power = 0.8: cần <strong>ít nhất {(sampleSizeExtra as { nRequired: number }).nRequired} người</strong> (mỗi nhóm khoảng {(sampleSizeExtra as { nPerGroup: number }).nPerGroup}).</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.power.resultTitleAnova")}</p>
+              <p>{t("hypothesisTab.power.withPrefix")} k = {(sampleSizeExtra as { k: number }).k} {t("hypothesisTab.power.withGroupsSuffix")} f = {(sampleSizeExtra as { effectSizeF: number }).effectSizeF.toFixed(2)}{t("hypothesisTab.power.alphaPowerNeedSuffix")} <strong>{t("hypothesisTab.power.atLeastLabel")} {(sampleSizeExtra as { nRequired: number }).nRequired} {t("hypothesisTab.power.peopleUnit")}</strong> {t("hypothesisTab.power.perGroupAboutPrefix")} {(sampleSizeExtra as { nPerGroup: number }).nPerGroup} {t("hypothesisTab.power.perGroupAboutSuffix")}</p>
             </div>
           )}
           {sampleSizeExtra && sampleSizeKind === "regression" && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">Cỡ mẫu (hồi quy tuyến tính)</p>
-              <p>Với {(sampleSizeExtra as { nPredictors: number }).nPredictors} biến độc lập, quy tắc {(sampleSizeExtra as { rule: string }).rule}: cần <strong>ít nhất {(sampleSizeExtra as { nRequired: number }).nRequired} người</strong>.</p>
+              <p className="font-medium mb-2">{t("hypothesisTab.power.resultTitleRegression")}</p>
+              <p>{t("hypothesisTab.power.withPrefix")} {(sampleSizeExtra as { nPredictors: number }).nPredictors} {t("hypothesisTab.power.withPredictorsSuffix")} {(sampleSizeExtra as { rule: string }).rule}: {t("hypothesisTab.power.needLabel")} <strong>{t("hypothesisTab.power.atLeastLabel")} {(sampleSizeExtra as { nRequired: number }).nRequired} {t("hypothesisTab.power.peopleUnit")}</strong>.</p>
             </div>
           )}
         </>
@@ -6337,18 +6369,18 @@ function ReliabilityTab({ selectedDataset, rows, numericCols, analysisBackendAva
   const alpha = (analysisBackendAvailable ? cronbachBackendResult : null) ??(selectedItems.length >= 2 ? computeCronbachAlpha(rows, selectedItems) : null);
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">Độ tin cậy Cronbach&apos;s alpha</h2>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Chọn ít nhất 2 cột số (các item thang đo, ví dụ Likert) để ước lượng Độ tin cậy nội tại.</p>
+      <h2 className="text-xl font-semibold mb-2">{t("reliabilityTab.title")}</h2>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reliabilityTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}. Cột: ${numericCols.slice(0, 15).join(", ")}${numericCols.length > 15 ? "…" : ""}.` : undefined}
-          context="Độ tin cậy Cronbach's alpha: đánh giá độ tin cậy nội tại của thang đo (các item đo cùng một khái niệm). Chọn ít nhất 2 cột số (item), alpha từ 0.7 trở lên thường được chấp nhận."
-          quickPrompts={[{ label: "Giải thích Cronbach alpha", systemHint: "Bạn là chuyên gia đo lường. Giải thích Cronbach's alpha: độ tin cậy nội tại, thang diễn giải (α ≥ 0.9 rất tốt, 0.8 tốt, 0.7 chấp nhận được, <0.6 cần cải thiện). Gợi ý cách tăng alpha nếu thấp. Trả lời ngắn gọn bằng tiếng Việt." }]}
-          title="Hỏi AI về độ tin cậy Cronbach"
+          context={t("reliabilityTab.contextDesc")}
+          quickPrompts={[{ label: t("reliabilityTab.explainAlphaLabel"), systemHint: `${t("reliabilityTab.explainAlphaHint")} ${aiAnswerLangHint()}` }]}
+          title={t("reliabilityTab.askAiTitle")}
         />
       </div>
       <div className="mb-4">
-        <p className="text-sm font-medium mb-2">Chọn các item (cột):</p>
+        <p className="text-sm font-medium mb-2">{t("reliabilityTab.selectItemsLabel")}</p>
         <div className="flex flex-wrap gap-2">
           {numericCols.map((c) => (
             <button key={c} type="button" onClick={() => toggle(c)} className={`rounded-lg px-3 py-1.5 text-sm ${selectedItems.includes(c) ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{c}</button>
@@ -6358,13 +6390,13 @@ function ReliabilityTab({ selectedDataset, rows, numericCols, analysisBackendAva
       {alpha != null && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
           <AIAssistPanel
-            context={`Cronbach's alpha = ${alpha.toFixed(4)}. Số item: ${selectedItems.length}. Đánh giá: ${alpha >= 0.9 ? "Rất tốt" : alpha >= 0.8 ? "Tốt" : alpha >= 0.7 ? "Chấp nhận được" : alpha >= 0.6 ? "Cần cải thiện" : "Độ tin cậy thấp"}. Các item: ${selectedItems.join(", ")}.`}
-            quickPrompts={[{ label: "Diễn giải Cronbach alpha", systemHint: "Bạn là chuyên gia đo lường. Giải thích Cronbach's alpha: độ tin cậy nội tại của thang đo (các item đo cùng một khái niệm). Thang diễn giải (α ≥ 0.9 rất tốt, 0.8 tốt, 0.7 chấp nhận được, <0.6 cần cải thiện). Gợi ý cách tăng alpha nếu thấp. Trả lời ngắn gọn bằng tiếng Việt." }]}
-            title="Hỏi AI về Cronbach alpha"
+            context={`Cronbach's alpha = ${alpha.toFixed(4)}. Số item: ${selectedItems.length}. Đánh giá: ${alpha >= 0.9 ? t("reliabilityTab.evalVeryGood") : alpha >= 0.8 ? t("reliabilityTab.evalGood") : alpha >= 0.7 ? t("reliabilityTab.evalAcceptable") : alpha >= 0.6 ? t("reliabilityTab.evalNeedsImprovement") : t("reliabilityTab.evalLow")}. Các item: ${selectedItems.join(", ")}.`}
+            quickPrompts={[{ label: t("reliabilityTab.interpretAlphaLabel"), systemHint: `${t("reliabilityTab.interpretAlphaHint")} ${aiAnswerLangHint()}` }]}
+            title={t("reliabilityTab.askAiAlphaTitle")}
           />
-          <p className="font-medium">Cronbach&apos;s ? = {alpha.toFixed(4)}</p>
+          <p className="font-medium">Cronbach&apos;s α = {alpha.toFixed(4)}</p>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
-            {alpha >= 0.9 ? "Rất tốt." : alpha >= 0.8 ? "Tốt." : alpha >= 0.7 ? "Chấp nhận được." : alpha >= 0.6 ? "Cần cải thiện." : "Độ tin cậy thấp, cần xem xét lại thang đo."}
+            {alpha >= 0.9 ? t("reliabilityTab.resultVeryGood") : alpha >= 0.8 ? t("reliabilityTab.resultGood") : alpha >= 0.7 ? t("reliabilityTab.resultAcceptable") : alpha >= 0.6 ? t("reliabilityTab.resultNeedsImprovement") : t("reliabilityTab.resultLow")}
           </p>
         </div>
       )}
@@ -6399,9 +6431,9 @@ function ReproducibilityView({
   const reproSubTabs = (
     <div className="flex flex-wrap gap-2 mb-4">
       {([
-        { id: "workflows" as const, label: "Workflows" },
-        { id: "versioning" as const, label: "Versioning & audit" },
-        { id: "openscience" as const, label: "Pre-reg & tái lập" },
+        { id: "workflows" as const, label: t("reproducibilityView.tabWorkflows") },
+        { id: "versioning" as const, label: t("reproducibilityView.tabVersioning") },
+        { id: "openscience" as const, label: t("openScience.title") },
       ]).map((x) => (
         <button
           key={x.id}
@@ -6442,34 +6474,34 @@ function ReproducibilityView({
     return (
       <div className="w-full max-w-full">
         {reproSubTabs}
-        <h2 className="text-xl font-semibold mb-2">Workflows</h2>
-        <p className="text-neutral-600 dark:text-neutral-400 mb-4">Lưu workflow phân tích, sinh script từ R, versioning dataset &amp; model.</p>
+        <h2 className="text-xl font-semibold mb-2">{t("reproducibilityView.tabWorkflows")}</h2>
+        <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reproducibilityView.workflowsDesc")}</p>
         <button type="button" onClick={() => { setShowNewWorkflowDialog(true); setNewWorkflowName(`Workflow ${workflows.length + 1}`); }} className="rounded-lg bg-brand text-white px-4 py-2 flex items-center gap-2 hover:opacity-90">
-          <GitBranch className="w-4 h-4" /> Tạo workflow mới
+          <GitBranch className="w-4 h-4" /> {t("app.createNewWorkflow")}
         </button>
         {showNewWorkflowDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }}>
             <div className="rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-xl max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-                <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">Tạo workflow mới</h3>
-                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+                <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("app.createNewWorkflow")}</h3>
+                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("app.close")}>
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="p-4">
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">Tên workflow</label>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">{t("app.workflowNameLabel")}</label>
               <input
                 type="text"
                 value={newWorkflowName}
                 onChange={(e) => setNewWorkflowName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") addWorkflow(newWorkflowName); if (e.key === "Escape") { setShowNewWorkflowDialog(false); setNewWorkflowName(""); } }}
-                placeholder="VD: Phân tích khảo sát 2024"
+                placeholder={t("reproducibilityView.workflowNamePlaceholder")}
                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
                 autoFocus
               />
               <div className="flex justify-end gap-2 mt-4">
-                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600">Hủy</button>
-                <button type="button" onClick={() => addWorkflow(newWorkflowName)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90">Tạo</button>
+                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600">{t("reproducibilityView.cancelButton")}</button>
+                <button type="button" onClick={() => addWorkflow(newWorkflowName)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90">{t("reproducibilityView.createButton")}</button>
               </div>
               </div>
             </div>
@@ -6481,9 +6513,9 @@ function ReproducibilityView({
               <li key={w.id} className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700">
                 <button type="button" onClick={() => onSelectWorkflow(w.id)} className="text-left flex-1">
                   <p className="font-medium">{w.name}</p>
-                  <span className="text-sm text-neutral-500">{w.steps.length} bước</span>
+                  <span className="text-sm text-neutral-500">{w.steps.length} {t("app.stepsCountSuffix")}</span>
                 </button>
-                <button type="button" onClick={() => onSelectWorkflow(w.id)} className="text-brand text-sm">Mở</button>
+                <button type="button" onClick={() => onSelectWorkflow(w.id)} className="text-brand text-sm">{t("reproducibilityView.openButton")}</button>
               </li>
             ))}
           </ul>
@@ -6491,7 +6523,7 @@ function ReproducibilityView({
         {selectedWorkflowId && (() => {
           const w = workflows.find((x) => x.id === selectedWorkflowId);
           if (!w) return null;
-          const stepLabels: Record<WorkflowStep["type"], string> = { import: "Thu thập / Import dữ liệu", clean: "Làm sạch & kiểm tra chất lượng", transform: "Chuẩn bị biến & biến đổi", describe: "Thống kê mô tả (EDA)", test: "Kiểm định giả thuyết", model: "Hồi quy & mô hình", visualize: "Trực quan hóa", report: "Viết báo cáo" };
+          const stepLabels: Record<WorkflowStep["type"], string> = { import: t("app.stepType.import"), clean: t("app.stepType.clean"), transform: t("app.stepType.transform"), describe: t("app.stepType.describe"), test: t("app.stepType.test"), model: t("app.stepType.model"), visualize: t("app.stepType.visualize"), report: t("app.stepType.report") };
           const addStep = () => {
             const now = new Date().toISOString();
             const label = newStepLabel.trim() || stepLabels[newStepType];
@@ -6508,7 +6540,7 @@ function ReproducibilityView({
           return (
             <div className="mt-6 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
               <h3 className="font-semibold mb-2">
-                Chi tiết: {editingWfNameId === w.id ? (
+                {t("reproducibilityView.detailsPrefix")} {editingWfNameId === w.id ? (
                   <input type="text" value={editingWfName} onChange={(e) => setEditingWfName(e.target.value)} onBlur={saveWfName} onKeyDown={(e) => e.key === "Enter" && saveWfName()} className="rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1 text-sm w-64" autoFocus />
                 ) : (
                   <button type="button" onClick={() => { setEditingWfNameId(w.id); setEditingWfName(w.name); }} className="text-left hover:underline">{w.name}</button>
@@ -6517,26 +6549,26 @@ function ReproducibilityView({
               {w.steps.length > 0 && (
                 <AIAssistPanel
                   context={`Workflow: ${w.name}. Các bước: ${w.steps.map((s, i) => `${i + 1}. ${s.label} (${s.type})`).join("; ")}.`}
-                  quickPrompts={[{ label: "Giải thích workflow", systemHint: "Bạn là chuyên gia phương pháp nghiên cứu. Giải thích ý nghĩa từng bước trong workflow (thu thập dữ liệu, làm sạch, biến đổi, mô tả, kiểm định, mô hình, trực quan, báo cáo). Gợi ý thứ tự thực hiện hợp lý và cách đảm bảo reproducibility. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                  title="Hỏi AI về workflow"
+                  quickPrompts={[{ label: t("reproducibilityView.askAiWorkflowLabel"), systemHint: `${t("reproducibilityView.askAiWorkflowHint")} ${aiAnswerLangHint()}` }]}
+                  title={t("reproducibilityView.askAiWorkflowTitle")}
                 />
               )}
               <div className="flex flex-wrap items-end gap-2 mb-3">
                 <select value={newStepType} onChange={(e) => setNewStepType(e.target.value as WorkflowStep["type"])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
-                  {(["import", "clean", "transform", "describe", "test", "model", "visualize", "report"] as const).map((t) => (
-                    <option key={t} value={t}>{stepLabels[t]}</option>
+                  {(["import", "clean", "transform", "describe", "test", "model", "visualize", "report"] as const).map((st) => (
+                    <option key={st} value={st}>{stepLabels[st]}</option>
                   ))}
                 </select>
-                <input type="text" value={newStepLabel} onChange={(e) => setNewStepLabel(e.target.value)} placeholder="Nhãn (tùy chọn)" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-40" />
-                <button type="button" onClick={addStep} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm">Thêm bước</button>
-                <button type="button" onClick={() => { navigator.clipboard.writeText(rScript); showToast("Đã sao chép script R"); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">Sao chép script R</button>
+                <input type="text" value={newStepLabel} onChange={(e) => setNewStepLabel(e.target.value)} placeholder={t("reproducibilityView.newStepLabelPlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-40" />
+                <button type="button" onClick={addStep} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm">{t("reproducibilityView.addStepButton")}</button>
+                <button type="button" onClick={() => { navigator.clipboard.writeText(rScript); showToast(t("reproducibilityView.copiedRScriptToast")); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">{t("reproducibilityView.copyRScriptButton")}</button>
               </div>
-              {w.steps.length === 0 ? <p className="text-sm text-neutral-500">Chưa có bước. Nhấn Thêm bước.</p> : (
+              {w.steps.length === 0 ? <p className="text-sm text-neutral-500">{t("reproducibilityView.noStepsHint")}</p> : (
                 <ol className="list-decimal list-inside space-y-1 text-sm">
                   {w.steps.map((s) => (
                     <li key={s.id} className="flex items-center justify-between">
                       <span>{s.label} ({s.type}){s.note ? ` — ${s.note}` : ""}</span>
-                      <button type="button" onClick={() => removeStep(s.id)} className="text-red-600 hover:underline">Xóa</button>
+                      <button type="button" onClick={() => removeStep(s.id)} className="text-red-600 hover:underline">{t("reproducibilityView.deleteButton")}</button>
                     </li>
                   ))}
                 </ol>
@@ -6551,10 +6583,10 @@ function ReproducibilityView({
   return (
     <div className="w-full max-w-full">
       {reproSubTabs}
-      <h2 className="text-xl font-semibold mb-2">Versioning &amp; audit</h2>
-      <p className="text-neutral-600 dark:text-neutral-400 mb-4">Version dataset và model, audit trail cho nghiên cứu.</p>
+      <h2 className="text-xl font-semibold mb-2">{t("reproducibilityView.tabVersioning")}</h2>
+      <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reproducibilityView.versioningDesc")}</p>
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm text-neutral-500">
-        Lịch sử phiên bản và nhật ký thay đổi hiển thị khi kết nối backend. Khi có backend, mỗi lần lưu dữ liệu sẽ tạo bản snapshot để so sánh và khôi phục.
+        {t("reproducibilityView.versioningPlaceholder")}
       </div>
     </div>
   );
@@ -6750,7 +6782,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
       });
       return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
     })() : [];
-    const radarGroups = (radarGroupCol && rows.length >= 2) ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? ""))) : ["Toàn bộ"];
+    const radarGroups = (radarGroupCol && rows.length >= 2) ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? ""))) : [t("presentationView.radarAllLabel")];
     const radarData = (chartType === "radar" && radarNumericCols.length >= 2) ? (() => {
       const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
       const fullMark = 100;
@@ -6785,35 +6817,35 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
     const crosstabResult: { rowLabels: string[]; colLabels: string[]; counts: number[][] } | null = (chartType === "crosstab" && crosstabCol1 && crosstabCol2 && rows.length >= 2) ? getCrosstab(rows, crosstabCol1, crosstabCol2) : null;
 
     const visualizationContext = [
-      selectedDataset ? `Bộ dữ liệu: ${selectedDataset.name}, ${rows.length} hàng, ${cols.length} cột.` : "",
-      `Loại biểu đồ: ${chartType}.`,
+      selectedDataset ? `${t("presentationView.contextDatasetLabel")} ${selectedDataset.name}, ${rows.length} ${t("transformTab.rowsUnit")}, ${cols.length} ${t("transformTab.columnsUnit")}.` : "",
+      `${t("presentationView.contextChartTypeLabel")} ${chartType}.`,
       (chartType === "scatter" || chartType === "line" || chartType === "area") && xCol && yCol
-        ? `Trục X: ${xCol}, Trục Y: ${yCol}. Số điểm: ${chartData.length}.`
+        ? `${t("presentationView.axisXLabel")}: ${xCol}, ${t("presentationView.axisYLabel")}: ${yCol}. ${t("presentationView.contextPointsCountLabel")} ${chartData.length}.`
         : "",
       (chartType === "bar" || chartType === "barH" || chartType === "pie" || chartType === "donut") && xCol
-        ? `Biến: ${xCol}. Số nhóm: ${barData.length}.`
+        ? `${t("presentationView.contextVariableLabel")} ${xCol}. ${t("presentationView.contextGroupCountLabel")} ${barData.length}.`
         : "",
       chartType === "box" && xCol && yCol
-        ? `Nhóm: ${xCol}, Giá trị: ${yCol}. Số nhóm: ${boxChartData.length}.`
+        ? `${t("presentationView.contextGroupLabel")} ${xCol}, ${t("presentationView.contextValueLabel")} ${yCol}. ${t("presentationView.contextGroupCountLabel")} ${boxChartData.length}.`
         : "",
       chartType === "histogram" && histogramCol
-        ? `Biến: ${histogramCol}. Số bins: ${histChartData.length}.${showHistogramDensity ? " Có đường mật độ (KDE)." : ""}`
+        ? `${t("presentationView.contextVariableLabel")} ${histogramCol}. ${t("presentationView.contextBinsCountLabel")} ${histChartData.length}.${showHistogramDensity ? ` ${t("presentationView.contextHasDensityLine")}` : ""}`
         : "",
-      chartType === "heatmap" ? "Heatmap ma trận tương quan." : "",
+      chartType === "heatmap" ? t("presentationView.contextHeatmapText") : "",
       chartType === "radar" && radarNumericCols.length > 0
-        ? `Các trục: ${radarNumericCols.slice(0, 6).join(", ")}${radarNumericCols.length > 6 ? "..." : ""}.`
+        ? `${t("presentationView.contextAxesLabel")} ${radarNumericCols.slice(0, 6).join(", ")}${radarNumericCols.length > 6 ? "..." : ""}.`
         : "",
-      chartType === "multiLine" && chartXCol ? `Trục X: ${chartXCol}, nhiều biến Y.` : "",
+      chartType === "multiLine" && chartXCol ? `${t("presentationView.axisXLabel")}: ${chartXCol}, ${t("presentationView.contextMultiLineSuffix")}` : "",
       chartType === "crosstab" && crosstabCol1 && crosstabCol2
-        ? `Bảng chéo: ${crosstabCol1} × ${crosstabCol2}.`
+        ? `${t("presentationView.contextCrosstabLabel")} ${crosstabCol1} × ${crosstabCol2}.`
         : "",
     ].filter(Boolean).join(" ");
 
     const visualizationQuickPrompts: AIQuickPrompt[] = [
-      { label: "Diễn giải biểu đồ / insight chính", systemHint: "Bạn là chuyên gia phân tích dữ liệu và trực quan hóa. Dựa trên mô tả biểu đồ và dữ liệu, nêu ý nghĩa, xu hướng hoặc insight chính; gợi ý cách đọc biểu đồ. Trả lời ngắn gọn bằng tiếng Việt.", userMessage: "Diễn giải biểu đồ này và nêu insight chính từ dữ liệu." },
-      { label: "Gợi ý loại biểu đồ phù hợp hơn", systemHint: "Bạn là chuyên gia trực quan hóa. Gợi ý loại biểu đồ (scatter, bar, line, box, histogram, heatmap...) phù hợp hơn với dữ liệu và mục tiêu trình bày. Giải thích ngắn gọn. Trả lời bằng tiếng Việt.", userMessage: "Gợi ý loại biểu đồ nào phù hợp hơn với dữ liệu này?" },
-      { label: "Viết chú thích (caption) cho biểu đồ", systemHint: "Bạn là chuyên gia báo cáo khoa học. Viết một câu chú thích (figure caption) ngắn gọn cho biểu đồ, mô tả nội dung và nguồn dữ liệu. Trả lời bằng tiếng Việt.", userMessage: "Viết chú thích (caption) cho biểu đồ này." },
-      { label: "Giải thích cách đọc biểu đồ", systemHint: "Bạn là chuyên gia thống kê. Giải thích cách đọc biểu đồ hiện tại: trục, đơn vị, ý nghĩa màu/size nếu có, cách rút ra kết luận. Trả lời ngắn gọn bằng tiếng Việt.", userMessage: "Giải thích cách đọc biểu đồ này." },
+      { label: t("presentationView.quickPromptInsightLabel"), systemHint: `${t("presentationView.quickPromptInsightHint")} ${aiAnswerLangHint()}`, userMessage: t("presentationView.quickPromptInsightUserMessage") },
+      { label: t("presentationView.quickPromptSuggestChartLabel"), systemHint: `${t("presentationView.quickPromptSuggestChartHint")} ${aiAnswerLangHint("Trả lời bằng tiếng Việt.", "Answer in English.")}`, userMessage: t("presentationView.quickPromptSuggestChartUserMessage") },
+      { label: t("presentationView.quickPromptCaptionLabel"), systemHint: `${t("presentationView.quickPromptCaptionHint")} ${aiAnswerLangHint("Trả lời bằng tiếng Việt.", "Answer in English.")}`, userMessage: t("presentationView.quickPromptCaptionUserMessage") },
+      { label: t("presentationView.quickPromptHowToReadLabel"), systemHint: `${t("presentationView.quickPromptHowToReadHint")} ${aiAnswerLangHint()}`, userMessage: t("presentationView.quickPromptHowToReadUserMessage") },
     ];
 
     const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && barChartData.length > 0) || (chartType === "barH" && barChartData.length > 0) || (chartType === "line" && lineData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
@@ -6878,10 +6910,10 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             if (!blob) { URL.revokeObjectURL(url); return; }
             navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]).then(() => {
               URL.revokeObjectURL(url);
-              if (typeof showToast === "function") showToast("Đã sao chép biểu đồ vào clipboard. Dán (Ctrl+V / Cmd+V) vào Word hoặc bài báo.");
+              if (typeof showToast === "function") showToast(t("presentationView.copyChartSuccessToast"));
             }).catch(() => {
               URL.revokeObjectURL(url);
-              if (typeof showToast === "function") showToast("Không sao chép được. Hãy dùng \"Lưu PNG\" rồi chèn ảnh thủ công.");
+              if (typeof showToast === "function") showToast(t("presentationView.copyChartFailToast"));
             });
           }, "image/png");
         } else {
@@ -6893,8 +6925,8 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
     };
     const chartExportIcons = hasExportableChart ? (
       <div className="absolute top-2 right-2 z-10 flex gap-1 rounded-lg bg-white/95 dark:bg-neutral-800/95 border border-neutral-200 dark:border-neutral-600 p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-        <button type="button" onClick={handleExportPng} title="Lưu PNG" className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Download className="w-4 h-4" /></button>
-        <button type="button" onClick={handleCopyToClipboard} title="Sao chép vào clipboard" className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /></button>
+        <button type="button" onClick={handleExportPng} title={t("presentationView.savePngTitle")} className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Download className="w-4 h-4" /></button>
+        <button type="button" onClick={handleCopyToClipboard} title={t("presentationView.copyToClipboardTitle")} className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /></button>
       </div>
     ) : null;
 
@@ -6903,31 +6935,31 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div className="flex flex-wrap items-center gap-4">
         <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 shrink-0">
-          {({ bar: "Cột", line: "Đường", scatter: "Phân tán", histogram: "Histogram", box: "Box plot", heatmap: "Heatmap", pie: "Tròn", stackedBar: "Cột chồng", barH: "Cột ngang", area: "Vùng", donut: "Donut", density: "Density", radar: "Radar" } as Record<string, string>)[chartType] ?? chartType}
+          {({ bar: t("presentationView.chartTypeBar"), line: t("presentationView.chartTypeLine"), scatter: t("presentationView.chartTypeScatter"), histogram: t("presentationView.chartTypeHistogram"), box: t("presentationView.chartTypeBox"), heatmap: t("presentationView.chartTypeHeatmap"), pie: t("presentationView.chartTypePie"), stackedBar: t("presentationView.chartTypeStackedBar"), barH: t("presentationView.chartTypeBarH"), area: t("presentationView.chartTypeArea"), donut: t("presentationView.chartTypeDonut"), density: t("presentationView.chartTypeDensity"), radar: t("presentationView.chartTypeRadar") } as Record<string, string>)[chartType] ?? chartType}
         </span>
         {(chartType === "scatter" || chartType === "bar" || chartType === "line" || chartType === "pie" || chartType === "area") && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Trục X</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.axisXLabel")}</label>
               <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Trục Y (số)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.axisYNumericLabel")}</label>
               <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             {chartType === "bar" && (
               <div>
-                <label className="block text-sm font-medium mb-1">Sắp xếp trục X</label>
+                <label className="block text-sm font-medium mb-1">{t("presentationView.sortAxisXLabel")}</label>
                 <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                  <option value="none">Không sắp xếp</option>
-                  <option value="asc">Tăng dần (theo tần số)</option>
-                  <option value="desc">Giảm dần (theo tần số)</option>
+                  <option value="none">{t("presentationView.sortNone")}</option>
+                  <option value="asc">{t("presentationView.sortAsc")}</option>
+                  <option value="desc">{t("presentationView.sortDesc")}</option>
                 </select>
               </div>
             )}
@@ -6936,23 +6968,23 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         {chartType === "stackedBar" && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Trục X (danh mục)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.axisXCategoryLabel")}</label>
               <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Chồng theo (danh mục)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.stackByLabel")}</label>
               <select value={stackByCol} onChange={(e) => setStackByCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.filter((c) => c !== xCol).map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Giá trị (số)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.valueNumericLabel")}</label>
               <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -6961,14 +6993,14 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         {chartType === "radar" && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Cột nhóm (tùy chọn)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.groupColumnOptionalLabel")}</label>
               <select value={radarGroupCol} onChange={(e) => setRadarGroupCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Không nhóm —</option>
+                <option value="">{t("presentationView.noGroupOption")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div className="w-full">
-              <label className="block text-sm font-medium mb-1">Các trục số (chọn tối đa 8)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.numericAxesLabel")}</label>
               <div className="flex flex-wrap gap-2">
                 {numericCols.slice(0, 16).map((c) => {
                   const checked = radarNumericCols.includes(c);
@@ -6986,7 +7018,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         )}
         {chartType === "heatmap" && (
           <div className="flex flex-wrap gap-4 mb-4">
-            <span className="text-sm font-medium">Hệ số:</span>
+            <span className="text-sm font-medium">{t("presentationView.coefficientLabel")}</span>
             <button type="button" onClick={() => setHeatmapCorrMethod("pearson")} className={`rounded-lg px-3 py-1.5 text-sm ${heatmapCorrMethod === "pearson" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Pearson</button>
             <button type="button" onClick={() => setHeatmapCorrMethod("spearman")} className={`rounded-lg px-3 py-1.5 text-sm ${heatmapCorrMethod === "spearman" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Spearman</button>
             <button type="button" onClick={() => setHeatmapCorrMethod("kendall")} className={`rounded-lg px-3 py-1.5 text-sm ${heatmapCorrMethod === "kendall" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Kendall</button>
@@ -7006,31 +7038,31 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 }}
                 className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"
               >
-                <Download className="w-4 h-4" /> Xuất CSV
+                <Download className="w-4 h-4" /> {t("presentationView.exportCsvButton")}
               </button>
             )}
           </div>
         )}
         {chartType === "pie" && (
           <div className="mb-4 space-y-3">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">Chọn <strong>Trục X</strong> (cột phân loại) ở trên là đủ để vẽ theo tỉ lệ thành phần. Tùy chọn: bật &quot;Chia theo khoảng&quot; nếu muốn chia biến số thành các khoảng.</p>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("presentationView.pieHint")}</p>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
-              Chia theo khoảng (biến số)
+              {t("presentationView.binNumericLabel")}
             </label>
             {pieBinNumeric && (
               <div className="flex flex-wrap gap-4">
                 <div>
-                  <label className="block text-xs font-medium mb-1">Cột số</label>
+                  <label className="block text-xs font-medium mb-1">{t("presentationView.numericColumnLabel")}</label>
                   <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("analysisView.selectPlaceholder")}</option>
                     {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">Số khoảng</label>
+                  <label className="block text-xs font-medium mb-1">{t("presentationView.binCountLabel")}</label>
                   <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} khoảng</option>)}
+                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} {t("presentationView.binCountUnit")}</option>)}
                   </select>
                 </div>
               </div>
@@ -7039,28 +7071,28 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         )}
         {chartType === "donut" && (
           <div className="mb-4 space-y-3">
-            <label className="block text-sm font-medium mb-1">Cột phân loại</label>
+            <label className="block text-sm font-medium mb-1">{t("presentationView.categoricalColumnLabel")}</label>
             <select value={xCol} onChange={(e) => { setXCol(e.target.value); setPieBinNumeric(false); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">— Chọn —</option>
+              <option value="">{t("analysisView.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
-              Chia theo khoảng (biến số)
+              {t("presentationView.binNumericLabel")}
             </label>
             {pieBinNumeric && (
               <div className="flex flex-wrap gap-4">
                 <div>
-                  <label className="block text-xs font-medium mb-1">Cột số</label>
+                  <label className="block text-xs font-medium mb-1">{t("presentationView.numericColumnLabel")}</label>
                   <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">— Chọn —</option>
+                    <option value="">{t("analysisView.selectPlaceholder")}</option>
                     {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">Số khoảng</label>
+                  <label className="block text-xs font-medium mb-1">{t("presentationView.binCountLabel")}</label>
                   <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} khoảng</option>)}
+                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} {t("presentationView.binCountUnit")}</option>)}
                   </select>
                 </div>
               </div>
@@ -7070,18 +7102,18 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         {chartType === "barH" && (
           <div className="mb-4 flex flex-wrap items-end gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Trục (danh mục)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.axisCategoryLabel")}</label>
               <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Sắp xếp trục</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.sortAxisLabel")}</label>
               <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="none">Không sắp xếp</option>
-                <option value="asc">Tăng dần (theo tần số)</option>
-                <option value="desc">Giảm dần (theo tần số)</option>
+                <option value="none">{t("presentationView.sortNone")}</option>
+                <option value="asc">{t("presentationView.sortAsc")}</option>
+                <option value="desc">{t("presentationView.sortDesc")}</option>
               </select>
             </div>
           </div>
@@ -7089,16 +7121,16 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         {chartType === "box" && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm (trục X)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.groupVarXLabel")}</label>
               <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số (trục Y)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.numericVarYLabel")}</label>
               <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -7107,31 +7139,31 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
         {chartType === "histogram" && (
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Cột số (phân bố)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.distributionColumnLabel")}</label>
               <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <label className="flex items-center gap-2 cursor-pointer mt-6">
               <input type="checkbox" checked={showHistogramDensity} onChange={(e) => setShowHistogramDensity(e.target.checked)} className="rounded border-neutral-400" />
-              <span className="text-sm text-neutral-700 dark:text-neutral-300">Hiển thị đường mật độ (KDE)</span>
+              <span className="text-sm text-neutral-700 dark:text-neutral-300">{t("presentationView.showKdeLabel")}</span>
             </label>
           </div>
         )}
         {chartType === "density" && (
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Biến nhóm (2 nhóm, ví dụ có/không gợi ý)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.densityGroupLabel")}</label>
               <select value={densityGroupCol} onChange={(e) => setDensityGroupCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Biến số (điểm / giá trị)</label>
+              <label className="block text-sm font-medium mb-1">{t("presentationView.densityValueLabel")}</label>
               <select value={densityValueCol} onChange={(e) => setDensityValueCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">— Chọn —</option>
+                <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -7141,8 +7173,8 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
           <AIAssistPanel
             context={visualizationContext}
             quickPrompts={visualizationQuickPrompts}
-            defaultSystemHint="Bạn là chuyên gia trực quan hóa dữ liệu và phân tích. Diễn giải biểu đồ, gợi ý loại biểu đồ, viết caption hoặc nêu insight. Trả lời ngắn gọn bằng tiếng Việt."
-            title="Hỏi AI về biểu đồ"
+            defaultSystemHint={`${t("presentationView.askAiChartHint")} ${aiAnswerLangHint()}`}
+            title={t("presentationView.askAiChartTitle")}
             includeStandardResultPrompts={false}
           />
         </div>
@@ -7156,17 +7188,17 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                   <XAxis dataKey="x" name={xCol} />
                   <YAxis dataKey="y" name={yCol} />
                   <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-                  <Scatter data={chartData} fill="#0061bb" name="điểm" />
+                  <Scatter data={chartData} fill="#0061bb" name={t("presentationView.scatterPointName")} />
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
           </div>
         )}
         {chartType === "scatter" && (() => {
-          if (!xCol || !yCol) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Chưa chọn trục: cần chọn <strong>Trục X</strong> và <strong>Trục Y</strong> (cả hai đều phải là cột số) để vẽ scatter.</p>;
-          if (!numericCols.includes(xCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được scatter: cột trục X <strong>"{xCol}"</strong> không phải cột số (chứa chữ hoặc rỗng). Scatter cần hai cột toàn giá trị số — hãy chọn cột số khác cho trục X.</p>;
-          if (!numericCols.includes(yCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được scatter: cột trục Y <strong>"{yCol}"</strong> không phải cột số. Hủy chọn cột số cho trục Y.</p>;
-          if (chartData.length === 0) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được: không có dữ liệu cặp (X, Y) hợp lệ. Hai cột <strong>"{xCol}"</strong> và <strong>"{yCol}"</strong> có thể toàn ô trống hoặc giá trị không phải số. Kiểm tra lại dữ liệu.</p>;
+          if (!xCol || !yCol) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterNoAxisWarningPart1")} <strong>{t("presentationView.axisXLabel")}</strong> {t("presentationView.scatterNoDataPart2")} <strong>{t("presentationView.axisYLabel")}</strong> {t("presentationView.scatterNoAxisWarningPart2")}</p>;
+          if (!numericCols.includes(xCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterXNotNumericPart1")} <strong>"{xCol}"</strong> {t("presentationView.scatterXNotNumericPart2")}</p>;
+          if (!numericCols.includes(yCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterYNotNumericPart1")} <strong>"{yCol}"</strong> {t("presentationView.scatterYNotNumericPart2")}</p>;
+          if (chartData.length === 0) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterNoDataPart1")} <strong>"{xCol}"</strong> {t("presentationView.scatterNoDataPart2")} <strong>"{yCol}"</strong> {t("presentationView.scatterNoDataPart3")}</p>;
           return null;
         })()}
         {chartType === "density" && densityData.length > 0 && (() => {
@@ -7183,7 +7215,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                   <LineChart data={merged} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="x" name={densityValueCol} type="number" tick={{ fontSize: 11 }} />
-                    <YAxis name="Mật độ" tick={{ fontSize: 11 }} />
+                    <YAxis name={t("presentationView.densityYAxisLabel")} tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Legend />
                     {keys.map((key, i) => (
@@ -7205,7 +7237,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                   <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `Tổng ${yCol}` : "Số lượng"} />
+                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `${t("presentationView.barTotalPrefix")} ${yCol}` : t("presentationView.barCountLabel")} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -7221,7 +7253,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                   <XAxis type="number" />
                   <YAxis type="category" dataKey="name" width={100} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `Tổng ${yCol}` : "Số lượng"} />
+                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `${t("presentationView.barTotalPrefix")} ${yCol}` : t("presentationView.barCountLabel")} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -7237,7 +7269,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                   <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
                   <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="y" stroke="#0061bb" strokeWidth={2} dot={{ r: 4 }} name={yCol || "Giá trị"} />
+                  <Line type="monotone" dataKey="y" stroke="#0061bb" strokeWidth={2} dot={{ r: 4 }} name={yCol || t("presentationView.lineDefaultValueName")} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -7254,7 +7286,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [v, "Số lượng"]} />
+                  <Tooltip formatter={(v: number) => [v, t("presentationView.barCountLabel")]} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -7271,7 +7303,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [v, "Số lượng"]} />
+                  <Tooltip formatter={(v: number) => [v, t("presentationView.barCountLabel")]} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -7309,7 +7341,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             </div>
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
               <table className="w-full">
-                <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="p-2 text-left">Nhóm</th><th className="p-2 text-right">n</th><th className="p-2 text-right">Min</th><th className="p-2 text-right">Q1</th><th className="p-2 text-right">Median</th><th className="p-2 text-right">Q3</th><th className="p-2 text-right">Max</th></tr></thead>
+                <thead><tr className="border-b border-neutral-200 dark:border-neutral-700"><th className="p-2 text-left">{t("presentationView.groupColumnHeader")}</th><th className="p-2 text-right">n</th><th className="p-2 text-right">Min</th><th className="p-2 text-right">Q1</th><th className="p-2 text-right">Median</th><th className="p-2 text-right">Q3</th><th className="p-2 text-right">Max</th></tr></thead>
                 <tbody>
                   {boxStats.map((b) => (
                     <tr key={b.group} className="border-b border-neutral-100 dark:border-neutral-700/50">
@@ -7330,9 +7362,9 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 <BarChart data={histChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
-                  <YAxis label={{ value: "Tần số", angle: -90, position: "insideLeft" }} />
+                  <YAxis label={{ value: t("presentationView.histogramFrequencyLabel"), angle: -90, position: "insideLeft" }} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name="Tần số" />
+                  <Bar dataKey="count" fill="#0061bb" name={t("presentationView.histogramFrequencyLabel")} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -7346,10 +7378,10 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                 <ComposedChart data={histComboData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
-                  <YAxis label={{ value: "Tần số / Mật độ", angle: -90, position: "insideLeft" }} />
+                  <YAxis label={{ value: t("presentationView.histogramFrequencyDensityLabel"), angle: -90, position: "insideLeft" }} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name="Tần số" />
-                  <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name="Đường mật độ (KDE)" />
+                  <Bar dataKey="count" fill="#0061bb" name={t("presentationView.histogramFrequencyLabel")} />
+                  <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name={t("presentationView.kdeLineLabel")} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -7365,7 +7397,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                   <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
                   <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Area type="monotone" dataKey="y" stroke="#0061bb" fill="#0061bb" fillOpacity={0.4} name={yCol || "Giá trị"} />
+                  <Area type="monotone" dataKey="y" stroke="#0061bb" fill="#0061bb" fillOpacity={0.4} name={yCol || t("presentationView.lineDefaultValueName")} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -7437,8 +7469,8 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
           <div className="space-y-3">
             <AIAssistPanel
               context={`Bảng chéo trực quan: hàng ${crosstabCol1}, cột ${crosstabCol2}. Hàng: ${crosstabResult.rowLabels.join(", ")}. Cột: ${crosstabResult.colLabels.join(", ")}. Tổng: ${crosstabResult.counts.reduce((a, row) => a + row.reduce((b, c) => b + c, 0), 0)}.`}
-              quickPrompts={[{ label: "Diễn giải bảng chéo", systemHint: "Bạn là chuyên gia thống kê. Giải thích bảng chéo (tần số chéo hai biến phân loại) và cách đọc biểu đồ cột chồng: so sánh tỉ lệ giữa các nhóm. Trả lời ngắn gọn bằng tiếng Việt." }]}
-              title="Hỏi AI về bảng chéo"
+              quickPrompts={[{ label: t("presentationView.crosstabAskAiLabel"), systemHint: `${t("presentationView.crosstabAskAiHint")} ${aiAnswerLangHint()}` }]}
+              title={t("presentationView.crosstabAskAiTitle")}
             />
             <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-700">
               <table className="w-full text-sm border-collapse">
@@ -7448,7 +7480,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                     {crosstabResult.colLabels.map((l) => (
                       <th key={l} className="p-2 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-left font-medium">{l}</th>
                     ))}
-                    <th className="p-2 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-right font-medium">Từng</th>
+                    <th className="p-2 border border-neutral-200 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-right font-medium">{t("presentationView.barTotalPrefix")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -7466,7 +7498,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
                     );
                   })}
                   <tr className="bg-neutral-50 dark:bg-neutral-800/50">
-                    <td className="p-2 border border-neutral-200 dark:border-neutral-600 font-medium">Từng</td>
+                    <td className="p-2 border border-neutral-200 dark:border-neutral-600 font-medium">{t("presentationView.barTotalPrefix")}</td>
                     {crosstabResult.colLabels.map((_, j) => {
                       const colSum = crosstabResult.counts.reduce((acc, row) => acc + row[j], 0);
                       return <td key={j} className="p-2 border border-neutral-200 dark:border-neutral-600 text-right font-medium">{colSum}</td>;
@@ -7497,8 +7529,8 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             <div className="p-2">
               <AIAssistPanel
                 context={`Ma trận tương quan (trực quan): ${corrResult.columnNames.join(", ")}. Mẫu hệ số: ${corrResult.matrix.slice(0, 3).map((row, i) => `${corrResult.columnNames[i]}: ${row.slice(0, 4).map((v) => v.toFixed(2)).join(", ")}`).join("; ")}.`}
-                quickPrompts={[{ label: "Giải thích ma trận tương quan", systemHint: "Bạn là chuyên gia thống kê. Giải thích ma trận tương quan và heatmap: màu sắc thể hiện cường độ tương quan (dương/âm), cách đọc nhanh biến nào tương quan mạnh với biến nào. Trả lời ngắn gọn bằng tiếng Việt." }]}
-                title="Hỏi AI về ma trận tương quan"
+                quickPrompts={[{ label: t("presentationView.heatmapAskAiLabel"), systemHint: `${t("presentationView.heatmapAskAiHint")} ${aiAnswerLangHint()}` }]}
+                title={t("presentationView.heatmapAskAiTitle")}
               />
             </div>
             <table className="border-collapse text-sm">
@@ -7536,17 +7568,17 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             {summaryStats.slice(0, 24).map((s) => (
               <div key={s.column} className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-3">
                 <p className="font-medium text-sm truncate" title={s.column}>{s.column}</p>
-                <p className="text-xs text-neutral-500 mt-0.5">n = {s.n} | Thiếu: {s.missing}</p>
-                {s.mean != null && <p className="text-sm mt-1">Trung bình: {s.mean.toFixed(2)}{s.std != null ? ` (ĐLC): ${s.std.toFixed(2)}` : ""}</p>}
-                {s.median != null && <p className="text-xs text-neutral-600 dark:text-neutral-400">Trung vị: {s.median.toFixed(2)}</p>}
-                {s.min != null && s.max != null && <p className="text-xs text-neutral-500">Min–Max: {s.min.toFixed(2)} – {s.max.toFixed(2)}</p>}
+                <p className="text-xs text-neutral-500 mt-0.5">n = {s.n} | {t("presentationView.missingPrefix")} {s.missing}</p>
+                {s.mean != null && <p className="text-sm mt-1">{t("presentationView.meanPrefix")} {s.mean.toFixed(2)}{s.std != null ? ` (${t("presentationView.sdAbbrev")}): ${s.std.toFixed(2)}` : ""}</p>}
+                {s.median != null && <p className="text-xs text-neutral-600 dark:text-neutral-400">{t("presentationView.medianPrefix")} {s.median.toFixed(2)}</p>}
+                {s.min != null && s.max != null && <p className="text-xs text-neutral-500">{t("presentationView.minMaxPrefix")} {s.min.toFixed(2)} – {s.max.toFixed(2)}</p>}
               </div>
             ))}
           </div>
         )}
         {chartType === "dashboard" && (dashboardStats.length > 0 || (dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2)) && (
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Tóm tắt nhanh</h3>
+            <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{t("presentationView.quickSummaryHeading")}</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
               {dashboardStats.slice(0, 6).map((s) => (
                 <div key={s.column} className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-2">
@@ -7558,7 +7590,7 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             </div>
             {dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2 && (
               <>
-                <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">Ma trận tương quan (Pearson)</h3>
+                <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{t("presentationView.correlationMatrixPearsonHeading")}</h3>
                 <div className="overflow-x-auto overflow-y-auto max-h-64 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <table className="border-collapse text-xs">
                     <thead>
@@ -7590,28 +7622,28 @@ function PresentationView({ tab, onTabChange, selectedDataset, lastHypothesisRes
             )}
           </div>
         )}
-        {chartType === "bar" && xCol && barChartData.length === 0 && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">Không vẽ được biểu đồ cột: không có dữ liệu cho cột &quot;{xCol}&quot;{yCol ? ` (trục Y: ${yCol})` : ""}. Kiểm tra cột đã chọn có giá trị không.</p>}
-        {chartType === "line" && (!xCol || !yCol || lineData.length === 0) && <p className="text-neutral-500 text-sm">Chọn trục X (danh mục/thứ tự) và trục Y (số) cho biểu đồ đường.</p>}
-        {chartType === "area" && (!xCol || !yCol || areaData.length === 0) && <p className="text-neutral-500 text-sm">Chọn trục X và trục Y (số) cho biểu đồ vùng.</p>}
-        {chartType === "stackedBar" && (!xCol || !stackByCol || !yCol || stackedBarData.length === 0) && <p className="text-neutral-500 text-sm">Chọn trục X (danh mục), cột chồng (danh mục) và giá trị (số) cho biểu đồ cột chồng.</p>}
-        {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn Trục X (cột phân loại) ở trên để vẽ biểu đồ tròn theo tỉ lệ thành phần.</p>}
-        {chartType === "box" && (!xCol || !yCol || boxChartData.length === 0) && <p className="text-neutral-500 text-sm">Chọn biến nhóm và biến số cho box plot.</p>}
-        {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">Chọn một cột số cho biểu đồ cột (histogram). Bật «Hiển thị đường mật độ» để vẽ thêm đường KDE.</p>}
-        {chartType === "density" && (!densityGroupCol || !densityValueCol) && <p className="text-neutral-500 text-sm">Chọn biến nhóm (ví dụ có/không gợi ý) và biến số để so sánh phân bố hai nhóm.</p>}
-        {chartType === "radar" && radarNumericCols.length < 2 && <p className="text-neutral-500 text-sm">Chọn ít nhất 2 cột số cho biểu đồ radar.</p>}
-        {chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2) && <p className="text-neutral-500 text-sm">Cần ít nhất 2 cột số trong dataset để vẽ ma trận tương quan.</p>}
-        {chartType === "summary" && summaryStats.length === 0 && <p className="text-neutral-500 text-sm">Không có thống kê mô tả (cần ít nhất 2 dòng dữ liệu).</p>}
-        {chartType === "donut" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">Chọn cột phân loại (Trục X hoặc ô bên trên) để vẽ biểu đồ donut.</p>}
-        {chartType === "barH" && (!xCol || barChartData.length === 0) && <p className="text-neutral-500 text-sm">Chọn Trục X (cột danh mục). Tùy chọn: chọn thêm Trục Y (số) để vẽ tổng giá trị theo nhóm.</p>}
-        {chartType === "dashboard" && dashboardStats.length === 0 && !(dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2) && <p className="text-neutral-500 text-sm">Cần ít nhất 2 dòng dữ liệu; dashboard hiển thị tóm tắt và ma trận tương quan nếu có đủ cột số.</p>}
+        {chartType === "bar" && xCol && barChartData.length === 0 && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.barNoDataPart1")} &quot;{xCol}&quot;{yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. {t("presentationView.barNoDataPart2")}</p>}
+        {chartType === "line" && (!xCol || !yCol || lineData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}
+        {chartType === "area" && (!xCol || !yCol || areaData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.areaEmptyHint")}</p>}
+        {chartType === "stackedBar" && (!xCol || !stackByCol || !yCol || stackedBarData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.stackedBarEmptyHint")}</p>}
+        {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.pieEmptyHint")}</p>}
+        {chartType === "box" && (!xCol || !yCol || boxChartData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.boxEmptyHint")}</p>}
+        {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">{t("presentationView.histogramEmptyHint")}</p>}
+        {chartType === "density" && (!densityGroupCol || !densityValueCol) && <p className="text-neutral-500 text-sm">{t("presentationView.densityEmptyHint")}</p>}
+        {chartType === "radar" && radarNumericCols.length < 2 && <p className="text-neutral-500 text-sm">{t("presentationView.radarEmptyHint")}</p>}
+        {chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2) && <p className="text-neutral-500 text-sm">{t("presentationView.heatmapEmptyHint")}</p>}
+        {chartType === "summary" && summaryStats.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.summaryEmptyHint")}</p>}
+        {chartType === "donut" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.donutEmptyHint")}</p>}
+        {chartType === "barH" && (!xCol || barChartData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.barHEmptyHint")}</p>}
+        {chartType === "dashboard" && dashboardStats.length === 0 && !(dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2) && <p className="text-neutral-500 text-sm">{t("presentationView.dashboardEmptyHint")}</p>}
       </div>
     );
   }
   if (tab === "visualization") return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">Biểu đồ</h2>
-      <p className="text-neutral-500">Chọn dataset ở Workflow hoặc Data.</p>
-      <p className="text-sm text-neutral-500 mt-2">Dùng tab <strong>AI hướng dẫn</strong> để hỏi gợi ý loại biểu đồ hoặc cách trực quan hóa.</p>
+      <h2 className="text-xl font-semibold mb-2">{t("presentationView.title")}</h2>
+      <p className="text-neutral-500">{t("presentationView.noDatasetHint")}</p>
+      <p className="text-sm text-neutral-500 mt-2">{t("presentationView.useAiGuidePrefix")} <strong>{t("aiAssistView.title")}</strong> {t("presentationView.useAiGuideSuffix")}</p>
     </div>
   );
 
@@ -7624,16 +7656,16 @@ type AIQuickPrompt = { label: string; systemHint: string; userMessage?: string }
 
 /** Prompt chuẩn cho mọi kết quả phân tích: viết APA + giải thích ý nghĩa (hỗ trợ AI toàn diện). Ngôn ngữ thống nhất: tiếng Việt. */
 const STANDARD_AI_RESULT_PROMPTS: AIQuickPrompt[] = [
-  { label: "Viết đoạn Kết quả theo APA", systemHint: "Bạn là chuyên gia thống kê. Viết đoạn Kết quả (Results) ngắn theo chuẩn APA từ số liệu cung cấp: phương pháp, thống kê, p-value, effect size. Trả lời bằng tiếng Việt.", userMessage: "Viết đoạn Kết quả theo APA dựa trên kết quả trên." },
-  { label: "Giải thích ý nghĩa kết quả", systemHint: "Bạn là chuyên gia thống kê. Giải thích ý nghĩa từng chỉ số (p-value, effect size, CI) và kết luận thực hành. Trả lời ngắn gọn bằng tiếng Việt.", userMessage: "Giải thích ý nghĩa kết quả và kết luận thực hành." },
+  { label: t("aiAssistPanel.standardPromptApaResultsLabel"), systemHint: `${t("aiAssistPanel.standardPromptApaResultsHint")} ${aiAnswerLangHint("Trả lời bằng tiếng Việt.", "Answer in English.")}`, userMessage: t("aiAssistPanel.standardPromptApaResultsUserMessage") },
+  { label: t("aiAssistPanel.standardPromptExplainResultLabel"), systemHint: `${t("aiAssistPanel.standardPromptExplainResultHint")} ${aiAnswerLangHint()}`, userMessage: t("aiAssistPanel.standardPromptExplainResultUserMessage") },
 ];
 
 const DISLIKE_REASONS = [
-  { id: "incorrect", label: "Sai nội dung" },
-  { id: "not_asked", label: "Không đúng câu hỏi" },
-  { id: "slow_buggy", label: "Chậm hoặc lỗi" },
-  { id: "style_tone", label: "Giọng văn / phong cách" },
-  { id: "other", label: "Khác" },
+  { id: "incorrect", label: t("aiAssistPanel.dislikeReasonIncorrect") },
+  { id: "not_asked", label: t("aiAssistPanel.dislikeReasonNotAsked") },
+  { id: "slow_buggy", label: t("aiAssistPanel.dislikeReasonSlowBuggy") },
+  { id: "style_tone", label: t("aiAssistPanel.dislikeReasonStyleTone") },
+  { id: "other", label: t("aiAssistPanel.dislikeReasonOther") },
 ] as const;
 
 function AIAssistPanel({
@@ -7641,9 +7673,9 @@ function AIAssistPanel({
   metadata,
   process,
   quickPrompts,
-  defaultSystemHint = "Bạn là chuyên gia thống kê và nghiên cứu định lượng. Viết đoạn diễn giải phù hợp với ngữ cảnh. Trả lời ngắn gọn bằng tiếng Việt. Có thể dùng Markdown (tiêu đề, danh sách). Nếu có bảng: mỗi hàng một dòng riêng, cột tách bằng dấu |, sau dòng tiêu đề cột thêm dòng phân cách kiểu | --- | --- | (GitHub-flavored Markdown); không chèn ký tự & giữa các ô.",
+  defaultSystemHint = `${t("aiAssistPanel.defaultSystemHint")} ${aiAnswerLangHint()} ${t("aiAssistPanel.defaultSystemHintMarkdownNote")}`,
   disabled = false,
-  title = "Hỏi AI về nội dung này",
+  title = t("aiAssistPanel.defaultTitle"),
   includeStandardResultPrompts = true,
 }: {
   context: string;
@@ -7768,11 +7800,11 @@ function AIAssistPanel({
       const res = await quantisApi.aiComplete(api, promptText, systemHint, modelToUse, { maxTokens: 1024 });
       setResult(res);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Lỗi kết nối AI";
+      const msg = e instanceof Error ? e.message : t("api.aiConnectionError");
       const hint = /fetch|network|failed|refused|404|500/i.test(msg)
-        ? " Kiểm tra Ollama đã chạy hoặc menu ⋮ → Cấu hình kết nối → chọn model."
+        ? t("aiAssistPanel.hintCheckOllama")
         : /abort|timeout/i.test(msg)
-          ? " Yêu cầu quá lâu (timeout). Thử lại hoặc chọn model nhỏ hơn."
+          ? t("aiAssistPanel.hintTimeout")
           : "";
       setError(msg + hint);
     } finally {
@@ -7853,7 +7885,7 @@ function AIAssistPanel({
               onMouseDown={handleDragStart}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.preventDefault(); }}
               className="py-1.5 pl-2 cursor-grab active:cursor-grabbing hover:bg-neutral-100 dark:hover:bg-neutral-700/80 rounded-l"
-              title="Kéo để di chuyển"
+              title={t("aiAssistPanel.dragToMoveTitle")}
             >
               <GripVertical className="w-4 h-4" aria-hidden />
             </div>
@@ -7862,23 +7894,23 @@ function AIAssistPanel({
               onClick={() => setOpen(false)}
               onMouseDown={(e) => e.stopPropagation()}
               className="p-1.5 rounded-r hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset"
-              title="Đóng"
-              aria-label="Đóng"
+              title={t("app.close")}
+              aria-label={t("app.close")}
             >
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="flex flex-col min-h-0 flex-1 overflow-y-auto p-3">
           {!modelToUse && (
-            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30">Chọn model trong <strong>Cấu hình kết nối</strong> (menu ⋮) để dùng AI. Hiện đang dùng model mặc định của máy chủ.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mb-2 px-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30">{t("aiAssistPanel.selectModelHintPrefix")} <strong>{t("app.connectionSettings")}</strong> {t("aiAssistPanel.selectModelHintSuffix")}</p>
           )}
           {fullContext.length > AI_MAX_PROMPT_CHARS && (
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Ngữ cảnh dài sẽ được rút gọn tự động khi gửi.</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{t("aiAssistPanel.longContextTruncateNote")}</p>
           )}
           {!hasContext && (
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Chưa có dữ liệu/kết quả để AI diễn giải. Chọn dữ liệu hoặc chạy phân tích trước.</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{t("aiAssistPanel.noContextNote")}</p>
           )}
-          <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">Câu hỏi gợi ý:</p>
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">{t("aiAssistPanel.suggestedQuestionsLabel")}</p>
           <div className="flex flex-wrap gap-1.5 mb-3">
             {quickPromptsToShow.map((p, i) => (
               <button
@@ -7892,12 +7924,12 @@ function AIAssistPanel({
               </button>
             ))}
           </div>
-          <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1.5">Hoặc nhập câu hỏi của bạn:</p>
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1.5">{t("aiAssistPanel.customQuestionLabel")}</p>
           <textarea
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleCustomSubmit(); } }}
-            placeholder="VD: Giải thích ý nghĩa các chỉ số này... (Ctrl+Enter gửi)"
+            placeholder={t("aiAssistPanel.customQuestionPlaceholder")}
             rows={3}
             className="w-full min-h-[5rem] rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm mb-2 resize-y"
           />
@@ -7907,29 +7939,29 @@ function AIAssistPanel({
             disabled={!customPrompt.trim() || loading}
             className="w-full py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
           >
-            Gửi
+            {t("aiAssistPanel.sendButton")}
           </button>
           {error && (
             <div className="mt-2 p-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
-              <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-0.5">Lỗi kết nối AI</p>
+              <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-0.5">{t("api.aiConnectionError")}</p>
               <p className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap">{error}</p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">Gợi ý: Menu ⋮ → <strong>Cấu hình kết nối</strong> → kiểm tra URL backend Node, cấu hình <strong>Ollama upstream</strong> (server) hoặc <code className="text-[10px]">OLLAMA_URL</code>, bấm <strong>Kiểm tra Ollama</strong>; trên máy chủ cần <code className="text-[10px]">ollama serve</code> và model đã kéo.</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t("aiAssistPanel.errorHintPrefix")} <strong>{t("app.connectionSettings")}</strong> {t("aiAssistPanel.errorHintMid1")} <strong>{t("aiAssistPanel.errorHintOllamaUpstream")}</strong> {t("aiAssistPanel.errorHintMid2")} <code className="text-[10px]">OLLAMA_URL</code>{t("aiAssistPanel.errorHintMid3")} <strong>{t("aiAssistPanel.errorHintCheckOllama")}</strong>{t("aiAssistPanel.errorHintMid4")} <code className="text-[10px]">ollama serve</code> {t("aiAssistPanel.errorHintSuffix")}</p>
             </div>
           )}
           {result !== null && (
             <>
               <div ref={resultBoxRef} className="mt-2 p-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20">
-                <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">Kết quả:</p>
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-1">{t("aiAssistPanel.resultLabel")}</p>
                 <div className="text-sm text-neutral-700 dark:text-neutral-300 max-h-80 overflow-y-auto overflow-x-auto">
-                  <AiMarkdown content={result || "Máy chủ trả về rỗng."} />
+                  <AiMarkdown content={result || t("aiAssistPanel.emptyServerResponse")} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                  <button type="button" onClick={() => { navigator.clipboard.writeText(result || ""); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-amber-300 dark:border-amber-600 bg-amber-100/80 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200"><Copy className="w-3 h-3" /> Sao chép</button>
-                  <button type="button" onClick={() => { setResult(null); setError(null); setFeedback(null); setShowDislikeForm(false); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600">Làm mới</button>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(result || ""); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-amber-300 dark:border-amber-600 bg-amber-100/80 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200"><Copy className="w-3 h-3" /> {t("aiAssistPanel.copyButton")}</button>
+                  <button type="button" onClick={() => { setResult(null); setError(null); setFeedback(null); setShowDislikeForm(false); }} className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-600">{t("aiAssistPanel.refreshButton")}</button>
                   <span className="text-neutral-400 dark:text-neutral-500 mx-0.5">|</span>
                   <button
                     type="button"
-                    title={feedback === "like" ? "Bỏ thích" : "Hữu ích"}
+                    title={feedback === "like" ? t("aiAssistPanel.likeButtonTitleActive") : t("aiAssistPanel.likeButtonTitleInactive")}
                     onClick={() => {
                       if (feedback === "like") {
                         setFeedback(null);
@@ -7940,11 +7972,11 @@ function AIAssistPanel({
                     }}
                     className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded border ${feedback === "like" ? "border-green-500 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : "border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600"}`}
                   >
-                    <ThumbsUp className="w-3 h-3" /> Thích
+                    <ThumbsUp className="w-3 h-3" /> {t("aiAssistPanel.likeButton")}
                   </button>
                   <button
                     type="button"
-                    title={feedback === "dislike" ? "Bỏ không thích" : "Không hữu ích"}
+                    title={feedback === "dislike" ? t("aiAssistPanel.dislikeButtonTitleActive") : t("aiAssistPanel.dislikeButtonTitleInactive")}
                     onClick={() => {
                       if (feedback === "dislike") {
                         setFeedback(null);
@@ -7954,12 +7986,12 @@ function AIAssistPanel({
                     }}
                     className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded border ${feedback === "dislike" ? "border-red-500 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : "border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-600"}`}
                   >
-                    <ThumbsDown className="w-3 h-3" /> Không thích
+                    <ThumbsDown className="w-3 h-3" /> {t("aiAssistPanel.dislikeButton")}
                   </button>
                 </div>
                 {showDislikeForm && (
                   <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800">
-                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">Góp ý cho câu trả lời (tùy chọn):</p>
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200 mb-2">{t("aiAssistPanel.dislikeFormLabel")}</p>
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {DISLIKE_REASONS.map((r) => (
                         <button
@@ -7975,7 +8007,7 @@ function AIAssistPanel({
                     <textarea
                       value={dislikeComment}
                       onChange={(e) => setDislikeComment(e.target.value)}
-                      placeholder="Nhập góp ý chi tiết (tùy chọn)..."
+                      placeholder={t("aiAssistPanel.dislikeCommentPlaceholder")}
                       rows={2}
                       maxLength={2000}
                       className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs mb-2 resize-none"
@@ -8002,7 +8034,7 @@ function AIAssistPanel({
                         }}
                         className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
                       >
-                        {dislikeSubmitting ? "Đang gửi..." : "Gửi góp ý"}
+                        {dislikeSubmitting ? t("aiAssistPanel.submittingDislike") : t("aiAssistPanel.submitDislikeButton")}
                       </button>
                       <button
                         type="button"
@@ -8010,14 +8042,14 @@ function AIAssistPanel({
                         onClick={() => { setShowDislikeForm(false); setDislikeReason(null); setDislikeComment(""); }}
                         className="px-2.5 py-1.5 rounded-lg text-xs border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                       >
-                        Hủy
+                        {t("aiAssistPanel.cancelDislikeButton")}
                       </button>
                     </div>
                   </div>
                 )}
               </div>
               <p className="mt-3 pt-2 border-t border-red-200 dark:border-red-800 text-[11px] text-red-600 dark:text-red-400">
-                ⚠️ AI có thể sai; cần kiểm tra lại kỹ câu trả lời trước khi sử dụng.
+                {t("aiAssistPanel.aiDisclaimerNote")}
               </p>
             </>
           )}
@@ -8041,18 +8073,18 @@ function pickRandomN<T>(items: readonly T[], n: number): T[] {
 }
 
 const AI_TAB_SUGGESTED_PROMPTS: { label: string; userMessage: string }[] = [
-  { label: "Quantis dùng để làm gì? Các bước sử dụng cơ bản?", userMessage: "Quantis dùng để làm gì? Các bước sử dụng cơ bản từ import dữ liệu đến phân tích và báo cáo?" },
-  { label: "Làm thế nào để import và xem dữ liệu?", userMessage: "Làm thế nào để import dữ liệu (file CSV/Excel) và xem dữ liệu trong Quantis?" },
-  { label: "Tab Khám phá & Biến đổi dùng để làm gì?", userMessage: "Tab Khám phá & biến đổi dữ liệu gồm những gì? Làm sạch dữ liệu, xử lý missing, chuẩn hóa thế nào?" },
-  { label: "Tab Phân tích thống kê có những công cụ nào?", userMessage: "Tab Phân tích thống kê có những công cụ nào? Kiểm định, hồi quy, tương quan, EFA, SEM dùng khi nào?" },
-  { label: "So sánh hai nhóm: nên dùng t-test hay Mann-Whitney?", userMessage: "So sánh trung bình hai nhóm độc lập: khi nào dùng t-test, khi nào dùng Mann-Whitney? Giả định của từng loại?" },
-  { label: "Nhiều nhóm: ANOVA hay Kruskal-Wallis?", userMessage: "So sánh nhiều nhóm (3 nhóm trở lên): khi nào dùng ANOVA một nhân tố, khi nào dùng Kruskal-Wallis?" },
-  { label: "Hai biến phân loại: kiểm định gì?", userMessage: "Muốn xem mối liên hệ giữa hai biến phân loại (bảng tần số chéo): nên dùng kiểm định Chi-square hay Fisher exact?" },
-  { label: "Hồi quy OLS và Logistic khác nhau thế nào?", userMessage: "Hồi quy OLS và hồi quy Logistic trong Quantis khác nhau thế nào? Khi nào dùng từng loại?" },
-  { label: "Mediation và Moderation khác nhau ra sao?", userMessage: "Phân tích Mediation (trung gian) và Moderation (điều tiết) trong SEM khác nhau thế nào? Cho ví dụ ngắn." },
-  { label: "Cách báo cáo kết quả theo chuẩn APA?", userMessage: "Cách báo cáo kết quả kiểm định thống kê (t-test, ANOVA, Chi-square, hồi quy) theo chuẩn APA? Cho mẫu câu." },
-  { label: "Cỡ mẫu bao nhiêu là đủ? Phân tích lực mẫu?", userMessage: "Cỡ mẫu bao nhiêu là đủ cho t-test, ANOVA, hồi quy? Phân tích lực mẫu (power analysis) và tính cỡ mẫu trong Quantis thế nào?" },
-  { label: "Cronbach alpha và EFA dùng khi nào?", userMessage: "Độ tin cậy Cronbach alpha và phân tích nhân tố EFA trong Quantis dùng khi nào? Cách đọc kết quả?" },
+  { label: t("aiAssistView.prompt1Label"), userMessage: t("aiAssistView.prompt1UserMessage") },
+  { label: t("aiAssistView.prompt2Label"), userMessage: t("aiAssistView.prompt2UserMessage") },
+  { label: t("aiAssistView.prompt3Label"), userMessage: t("aiAssistView.prompt3UserMessage") },
+  { label: t("aiAssistView.prompt4Label"), userMessage: t("aiAssistView.prompt4UserMessage") },
+  { label: t("aiAssistView.prompt5Label"), userMessage: t("aiAssistView.prompt5UserMessage") },
+  { label: t("aiAssistView.prompt6Label"), userMessage: t("aiAssistView.prompt6UserMessage") },
+  { label: t("aiAssistView.prompt7Label"), userMessage: t("aiAssistView.prompt7UserMessage") },
+  { label: t("aiAssistView.prompt8Label"), userMessage: t("aiAssistView.prompt8UserMessage") },
+  { label: t("aiAssistView.prompt9Label"), userMessage: t("aiAssistView.prompt9UserMessage") },
+  { label: t("aiAssistView.prompt10Label"), userMessage: t("aiAssistView.prompt10UserMessage") },
+  { label: t("aiAssistView.prompt11Label"), userMessage: t("aiAssistView.prompt11UserMessage") },
+  { label: t("aiAssistView.prompt12Label"), userMessage: t("aiAssistView.prompt12UserMessage") },
 ];
 
 const AI_TAB_QUICK_PROMPTS_COUNT = 3;
@@ -8061,7 +8093,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
   const api = quantisApi.getAiApiBase();
   const defaultModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
   const modelToUse = loadAiModel() ?? defaultModel ?? quantisApi.getDefaultAiModel();
-  const systemHint = "Bạn là trợ lý chuyên về ứng dụng Quantis và phân tích định lượng. Nhiệm vụ: (1) Hướng dẫn cách sử dụng ứng dụng Quantis (import dữ liệu, các tab Khám phá, Phân tích thống kê, Trực quan, kiểm định, hồi quy, SEM, v.v.). (2) Gợi ý phương pháp phân tích định lượng phù hợp, cách chọn kiểm định, diễn giải kết quả, báo cáo APA. Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt.";
+  const systemHint = `${t("aiAssistView.systemHintTask")} ${aiAnswerLangHint("Trả lời ngắn gọn, rõ ràng, bằng tiếng Việt.", "Answer concisely and clearly in English.")}`;
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -8069,8 +8101,8 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
   const [suggestionRound, setSuggestionRound] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const dsCtx = selectedDataset
-    ? `Bộ dữ liệu hiện tại: ${selectedDataset.name}, ${selectedDataset.rows} hàng, ${selectedDataset.columns} cột. Cột: ${(selectedDataset.columnNames || []).slice(0, 10).join(", ")}${(selectedDataset.columnNames?.length || 0) > 10 ? "…" : ""}.`
-    : "Chưa chọn bộ dữ liệu.";
+    ? `${t("aiAssistView.datasetContextPrefix")} ${selectedDataset.name}, ${selectedDataset.rows} ${t("transformTab.rowsUnit")}, ${selectedDataset.columns} ${t("transformTab.columnsUnit")}. ${t("aiAssistView.datasetContextColumnsPrefix")} ${(selectedDataset.columnNames || []).slice(0, 10).join(", ")}${(selectedDataset.columnNames?.length || 0) > 10 ? "…" : ""}.`
+    : t("aiAssistView.noDatasetSelected");
 
   const suggestedPromptsPick = useMemo(
     () => pickRandomN(AI_TAB_SUGGESTED_PROMPTS, AI_TAB_QUICK_PROMPTS_COUNT),
@@ -8094,9 +8126,9 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
       const res = await quantisApi.aiComplete(api, promptText, systemHint, modelToUse, { maxTokens: 1024 });
       setMessages((prev) => [...prev, { role: "assistant", content: res }]);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Lỗi kết nối AI";
+      const msg = e instanceof Error ? e.message : t("api.aiConnectionError");
       const hint = /fetch|network|failed|refused|404|500/i.test(msg)
-        ? " Kiểm tra Ollama đã chạy hoặc menu ⋮ → Cấu hình kết nối → chọn model."
+        ? t("aiAssistPanel.hintCheckOllama")
         : "";
       setError(msg + hint);
       setMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${msg}${hint}` }]);
@@ -8118,7 +8150,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
           context={dsCtx}
           quickPrompts={suggestedPromptsPick.map((p) => ({ label: p.label, systemHint, userMessage: p.userMessage }))}
           defaultSystemHint={systemHint}
-          title="AI hướng dẫn"
+          title={t("aiAssistView.title")}
           includeStandardResultPrompts={false}
         />
       </div>
@@ -8130,19 +8162,19 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
       <div className="shrink-0 p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
         <h2 className="text-lg sm:text-xl font-semibold mb-1 flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-amber-500 shrink-0" /> AI hướng dẫn
+          <Sparkles className="w-5 h-5 text-amber-500 shrink-0" /> {t("aiAssistView.title")}
         </h2>
         <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400">
-          Hướng dẫn sử dụng ứng dụng Quantis và gợi ý phân tích định lượng. Chọn câu hỏi gợi ý bên dưới hoặc nhập câu hỏi của bạn.
+          {t("aiAssistView.subtitle")}
         </p>
         {selectedDataset && (
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 truncate" title={dsCtx}>Bộ dữ liệu: {selectedDataset.name}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 truncate" title={dsCtx}>{t("aiAssistView.datasetLabelPrefix")} {selectedDataset.name}</p>
         )}
       </div>
 
       <div className="shrink-0 p-4 sm:px-6 sm:pb-4 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-50/80 dark:bg-neutral-800/40">
         <p className="text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-2 text-center">
-          Gợi ý câu hỏi — bấm để hỏi (hiển thị {AI_TAB_QUICK_PROMPTS_COUNT} gợi ý ngẫu nhiên):
+          {t("aiAssistView.suggestedQuestionsHeadingPrefix")} {AI_TAB_QUICK_PROMPTS_COUNT} {t("aiAssistView.suggestedQuestionsHeadingSuffix")}
         </p>
         <div className="flex flex-col items-stretch gap-2 w-full max-w-lg mx-auto">
           {suggestedPromptsPick.map((p, i) => (
@@ -8164,7 +8196,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
             disabled={loading}
             className="mt-2 text-xs text-amber-700 dark:text-amber-400 hover:underline disabled:opacity-50"
           >
-            Lấy {AI_TAB_QUICK_PROMPTS_COUNT} gợi ý khác
+            {t("aiAssistView.getOtherSuggestionsPrefix")} {AI_TAB_QUICK_PROMPTS_COUNT} {t("aiAssistView.getOtherSuggestionsSuffix")}
           </button>
         </div>
       </div>
@@ -8173,7 +8205,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
             <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center py-8">
-              Chưa có tin nhắn. Hãy bấm một câu hỏi gợi ý ở trên hoặc nhập câu hỏi bên dưới.
+              {t("aiAssistView.noMessagesYet")}
             </p>
           )}
           {messages.map((m, i) => (
@@ -8202,7 +8234,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
             <div className="flex justify-start">
               <div className="rounded-xl px-4 py-2.5 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 text-neutral-500">
                 <Loader2 className="w-5 h-5 animate-spin inline-block" />
-                <span className="ml-2 text-sm">Đang trả lời…</span>
+                <span className="ml-2 text-sm">{t("aiAssistView.answeringLabel")}</span>
               </div>
             </div>
           )}
@@ -8219,7 +8251,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(input); } }}
-            placeholder="Nhập câu hỏi về Quantis hoặc phân tích định lượng..."
+            placeholder={t("aiAssistView.inputPlaceholder")}
             className="flex-1 h-11 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
             disabled={loading}
           />
@@ -8228,7 +8260,7 @@ function AIAssistView({ selectedDataset, compact = false }: { selectedDataset?: 
             disabled={loading || !input.trim()}
             className="shrink-0 rounded-lg bg-brand text-white px-4 py-2 h-11 font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Gửi
+            {t("aiAssistPanel.sendButton")}
           </button>
         </form>
       </div>
@@ -8257,34 +8289,34 @@ function AppFeedbackModal({ onClose }: { onClose: () => void }) {
       <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-md w-full mx-4 flex flex-col max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
-            <FileText className="w-5 h-5" /> Góp ý ứng dụng
+            <FileText className="w-5 h-5" /> {t("app.appFeedback")}
           </h3>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label="Đóng">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("app.close")}>
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-6 overflow-y-auto">
         {sent ? (
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">Đã gửi. Cảm ơn bạn đã góp ý!</p>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">{t("appFeedbackModal.sentThanks")}</p>
         ) : (
           <>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">Góp ý, báo lỗi hoặc đề xuất cải thiện (tối thiểu 5 ký tự). Nội dung được lưu local và có thể gửi lên server sau.</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{t("appFeedbackModal.description")}</p>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Nhập nội dung góp ý..."
+              placeholder={t("appFeedbackModal.contentPlaceholder")}
               rows={4}
               maxLength={4000}
               className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm resize-none mb-3"
             />
             <p className="text-xs text-neutral-500 mb-3">{content.length}/4000</p>
             <div className="flex gap-2">
-              <button type="button" onClick={handleSubmit} disabled={content.trim().length < 5 || sending} className="rounded-lg bg-amber-500 text-white px-4 py-2 hover:bg-amber-600 disabled:opacity-50">Gửi</button>
-              <button type="button" onClick={onClose} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-700">Đóng</button>
+              <button type="button" onClick={handleSubmit} disabled={content.trim().length < 5 || sending} className="rounded-lg bg-amber-500 text-white px-4 py-2 hover:bg-amber-600 disabled:opacity-50">{t("appFeedbackModal.sendButton")}</button>
+              <button type="button" onClick={onClose} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-700">{t("app.close")}</button>
             </div>
           </>
         )}
-        {sent && <button type="button" onClick={onClose} className="mt-2 rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">Đóng</button>}
+        {sent && <button type="button" onClick={onClose} className="mt-2 rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90">{t("app.close")}</button>}
         </div>
       </div>
     </div>
@@ -8580,13 +8612,13 @@ function SettingsModal({
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
           <div className="min-w-0 pr-2">
             <h3 id="quantis-settings-title" className="text-base font-semibold flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
-              <Server className="w-4 h-4 shrink-0 text-brand" /> Cấu hình kết nối
+              <Server className="w-4 h-4 shrink-0 text-brand" /> {t("app.connectionSettings")}
             </h3>
             <p id="quantis-settings-desc" className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1">
-              Thiết lập URL backend, Ollama upstream (lưu server, dùng chung mọi tài khoản), Archive; <strong>Kiểm tra</strong> Node, Python và proxy Ollama.
+              {t("settingsModal.descPrefix")} <strong>{t("settingsModal.descStrong")}</strong> {t("settingsModal.descSuffix")}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label="Đóng">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label={t("app.close")}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -8594,59 +8626,59 @@ function SettingsModal({
         <div className="mb-3 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900/50 px-3 py-2.5">
           <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-2">
             <User className="w-3.5 h-3.5 shrink-0 text-brand" />
-            Tài khoản &amp; đăng nhập (giống SurveyLab)
+            {t("settingsModal.accountLoginHeading")}
           </p>
           {accountAuthHint.state === "loading" && (
-            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1.5">Đang tải cấu hình từ server…</p>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1.5">{t("settingsModal.accountLoading")}</p>
           )}
           {accountAuthHint.state === "portal" && (
             <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
-              Bạn đang dùng Quantis trong <strong>AI Portal</strong>: phiên là tài khoản Portal (không có form đăng ký/đăng nhập Quantis riêng). Dữ liệu workspace gắn với user Portal qua proxy.
+              {t("settingsModal.accountPortalPrefix")} <strong>{t("guideModal.tabPortal")}</strong>{t("settingsModal.accountPortalSuffix")}
             </p>
           )}
           {accountAuthHint.state === "no-backend" && (
             <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
-              <strong>Chưa kết nối backend Quantis</strong> — ứng dụng chỉ lưu dữ liệu trên trình duyệt. Để có <strong>đăng ký / đăng nhập</strong> và đồng bộ workspace theo tài khoản như SurveyLab: trong <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">backend/</code> chạy <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">npm run build &amp;&amp; npm start</code> (PostgreSQL), đặt <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">VITE_QUANTIS_API_URL</code> trong <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">.env</code> frontend, kiểm tra Node OK bên dưới rồi tải lại trang.
+              {t("settingsModal.accountNoBackend")}
             </p>
           )}
           {accountAuthHint.state === "config-unavailable" && (
             <p className="text-[11px] text-amber-800 dark:text-amber-200 mt-1.5">
-              Backend phản hồi nhưng <strong>không đọc được</strong> <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">/api/quantis/auth/config</code> (URL sai, CORS, hoặc đang dùng chế độ JSON thay vì PostgreSQL). Đăng nhập Quantis có thể không hoạt động — chỉnh URL backend và thử <strong>Kiểm tra Backend</strong>.
+              {t("settingsModal.accountConfigUnavailable")}
             </p>
           )}
           {accountAuthHint.state === "disabled" && (
             <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
-              Trên server đang <strong>tắt auth Quantis</strong> (<code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">RUN_MODE=embedded</code> hoặc <code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">AUTH_ENABLED=0</code>). Không có đăng ký/đăng nhập tài khoản Quantis trên API này.
+              {t("settingsModal.accountDisabled")}
             </p>
           )}
           {accountAuthHint.state === "optional" && (
             <div className="mt-1.5 space-y-1.5">
               <p className="text-[11px] text-neutral-600 dark:text-neutral-400">
-                Server bật <strong>đăng nhập tùy chọn</strong> (<code className="text-[10px] bg-neutral-200/70 dark:bg-neutral-700 px-0.5 rounded">AUTH_REQUIRED=0</code>): có thể dùng app không đăng nhập; khi đăng nhập, workspace được lưu theo tài khoản trên PostgreSQL.
+                {t("settingsModal.accountOptionalText")}
               </p>
               {!authUser && onRequestLogin && (
                 <button type="button" onClick={onRequestLogin} className="text-xs font-medium text-brand hover:underline">
-                  Mở đăng nhập / đăng ký →
+                  {t("settingsModal.accountOptionalLoginLink")}
                 </button>
               )}
               {authUser && (
-                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Đang đăng nhập: {authUser.email || authUser.name || "—"}</p>
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">{t("settingsModal.accountLoggedInPrefix")} {authUser.email || authUser.name || "—"}</p>
               )}
             </div>
           )}
           {accountAuthHint.state === "required" && (
             <p className="text-[11px] text-neutral-600 dark:text-neutral-400 mt-1.5">
-              Server <strong>bật đăng nhập bắt buộc</strong> (mặc định backend PostgreSQL standalone). Nếu bạn vào được app mà không qua màn hình đăng nhập, hãy tải lại trang hoặc xóa cookie trang này rồi thử lại.
+              {t("settingsModal.accountRequiredText")}
             </p>
           )}
         </div>
         <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mb-3">
-          <strong>Lưu</strong> ghi cấu hình lên server (áp dụng mọi tài khoản) và lưu URL backend/Archive trên trình duyệt. Trình duyệt <strong>chỉ</strong> gọi Ollama qua Node: <code className="text-[10px]">…/api/quantis/ollama/v1</code>; địa chỉ Ollama thật do admin nhập mục dưới (hoặc biến <code className="text-[10px]">OLLAMA_URL</code> trên server).
+          {t("settingsModal.saveNote")}
         </p>
         <div className="mb-4 flex flex-col gap-2 rounded-lg border border-brand/25 bg-brand/5 dark:bg-brand/10 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">Kiểm tra nhanh</p>
-            <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Backend (Node + Python) và Ollama trong một lần bấm</p>
+            <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200">{t("settingsModal.quickTestHeading")}</p>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{t("settingsModal.quickTestDesc")}</p>
           </div>
           <button
             type="button"
@@ -8654,62 +8686,62 @@ function SettingsModal({
             disabled={quickTestLoading || !effectiveBackendUrl()}
             className="shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
-            {quickTestLoading ? "Đang kiểm tra…" : "Backend + Ollama"}
+            {quickTestLoading ? t("settingsModal.testingEllipsis") : t("settingsModal.quickTestButton")}
           </button>
         </div>
         <div className="space-y-5 text-sm">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-brand mb-2 flex items-center gap-2">
-              <Cpu className="w-3.5 h-3.5" /> Backend Quantis
+              <Cpu className="w-3.5 h-3.5" /> {t("settingsModal.backendSectionHeading")}
             </h4>
           <div className={rowClass}>
-            <label className={labelClass}>URL backend Node (gốc API)</label>
-            <p className={hintClass}>Trên research.neu.edu.vn mặc định: backend Node tại /api/quantis/backend, backend Python tại /api/quantis/backend-python (cấu hình ANALYZE_PYTHON_URL trên server).</p>
+            <label className={labelClass}>{t("settingsModal.backendUrlLabel")}</label>
+            <p className={hintClass}>{t("settingsModal.backendUrlHint")}</p>
             <div className={inputRowClass}>
               <input type="url" value={backendUrlInput} onChange={(e) => { setBackendUrlInput(e.target.value); setBackendTestResult(null); }} onBlur={handleSaveBackendUrl} placeholder="http://localhost:4001" className={inputClass} />
-              <button type="button" onClick={handleSaveBackendUrl} className={btnClass}>Lưu</button>
-              <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !effectiveBackendUrl()} className={testBtnClass}>{backendTestLoading ? "…" : "Kiểm tra Backend"}</button>
+              <button type="button" onClick={handleSaveBackendUrl} className={btnClass}>{t("settingsModal.saveButton")}</button>
+              <button type="button" onClick={handleTestBackend} disabled={backendTestLoading || !effectiveBackendUrl()} className={testBtnClass}>{backendTestLoading ? t("settingsModal.checkingEllipsis") : t("settingsModal.checkBackendButton")}</button>
             </div>
             {backendTestResult !== null && (
               <p className={backendTestResult.node ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
-                {backendTestResult.node ? "✓ Node OK" : "✗ Node lỗi"}
-                {backendTestResult.python ? " · Python OK" : " · Backend phân tích (Python/R) chưa cấu hình"}
+                {backendTestResult.node ? t("settingsModal.nodeOkText") : t("settingsModal.nodeErrorText")}
+                {backendTestResult.python ? ` ${t("settingsModal.pythonOkSuffix")}` : ` ${t("settingsModal.pythonNotConfiguredSuffix")}`}
               </p>
             )}
             {backendTestResult !== null && !backendTestResult.python && (
-              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">Backend phân tích là tùy chọn: cấu hình <code className="bg-neutral-100 dark:bg-neutral-700 px-0.5 rounded">ANALYZE_PYTHON_URL</code> trên server Node để bật. Ứng dụng vẫn dùng được (tính trên trình duyệt).</p>
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">{t("settingsModal.pythonOptionalNote")}</p>
             )}
           </div>
           <div className={rowClass}>
-            <label className={labelClass}>Archive (tìm kiếm dataset)</label>
-            <p className={hintClass}>Để trống = proxy qua backend hoặc mặc định.</p>
+            <label className={labelClass}>{t("settingsModal.archiveLabel")}</label>
+            <p className={hintClass}>{t("settingsModal.archiveHint")}</p>
             <div className={inputRowClass}>
               <input type="url" value={archiveUrlInput} onChange={(e) => setArchiveUrlInput(e.target.value)} onBlur={handleSaveArchiveUrl} placeholder="http://host:8010" className={inputClass} />
-              <button type="button" onClick={handleSaveArchiveUrl} className={btnClass}>Lưu</button>
-              <button type="button" onClick={handleTestArchive} disabled={archiveTestLoading} className={testBtnClass}>{archiveTestLoading ? "…" : "Kiểm tra"}</button>
+              <button type="button" onClick={handleSaveArchiveUrl} className={btnClass}>{t("settingsModal.saveButton")}</button>
+              <button type="button" onClick={handleTestArchive} disabled={archiveTestLoading} className={testBtnClass}>{archiveTestLoading ? t("settingsModal.checkingEllipsis") : t("settingsModal.checkButton")}</button>
             </div>
-            {archiveTestResult !== null && <p className={archiveTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveTestResult ? "✓ OK" : "✗ Lỗi"}</p>}
+            {archiveTestResult !== null && <p className={archiveTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveTestResult ? t("settingsModal.okText") : t("settingsModal.errorText")}</p>}
           </div>
           <div className={rowClass}>
-            <label className={labelClass}>Archive file (tải file)</label>
-            <p className={hintClass}>Để trống = env VITE_ARCHIVE_FILE_BASE_URL.</p>
+            <label className={labelClass}>{t("settingsModal.archiveFileLabel")}</label>
+            <p className={hintClass}>{t("settingsModal.archiveFileHint")}</p>
             <div className={inputRowClass}>
               <input type="url" value={archiveFileUrlInput} onChange={(e) => setArchiveFileUrlInput(e.target.value)} onBlur={handleSaveArchiveFileUrl} placeholder="http://host:8013" className={inputClass} />
-              <button type="button" onClick={handleSaveArchiveFileUrl} className={btnClass}>Lưu</button>
-              <button type="button" onClick={handleTestArchiveFile} disabled={archiveFileTestLoading} className={testBtnClass}>{archiveFileTestLoading ? "…" : "Kiểm tra"}</button>
+              <button type="button" onClick={handleSaveArchiveFileUrl} className={btnClass}>{t("settingsModal.saveButton")}</button>
+              <button type="button" onClick={handleTestArchiveFile} disabled={archiveFileTestLoading} className={testBtnClass}>{archiveFileTestLoading ? t("settingsModal.checkingEllipsis") : t("settingsModal.checkButton")}</button>
             </div>
-            {archiveFileTestResult !== null && <p className={archiveFileTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveFileTestResult ? "✓ OK" : "✗ Lỗi"}</p>}
+            {archiveFileTestResult !== null && <p className={archiveFileTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>{archiveFileTestResult ? t("settingsModal.okText") : t("settingsModal.errorText")}</p>}
           </div>
           </div>
 
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-brand mb-2 flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5" /> Ollama AI
+              <Sparkles className="w-3.5 h-3.5" /> {t("settingsModal.ollamaSectionHeading")}
             </h4>
           <div className={rowClass}>
-            <label className={labelClass}>Ollama — địa chỉ upstream (máy chủ)</label>
+            <label className={labelClass}>{t("settingsModal.ollamaUpstreamLabel")}</label>
             <p className={hintClass}>
-              URL mà <strong>backend Node</strong> dùng để gọi Ollama (vd. <code className="text-[10px]">http://127.0.0.1:11434</code> hoặc <code className="text-[10px]">http://ollama:11434</code> trong Docker). Không cần <code className="text-[10px]">/v1</code>. Lưu trên server — áp dụng cho <strong>mọi tài khoản</strong> (cấu hình quản trị). Nếu để trống, backend chỉ dùng biến môi trường <code className="text-[10px]">OLLAMA_URL</code> khi bạn đã đặt trên máy chủ.
+              {t("settingsModal.ollamaUpstreamHint")}
             </p>
             <div className={inputRowClass}>
               <input
@@ -8720,63 +8752,60 @@ function SettingsModal({
                 placeholder="http://127.0.0.1:11434"
                 className={inputClass}
               />
-              <button type="button" onClick={handleSaveOllamaUpstream} className={btnClass}>Lưu</button>
-              <button type="button" onClick={handleTestAiApi} disabled={aiTestLoading || !canTestOllama} className={testBtnClass} title={!canTestOllama ? "Cần URL backend Node" : undefined}>{aiTestLoading ? "…" : "Kiểm tra Ollama"}</button>
+              <button type="button" onClick={handleSaveOllamaUpstream} className={btnClass}>{t("settingsModal.saveButton")}</button>
+              <button type="button" onClick={handleTestAiApi} disabled={aiTestLoading || !canTestOllama} className={testBtnClass} title={!canTestOllama ? t("settingsModal.needBackendUrlTitle") : undefined}>{aiTestLoading ? t("settingsModal.checkingEllipsis") : t("settingsModal.checkOllamaButton")}</button>
             </div>
             {aiTestResult !== null && (
               <div className="space-y-1">
                 <p className={aiTestResult ? "text-emerald-600 dark:text-emerald-400 text-xs" : "text-amber-600 dark:text-amber-400 text-xs"}>
-                  {aiTestResult ? "✓ Proxy Ollama qua backend: OK" : "✗ Không kết nối được — kiểm tra backend Node, upstream Ollama, hoặc OLLAMA_URL"}
+                  {aiTestResult ? t("settingsModal.proxyOkText") : t("settingsModal.proxyErrorText")}
                 </p>
                 {!aiTestResult && pageIsLocalDev && backendHostIsRemote ? (
                   <p className="text-[11px] leading-snug text-amber-800 dark:text-amber-200/95">
-                    Trang đang chạy trên <strong>localhost</strong> nhưng backend Node trỏ tới <strong>máy chủ khác</strong> — kiểm tra Ollama chạy trên server đó;{" "}
-                    <code className="text-[10px]">localhost:11434</code> ở upstream là Ollama trên server, không phải máy bạn. Để dùng Ollama cục bộ: ô <strong>URL backend Node</strong> phía trên ={" "}
-                    <code className="text-[10px]">http://localhost:4001</code> (chạy <code className="text-[10px]">npm start</code> trong thư mục Quantis), <strong>Lưu</strong>, upstream{" "}
-                    <code className="text-[10px]">http://127.0.0.1:11434</code>. Nếu đã sửa <code className="text-[10px]">.env</code> mà vẫn thấy URL research, bấm <strong>Lưu</strong> lại URL backend — trình duyệt có thể đang nhớ giá trị cũ trong localStorage.
+                    {t("settingsModal.localDevRemoteBackendWarning")}
                   </p>
                 ) : null}
               </div>
             )}
           </div>
           <div className={rowClass}>
-            <label className={labelClass}>Mô hình AI</label>
-            <p className={hintClass}>Giải thích / Diễn giải kết quả, tab AI hướng dẫn.</p>
+            <label className={labelClass}>{t("settingsModal.aiModelLabel")}</label>
+            <p className={hintClass}>{t("settingsModal.aiModelHint")}</p>
             {loading ? (
-              <p className="text-xs text-neutral-500">Đang tải danh sách...</p>
+              <p className="text-xs text-neutral-500">{t("settingsModal.loadingModelsText")}</p>
             ) : models.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2">
-                <select value={selectedModel} onChange={(e) => handleChange(e.target.value)} className={`${inputClass} max-w-[200px]`} title="Chọn mô hình Ollama">
+                <select value={selectedModel} onChange={(e) => handleChange(e.target.value)} className={`${inputClass} max-w-[200px]`} title={t("settingsModal.selectModelTitle")}>
                   {models.map((m) => <option key={m} value={m}>{m}</option>)}
                 </select>
-                {selectedModel && <span className="text-xs text-neutral-500">Đang dùng: {selectedModel}</span>}
+                {selectedModel && <span className="text-xs text-neutral-500">{t("settingsModal.currentlyUsingPrefix")} {selectedModel}</span>}
               </div>
             ) : (
-              <p className="text-xs text-amber-600 dark:text-amber-400">Chưa lấy được danh sách. Cấu hình URL backend + upstream Ollama (server) + bấm <strong>Kiểm tra Ollama</strong>. Dev không backend: <code className="text-[10px]">VITE_OLLAMA_URL</code>.</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">{t("settingsModal.noModelsListText")}</p>
             )}
           </div>
           </div>
 
           <div className="mt-6 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/25 p-3 sm:p-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-red-800 dark:text-red-300 mb-2 flex items-center gap-2">
-              <RotateCcw className="w-3.5 h-3.5 shrink-0" /> Đặt lại ứng dụng
+              <RotateCcw className="w-3.5 h-3.5 shrink-0" /> {t("settingsModal.resetHeading")}
             </h4>
             <p className="text-[11px] text-red-900/80 dark:text-red-200/90 mb-3">
-              Xóa sạch dữ liệu trên trình duyệt như <strong>lần đầu mở app</strong>: datasets, workflows, biểu đồ báo cáo, URL backend/Ollama/Archive, model AI, góp ý, và dữ liệu pre-reg đồng bộ Writium.
-              Nếu bạn <strong>đã đăng nhập</strong> và đồng bộ server, workspace trên tài khoản cũng có thể được <strong>ghi đè rỗng</strong>.
+              {t("settingsModal.resetWarningPart1")}
+              {" "}{t("settingsModal.resetWarningPart2")}
             </p>
             <button
               type="button"
               onClick={() => onFactoryResetRequest()}
               className="w-full sm:w-auto rounded-lg border-2 border-red-400 dark:border-red-700 bg-white dark:bg-neutral-900 text-red-800 dark:text-red-200 px-4 py-2.5 text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
             >
-              Đặt lại về trạng thái ban đầu…
+              {t("settingsModal.resetButton")}
             </button>
           </div>
         </div>
         </div>
         <div className="p-4 border-t border-neutral-200 dark:border-neutral-700 shrink-0">
-          <button type="button" onClick={onClose} className="rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90">Đóng</button>
+          <button type="button" onClick={onClose} className="rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90">{t("app.close")}</button>
         </div>
       </div>
     </div>
@@ -8786,13 +8815,13 @@ function SettingsModal({
 type GuideHelpTab = "overview" | "ui" | "data" | "analysis" | "sync" | "ai" | "portal";
 
 const GUIDE_HELP_TABS: { id: GuideHelpTab; label: string }[] = [
-  { id: "overview", label: "Tổng quan" },
-  { id: "ui", label: "Giao diện" },
-  { id: "data", label: "Dữ liệu" },
-  { id: "analysis", label: "Phân tích" },
-  { id: "sync", label: "Đồng bộ" },
-  { id: "ai", label: "AI & backend" },
-  { id: "portal", label: "AI Portal" },
+  { id: "overview", label: t("guideModal.tabOverview") },
+  { id: "ui", label: t("guideModal.tabUi") },
+  { id: "data", label: t("guideModal.tabData") },
+  { id: "analysis", label: t("guideModal.tabAnalysis") },
+  { id: "sync", label: t("guideModal.tabSync") },
+  { id: "ai", label: t("guideModal.tabAi") },
+  { id: "portal", label: t("guideModal.tabPortal") },
 ];
 
 function GuideModal({
@@ -8830,27 +8859,27 @@ function GuideModal({
         <div className="flex items-center justify-between p-3 sm:p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0 gap-2">
           <h3 id="quantis-help-title" className="text-base sm:text-lg font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-2 min-w-0">
             <BookOpen className="w-5 h-5 text-brand shrink-0" />
-            <span className="truncate">Hướng dẫn — Quantis</span>
+            <span className="truncate">{t("guideModal.title")}</span>
           </h3>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label="Đóng">
+          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label={t("app.close")}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-2 sm:px-3 py-2 bg-neutral-50/90 dark:bg-neutral-900/50">
           <div className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] snap-x">
-            {GUIDE_HELP_TABS.map((t) => (
+            {GUIDE_HELP_TABS.map((gt) => (
               <button
-                key={t.id}
+                key={gt.id}
                 type="button"
-                onClick={() => setHelpTab(t.id)}
+                onClick={() => setHelpTab(gt.id)}
                 className={`snap-start shrink-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-900 ${
-                  helpTab === t.id
+                  helpTab === gt.id
                     ? "bg-brand text-white"
                     : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80"
                 }`}
               >
-                {t.label}
+                {gt.label}
               </button>
             ))}
           </div>
@@ -8860,30 +8889,30 @@ function GuideModal({
           {helpTab === "overview" && (
             <>
               <p>
-                <strong className="text-neutral-800 dark:text-neutral-200">Quantis</strong> hỗ trợ phân tích định lượng trong nghiên cứu: nhập và làm sạch dữ liệu, thống kê mô tả &amp; suy luận, mô hình (hồi quy, SEM, ML…), trực quan hóa, báo cáo và lưu workflow để tái lập.
+                <strong className="text-neutral-800 dark:text-neutral-200">Quantis</strong> {t("guideModal.overview.introSuffix")}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={onOpenSettings} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 dark:hover:bg-brand/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                   <Server className="w-4 h-4 shrink-0" />
-                  Mở cấu hình kết nối
+                  {t("guideModal.overview.openSettingsButton")}
                 </button>
                 <button type="button" onClick={() => onGoRepro("workflows")} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                   <GitBranch className="w-4 h-4 shrink-0" />
-                  Đến Workflows
+                  {t("guideModal.overview.goWorkflowsButton")}
                 </button>
                 <button type="button" onClick={() => onGoRepro("openscience")} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                   <FileText className="w-4 h-4 shrink-0" />
-                  Pre-reg &amp; tái lập
+                  {t("openScience.title")}
                 </button>
               </div>
               <section className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50/80 dark:bg-neutral-900/40 p-3 text-xs sm:text-sm">
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Luồng gợi ý</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.overview.suggestedFlowHeading")}</p>
                 <ol className="list-decimal pl-4 space-y-1">
-                  <li>Bấm logo <strong>Quantis</strong> để xem <strong>Workflow nghiên cứu</strong> — chọn từng bước hoặc dùng tab trên header.</li>
-                  <li>Panel trái: chọn workflow, <strong>Tải file</strong> (CSV/Excel/SPSS…), chọn dataset.</li>
-                  <li>Tab <strong>Dữ liệu</strong> → Xem / Sơ bộ / Mô tả / Biến đổi.</li>
-                  <li>Tab <strong>Phân tích</strong> → tương quan, kiểm định, độ tin cậy, hồi quy, …</li>
-                  <li>Tab <strong>Trực quan</strong> + <strong>AI hướng dẫn</strong> khi cần gợi ý phương pháp.</li>
+                  <li>{t("guideModal.overview.step1Part1")} <strong>Quantis</strong> {t("guideModal.overview.step1Part2")} <strong>{t("guideModal.overview.step1Strong")}</strong> {t("guideModal.overview.step1Part3")}</li>
+                  <li>{t("guideModal.overview.step2Part1")} <strong>{t("guideModal.overview.step2Strong")}</strong> {t("guideModal.overview.step2Part2")}</li>
+                  <li>{t("guideModal.overview.step3Part1")} <strong>{t("guideModal.tabData")}</strong> {t("guideModal.overview.step3Part2")}</li>
+                  <li>{t("guideModal.overview.step4Part1")} <strong>{t("guideModal.tabAnalysis")}</strong> {t("guideModal.overview.step4Part2")}</li>
+                  <li>{t("guideModal.overview.step5Part1")} <strong>{t("guideModal.overview.step5Strong1")}</strong> {t("guideModal.overview.step5Mid")} <strong>{t("guideModal.overview.step5Strong2")}</strong> {t("guideModal.overview.step5Part2")}</li>
                 </ol>
               </section>
             </>
@@ -8892,28 +8921,27 @@ function GuideModal({
           {helpTab === "ui" && (
             <>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Thanh trên (header)</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.ui.headerHeading")}</p>
                 <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
-                  <li><strong>Logo Quantis</strong> — về màn hình <strong>Workflow nghiên cứu tiêu chuẩn</strong> (các bước từ thu thập dữ liệu đến báo cáo).</li>
+                  <li><strong>{t("guideModal.ui.item1Strong1")}</strong> {t("guideModal.ui.item1Mid")} <strong>{t("workflowView.title")}</strong> {t("guideModal.ui.item1Suffix")}</li>
                   <li>
-                    Các tab: <strong>Khám phá &amp; biến đổi dữ liệu</strong> (rút gọn: <em>Dữ liệu</em>), <strong>Phân tích thống kê</strong>, <strong>Trực quan</strong>, <strong>AI hướng dẫn</strong>.
-                    Trên điện thoại nhãn rút gọn; vuốt ngang nếu cần.
+                    {t("guideModal.ui.item2Prefix")} <strong>{t("guideModal.ui.item2Strong")}</strong> {t("guideModal.ui.item2Suffix")}
                   </li>
-                  <li>Nút sáng/tối; đăng nhập (standalone); menu <strong>⋮</strong> — hướng dẫn này, workflow mẫu, Pre-reg, cấu hình, góp ý.</li>
+                  <li>{t("guideModal.ui.item3")}</li>
                 </ul>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Sidebar trái</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.ui.sidebarHeading")}</p>
                 <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
-                  <li>Dropdown <strong>Workflow</strong> + nút tạo workflow mới.</li>
-                  <li><strong>Bộ dữ liệu (Import)</strong>: Tải file, thêm dataset mẫu / từ kho lưu trữ (nếu cấu hình Archive).</li>
-                  <li>Trên mobile: sidebar trượt; nút ở footer để mở/đóng panel.</li>
+                  <li>{t("guideModal.ui.sidebarItem1Prefix")} {t("guideModal.ui.sidebarItem1Suffix")}</li>
+                  <li><strong>{t("guideModal.ui.sidebarItem2Strong")}</strong>{t("guideModal.ui.sidebarItem2Suffix")}</li>
+                  <li>{t("guideModal.ui.sidebarItem3")}</li>
                 </ul>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Thanh công cụ phụ (dưới header)</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.ui.toolbarHeading")}</p>
                 <p className="text-xs sm:text-sm">
-                  Khi ở tab <strong>Dữ liệu</strong>, <strong>Phân tích</strong> hoặc <strong>Trực quan</strong>, một hàng nút thứ cấp xuất hiện (vd. Xem dữ liệu / Sơ bộ / Mô tả / Biến đổi, hoặc Tương quan / Kiểm định / …). Cuộn ngang nếu không đủ chỗ.
+                  {t("guideModal.ui.toolbarText")}
                 </p>
               </section>
             </>
@@ -8922,27 +8950,26 @@ function GuideModal({
           {helpTab === "data" && (
             <>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Định dạng file</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.data.formatsHeading")}</p>
                 <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
-                  <li><strong>CSV, TSV, JSON, TXT</strong> — đọc trực tiếp trong trình duyệt.</li>
+                  <li><strong>{t("guideModal.data.formatsItem1Strong")}</strong> {t("guideModal.data.formatsItem1Suffix")}</li>
                   <li>
-                    <strong>Excel (.xlsx, .xls), ODS, SPSS (.sav), Stata (.dta), SAS (.sas7bdat), R (.rds, .RData)</strong> — cần <strong>backend Quantis</strong> bật và Python phân tích (parse trên máy chủ).
-                    Khi import, có thể thấy overlay <em>“Đang đọc file trên máy chủ”</em>.
+                    {t("guideModal.data.formatsItem2")}
                   </li>
                 </ul>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Tab Dữ liệu</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.data.tabHeading")}</p>
                 <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
-                  <li><strong>Xem dữ liệu</strong> — bảng, kiểu cột.</li>
-                  <li><strong>Sơ bộ</strong> — missing, outlier IQR, profiling.</li>
-                  <li><strong>Mô tả</strong> — thống kê mô tả, tần số, một số công cụ văn bản / Cohen kappa (qua backend khi bật).</li>
-                  <li><strong>Biến đổi</strong> — xử lý missing, mã hóa, chuẩn hóa.</li>
+                  <li><strong>{t("transformTab.viewDataTabName")}</strong> {t("guideModal.data.tabItem1Suffix")}</li>
+                  <li><strong>{t("guideModal.data.tabItem2Strong")}</strong> {t("guideModal.data.tabItem2Suffix")}</li>
+                  <li><strong>{t("guideModal.data.tabItem3Strong")}</strong> {t("guideModal.data.tabItem3Suffix")}</li>
+                  <li><strong>{t("guideModal.data.tabItem4Strong")}</strong> {t("guideModal.data.tabItem4Suffix")}</li>
                 </ul>
               </section>
               <section className="rounded-lg border border-sky-200/80 dark:border-sky-900/40 bg-sky-50/50 dark:bg-sky-950/20 p-3 text-xs sm:text-sm">
-                <p className="font-semibold text-sky-900 dark:text-sky-200 mb-1">Đồng bộ workspace</p>
-                <p>Khi đăng nhập và backend lưu PostgreSQL, có thể có dải thông báo <em>“Đang tải workspace từ máy chủ…”</em> lúc kéo dữ liệu lần đầu.</p>
+                <p className="font-semibold text-sky-900 dark:text-sky-200 mb-1">{t("guideModal.data.syncHeading")}</p>
+                <p>{t("guideModal.data.syncText")}</p>
               </section>
             </>
           )}
@@ -8950,20 +8977,20 @@ function GuideModal({
           {helpTab === "analysis" && (
             <>
               <p className="text-xs sm:text-sm">
-                Dưới tab <strong>Phân tích thống kê</strong>, chọn một mục trên thanh công cụ:
+                {t("guideModal.analysis.introPrefix")} <strong>{t("guideModal.analysis.introStrong")}</strong>{t("guideModal.analysis.introSuffix")}
               </p>
               <ul className="list-disc pl-4 space-y-1.5 text-xs sm:text-sm">
-                <li><strong>Tương quan</strong> — ma trận Pearson / Spearman / Kendall (một phần qua Python nếu bật backend).</li>
-                <li><strong>Kiểm định</strong> — t-test, ANOVA, Chi-square, Mann-Whitney, Wilcoxon, Friedman, Levene, Shapiro-Wilk, cỡ mẫu / công suất, …</li>
-                <li><strong>Độ tin cậy</strong> — Cronbach alpha và liên quan.</li>
-                <li><strong>Hồi quy</strong> — OLS, logistic, Ridge, …</li>
-                <li><strong>Nhân tố</strong> — EFA (PCA, varimax).</li>
-                <li><strong>SEM</strong> — mediation, moderation.</li>
-                <li><strong>Học máy</strong> — K-means, phân loại đa lớp, permutation importance, …</li>
-                <li><strong>Bayesian</strong> — ước lượng posterior đơn giản.</li>
+                <li><strong>{t("app.analysisTab.correlation")}</strong> {t("guideModal.analysis.item1Suffix")}</li>
+                <li><strong>{t("app.analysisTab.hypothesis")}</strong> {t("guideModal.analysis.item2Suffix")}</li>
+                <li><strong>{t("app.analysisTab.reliability")}</strong> {t("guideModal.analysis.item3Suffix")}</li>
+                <li><strong>{t("regressionExplainer.title")}</strong> {t("guideModal.analysis.item4Suffix")}</li>
+                <li><strong>{t("guideModal.analysis.item5Strong")}</strong> {t("guideModal.analysis.item5Suffix")}</li>
+                <li><strong>{t("analysisView.tabSemTitle")}</strong> {t("guideModal.analysis.item6Suffix")}</li>
+                <li><strong>{t("analysisView.tabMlTitle")}</strong> {t("guideModal.analysis.item7Suffix")}</li>
+                <li><strong>{t("analysisView.tabBayesianTitle")}</strong> {t("guideModal.analysis.item8Suffix")}</li>
               </ul>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Nhiều nút hiển thị <em>Đang xử lý…</em> khi tính toán lâu — không đóng tab giữa chừng.
+                {t("guideModal.analysis.processingNote")}
               </p>
             </>
           )}
@@ -8971,33 +8998,33 @@ function GuideModal({
           {helpTab === "sync" && (
             <>
               <section className="rounded-lg border border-brand/20 bg-brand/5 dark:bg-brand/10 p-3 text-xs sm:text-sm">
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">Đăng nhập như SurveyLab?</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-1">{t("guideModal.sync.loginHeading")}</p>
                 <p>
-                  Quantis <strong>có</strong> đăng ký/đăng nhập session + quản lý tài khoản khi dùng <strong>backend PostgreSQL</strong> (<code className="text-[0.65rem] bg-white/60 dark:bg-neutral-800 px-1 rounded">backend/</code>, <code className="text-[0.65rem] bg-white/60 dark:bg-neutral-800 px-1 rounded">npm run build && npm start</code>) và frontend trỏ đúng API (<code className="text-[0.65rem] bg-white/60 dark:bg-neutral-800 px-1 rounded">VITE_QUANTIS_API_URL</code>). Chỉ chạy frontend → không bắt đăng nhập. Trên <strong>AI Portal</strong> → dùng tài khoản Portal, không form Quantis. Xem khối <strong>Tài khoản &amp; đăng nhập</strong> trong menu ⋮ → Cấu hình kết nối.
+                  {t("guideModal.sync.loginText")}
                 </p>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Chế độ chỉ trình duyệt</p>
-                <p className="text-xs sm:text-sm">Dữ liệu và workflow có thể lưu trong <strong>localStorage</strong> của trình duyệt (giới hạn dung lượng). Đổi máy / xóa dữ liệu trình duyệt sẽ mất bản cục bộ.</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.sync.browserOnlyHeading")}</p>
+                <p className="text-xs sm:text-sm">{t("guideModal.sync.browserOnlyText")}</p>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Standalone + PostgreSQL</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.sync.standaloneHeading")}</p>
                 <p className="text-xs sm:text-sm">
-                  Khi bật <strong>backend PostgreSQL</strong> và đăng nhập Quantis, workspace (datasets + workflows) đồng bộ lên server theo tài khoản. Offline có thể chỉnh sửa cục bộ; khi có mạng lại, ứng dụng ghi lên server (có debounce).
+                  {t("guideModal.sync.standaloneText")}
                 </p>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">AI Portal (nhúng)</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.sync.portalEmbedHeading")}</p>
                 <p className="text-xs sm:text-sm">
-                  Không cần form đăng nhập Quantis: phiên lấy từ Portal; API có thể nhận header <strong>X-User-Id</strong>. Chi tiết kỹ thuật: tài liệu <code className="text-xs bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">docs/QUANTIS-DATABASE.md</code>.
+                  {t("guideModal.sync.portalEmbedText")}
                 </p>
               </section>
               <button type="button" onClick={onOpenSettings} className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
                 <Settings className="w-4 h-4 shrink-0" />
-                Cấu hình &amp; đặt lại ứng dụng
+                {t("guideModal.sync.resetButton")}
               </button>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Trong <strong>Cấu hình kết nối</strong> có mục <strong>Đặt lại ứng dụng</strong> (xóa local và tùy chọn ghi rỗng server) — cần xác nhận.
+                {t("guideModal.sync.resetNote")}
               </p>
             </>
           )}
@@ -9005,24 +9032,24 @@ function GuideModal({
           {helpTab === "ai" && (
             <>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Tab AI hướng dẫn</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.ai.tabHeading")}</p>
                 <p className="text-xs sm:text-sm">
-                  Gợi ý phương pháp, diễn giải bước workflow hoặc kết quả — cần backend proxy tới <strong>Ollama</strong> (hoặc tương thích OpenAI) đã cấu hình. Chọn model trong cài đặt nếu có.
+                  {t("guideModal.ai.tabText")}
                 </p>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Phân tích số (Python)</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.ai.pythonHeading")}</p>
                 <p className="text-xs sm:text-sm">
-                  Tương quan ma trận lớn, một số kiểm định / mô hình nặng dùng service Python (<code className="text-xs bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">ANALYZE_PYTHON_URL</code> / proxy qua backend). Dùng <strong>Cấu hình kết nối</strong> để kiểm tra trạng thái.
+                  {t("guideModal.ai.pythonText")}
                 </p>
               </section>
               <section className="rounded-lg border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/20 p-3 text-xs sm:text-sm">
-                <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1">Lỗi timeout / chậm</p>
-                <p>Thử model nhỏ hơn, rút ngắn prompt, hoặc nhờ quản trị Portal tăng timeout proxy. Giảm kích thước bảng dữ liệu trước khi chạy phân tích nặng.</p>
+                <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1">{t("guideModal.ai.timeoutHeading")}</p>
+                <p>{t("guideModal.ai.timeoutText")}</p>
               </section>
               <button type="button" onClick={onOpenSettings} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                 <Server className="w-4 h-4 shrink-0" />
-                Kiểm tra Backend &amp; Ollama
+                {t("guideModal.ai.checkBackendButton")}
               </button>
             </>
           )}
@@ -9030,16 +9057,16 @@ function GuideModal({
           {helpTab === "portal" && (
             <>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Nhúng trong AI Portal</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.portal.embedHeading")}</p>
                 <ul className="list-disc pl-4 space-y-1 text-xs sm:text-sm">
-                  <li>Ứng dụng nhận biết embed qua <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">__PORTAL_USER__</code>, <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">__WRITE_API_BASE__</code>, <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">embed-config.json</code>, URL <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">/embed/quantis</code>, v.v.</li>
-                  <li>Schema PostgreSQL riêng <strong>quantis</strong> — không ghi đè dữ liệu schema Portal.</li>
-                  <li>So sánh triển khai với SurveyLab: <code className="text-[0.7rem] bg-neutral-200/60 dark:bg-neutral-700/60 px-1 rounded">docs/QUANTIS-PORTAL-AND-SURVEYLAB.md</code>.</li>
+                  <li>{t("guideModal.portal.embedItem1")}</li>
+                  <li>{t("guideModal.portal.embedItem2")}</li>
+                  <li>{t("guideModal.portal.embedItem3")}</li>
                 </ul>
               </section>
               <section>
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">Quyền riêng tư</p>
-                <p className="text-xs sm:text-sm">Dữ liệu phân tích và workspace thuộc ngữ cảnh bạn đăng nhập (Portal hoặc Quantis). Không chia sẻ mật khẩu API trong ảnh chụp màn hình khi góp ý.</p>
+                <p className="font-semibold text-neutral-800 dark:text-neutral-200 mb-2">{t("guideModal.portal.privacyHeading")}</p>
+                <p className="text-xs sm:text-sm">{t("guideModal.portal.privacyText")}</p>
               </section>
             </>
           )}
@@ -9047,10 +9074,10 @@ function GuideModal({
 
         <div className="p-3 sm:p-4 border-t border-neutral-200 dark:border-neutral-700 shrink-0 flex flex-wrap items-center justify-between gap-2 bg-neutral-50/50 dark:bg-neutral-900/30">
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Phím <kbd className="px-1 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-[0.65rem] font-mono">Esc</kbd> để đóng
+            {t("guideModal.escPrefix")} <kbd className="px-1 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-[0.65rem] font-mono">Esc</kbd> {t("guideModal.escSuffix")}
           </p>
           <button type="button" onClick={onClose} className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
-            Đóng
+            {t("app.close")}
           </button>
         </div>
       </div>
