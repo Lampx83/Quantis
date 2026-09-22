@@ -3,7 +3,7 @@
  */
 
 import type { Dataset, Workflow, WorkflowStep } from "./types";
-import { generateId } from "./store";
+import { generateId } from "./utils/helpers";
 import { SAMPLE_DATASETS, type SampleDatasetDef } from "./sampleDatasets";
 import { t } from "./i18n";
 

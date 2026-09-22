@@ -5,7 +5,7 @@
  */
 import type { Dataset, Workflow } from "./types";
 import type { MediationResult } from "./utils/stats";
-import { loadBackendApiUrl } from "./store";
+import { loadBackendApiUrl, type ServerSettings } from "./utils/storage";
 import { t } from "./i18n";
 
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). Mặc định research.neu.edu.vn */
@@ -206,7 +206,7 @@ export function getDefaultBackendPythonUrl(): string {
 }
 
 /** Lấy cấu hình dùng chung từ server (áp dụng cho mọi tài khoản). */
-export async function getQuantisSettings(baseUrl?: string): Promise<import("./store").ServerSettings> {
+export async function getQuantisSettings(baseUrl?: string): Promise<ServerSettings> {
   const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
   if (!base) return {};
   try {
@@ -227,7 +227,7 @@ export async function getQuantisSettings(baseUrl?: string): Promise<import("./st
 }
 
 /** Lưu cấu hình dùng chung lên server (áp dụng cho mọi tài khoản). */
-export async function putQuantisSettings(settings: import("./store").ServerSettings, baseUrl?: string): Promise<boolean> {
+export async function putQuantisSettings(settings: ServerSettings, baseUrl?: string): Promise<boolean> {
   const base = (baseUrl != null && String(baseUrl).trim() !== "") ? String(baseUrl).trim().replace(/\/+$/, "") : getBase();
   if (!base) return false;
   try {

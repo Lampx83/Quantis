@@ -65,29 +65,169 @@ import {
 } from "lucide-react";
 import { getPortalTheme, applyPortalTheme } from "./portal-theme";
 import { QUANTIS_EMBED_CONFIG_EVENT } from "./embed-config";
-import { loadDatasets, saveDatasets, loadWorkflows, saveWorkflows, generateId, loadSelectedDatasetId, saveSelectedDatasetId, clearWorkspaceLocalData, clearQuantisLocalAppData, loadAiModel, saveAiModel, loadBackendApiUrl, saveBackendApiUrl, loadArchiveUrl, saveArchiveUrl, loadArchiveFileUrl, saveArchiveFileUrl, loadOllamaUpstreamFromServer, saveAiFeedback, saveAppFeedback, setServerSettings, getServerSettings } from "./store";
+import { generateId } from "@/utils/helpers";
+import {
+  clearWorkspaceLocalData,
+  clearQuantisLocalAppData,
+  loadAiModel,
+  saveAiModel,
+  loadBackendApiUrl,
+  saveBackendApiUrl,
+  loadArchiveUrl,
+  saveArchiveUrl,
+  loadArchiveFileUrl,
+  saveArchiveFileUrl,
+  loadOllamaUpstreamFromServer,
+  saveAiFeedback,
+  saveAppFeedback,
+  setServerSettings,
+  getServerSettings,
+} from "@/utils/storage";
+import {
+  useDataStore,
+  useWorkflowStore,
+  useUIStore,
+  useAnalysisStore,
+  useSyncStore,
+  type MainSection,
+  type DataTab,
+  type AnalysisTab,
+  type ReproducibilityTab,
+  type PresentationTab,
+  type PresentationChartType,
+} from "@/stores";
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import * as quantisApi from "./api";
 import type { AuthConfig, AuthUser } from "./api";
 import { QuantAuthGate, QuantLoginModal } from "./auth-ui";
 import { AI_MAX_PROMPT_CHARS } from "./api";
 import { AiMarkdown } from "./ai-markdown";
-import { parseCSV, parseFileContent, getFormatFromFilename, isTextFormat, isBackendParseFormat, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, kernelDensityEstimate, binNumericForPie, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
+import {
+  parseCSV,
+  parseFileContent,
+  getFormatFromFilename,
+  isTextFormat,
+  isBackendParseFormat,
+  computeProfile,
+  computeProfileWithOutliers,
+  computeDescriptive,
+  getDataRows,
+  getUniqueValues,
+  getColumnMode,
+  computeTTest,
+  computeChiSquare,
+  computeMcNemar,
+  computeCorrelationMatrix,
+  computePartialCorrelation,
+  computeOneWayANOVA,
+  computeKruskalWallis,
+  computeCronbachAlpha,
+  computeTextStats,
+  computeOutlierIqr,
+  computeKeywordCounts,
+  computeNgramFreq,
+  computeCohensKappa,
+  getBoxStatsByGroup,
+  getHistogramBins,
+  kernelDensityEstimate,
+  binNumericForPie,
+  MAX_ROWS_STORED,
+  computeMannWhitneyU,
+  computePairedTTest,
+  computeWilcoxonSignedRank,
+  computeFriedmanTest,
+  computeLeveneTest,
+  computeOLS,
+  computeBetaPosterior,
+  computeKMeans,
+  getCrosstab,
+  pairwisePostHoc,
+  computeLogisticRegression,
+  computeVIF,
+  computeEFA,
+  computeMediation,
+  computeModeration,
+  computeShapiroWilk,
+  computePowerTTest,
+  computeSampleSizeProportion,
+  computeSampleSizeChiSquare,
+  computeSampleSizeAnova,
+  computeSampleSizeRegression,
+  computeMulticlassLogisticOneVsRest,
+  computeFeatureImportanceFromMulticlass,
+  computePermutationImportanceMulticlass,
+  computeBootstrapMeanCI,
+  computeFisherExact,
+  computeOneSampleTTest,
+  computeBinomialTest,
+  computeTwoProportionZTest,
+  computeCorrelationCI,
+  computeSignTest,
+  computeOddsRatio,
+} from "./utils/stats";
 import * as archiveApi from "./archive-api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "./archive-api";
 import { SAMPLE_DATASETS } from "./sampleDatasets";
 import { getSampleWorkflowStandalone, getDefaultStandardWorkflow, getDemoWorkflowTemplates } from "./sample-data";
 import { OpenScienceProtocolPanel } from "./OpenScienceProtocolPanel";
-import type { DescriptiveRow, TTestResult, ChiSquareResult, ANOVAResult, BoxGroupStats, MannWhitneyResult, OLSResult, BetaPosteriorResult, KMeansResult, LogisticResult, EFAResult, MediationResult, ShapiroWilkResult, MulticlassLogisticResult, SampleSizeProportionResult, SampleSizeChiSquareResult, SampleSizeAnovaResult, SampleSizeRegressionResult, PairedTTestResult, WilcoxonSignedRankResult, FriedmanResult, LeveneResult, McNemarResult, FisherExactResult, OneSampleTTestResult, BinomialTestResult, TwoProportionZTestResult, SignTestResult } from "./utils/stats";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, CartesianGrid, PieChart, Pie, LineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend, ComposedChart, ReferenceArea, ReferenceLine } from "recharts";
+import type {
+  DescriptiveRow,
+  TTestResult,
+  ChiSquareResult,
+  ANOVAResult,
+  BoxGroupStats,
+  MannWhitneyResult,
+  OLSResult,
+  BetaPosteriorResult,
+  KMeansResult,
+  LogisticResult,
+  EFAResult,
+  MediationResult,
+  ShapiroWilkResult,
+  MulticlassLogisticResult,
+  SampleSizeProportionResult,
+  SampleSizeChiSquareResult,
+  SampleSizeAnovaResult,
+  SampleSizeRegressionResult,
+  PairedTTestResult,
+  WilcoxonSignedRankResult,
+  FriedmanResult,
+  LeveneResult,
+  McNemarResult,
+  FisherExactResult,
+  OneSampleTTestResult,
+  BinomialTestResult,
+  TwoProportionZTestResult,
+  SignTestResult,
+} from "./utils/stats";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  ScatterChart,
+  Scatter,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Legend,
+  ComposedChart,
+  ReferenceArea,
+  ReferenceLine,
+} from "recharts";
 import { t, aiAnswerLangHint, tAllLocales } from "./i18n";
-
-type DataTab = "import" | "profiling" | "transform" | "preview" | "descriptive";
-type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian";
-type ReproducibilityTab = "workflows" | "versioning" | "openscience";
-type PresentationTab = "visualization";
-
-type MainSection = "data" | "analysis" | "reproducibility" | "presentation" | "ai" | "workflow";
 
 const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
 
@@ -104,87 +244,146 @@ const WORKFLOW_STEPS = [
 ];
 
 export default function App() {
-  const [datasets, setDatasets] = useState<Dataset[]>(loadDatasets);
-  const [workflows, setWorkflows] = useState<Workflow[]>(() => {
-    const loaded = loadWorkflows();
-    return loaded.length > 0 ? loaded : [];
-  });
-  const [mainSection, setMainSection] = useState<MainSection>("data");
-  const [dataTab, setDataTab] = useState<DataTab>("preview");
-  const [analysisTab, setAnalysisTab] = useState<AnalysisTab>("correlation");
-  const [reproTab, setReproTab] = useState<ReproducibilityTab>("workflows");
-  const [presentationTab, setPresentationTab] = useState<PresentationTab>("visualization");
-  type PresentationChartType = "scatter" | "bar" | "line" | "pie" | "box" | "histogram" | "area" | "stackedBar" | "radar" | "heatmap" | "summary" | "donut" | "barH" | "dashboard" | "multiLine" | "crosstab" | "density";
-  const [presentationChartType, setPresentationChartType] = useState<PresentationChartType>("bar");
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(() => loadSelectedDatasetId());
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
-  const [selectedWorkflowStepId, setSelectedWorkflowStepId] = useState<string | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showAppFeedbackModal, setShowAppFeedbackModal] = useState(false);
-  /** Desktop: sidebar trong layout; mobile (max-md): sidebar trượt + overlay — mặc định đóng để main rộng. */
-  const [isMobileLayout, setIsMobileLayout] = useState(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches,
-  );
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
-    typeof window === "undefined" || !window.matchMedia("(max-width: 767px)").matches,
-  );
-  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
-  const [useBackend, setUseBackend] = useState(false);
-  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginModalInitialTab, setLoginModalInitialTab] = useState<"login" | "register">("login");
-  const [showAccountDialog, setShowAccountDialog] = useState(false);
-  const [analysisBackendAvailable, setAnalysisBackendAvailable] = useState(false);
-  const [descriptiveBackendResult, setDescriptiveBackendResult] = useState<DescriptiveRow[] | null>(null);
-  const [correlationBackendResult, setCorrelationBackendResult] = useState<{ matrix: number[][]; columnNames: string[] } | null>(null);
-  const [correlationLoading, setCorrelationLoading] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [lastHypothesisResult, setLastHypothesisResult] = useState<{ type: "ttest" | "chisquare" | "anova" | "mannwhitney"; payload: TTestResult | ChiSquareResult | ANOVAResult | MannWhitneyResult; meta?: { groupCol?: string; groupVal1?: string; groupVal2?: string; numCol?: string; chiCol1?: string; chiCol2?: string; factorCol?: string; valueCol?: string } } | null>(null);
-  const [correlationMethod, setCorrelationMethod] = useState<"pearson" | "spearman" | "kendall">("pearson");
-  const [theme, setTheme] = useState<"light" | "dark">(() => getPortalTheme());
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const { datasets, setDatasets, selectedDatasetId, setSelectedDatasetId } = useDataStore();
+  const {
+    workflows,
+    setWorkflows,
+    selectedWorkflowId,
+    setSelectedWorkflowId,
+    selectedWorkflowStepId,
+    setSelectedWorkflowStepId,
+    newWorkflowStepType,
+    setNewWorkflowStepType,
+    newWorkflowStepLabel,
+    setNewWorkflowStepLabel,
+    editingWorkflowNameId,
+    setEditingWorkflowNameId,
+    editingWorkflowName,
+    setEditingWorkflowName,
+    editingWorkflowDescriptionId,
+    setEditingWorkflowDescriptionId,
+    editingWorkflowDescription,
+    setEditingWorkflowDescription,
+    editingStepId,
+    setEditingStepId,
+    editingStepLabel,
+    setEditingStepLabel,
+    editingStepType,
+    setEditingStepType,
+    editingStepNote,
+    setEditingStepNote,
+    stepMenuOpenId,
+    setStepMenuOpenId,
+    draggingStepId,
+    setDraggingStepId,
+    dropTargetIndex,
+    setDropTargetIndex,
+  } = useWorkflowStore();
+  const {
+    mainSection,
+    setMainSection,
+    dataTab,
+    setDataTab,
+    analysisTab,
+    setAnalysisTab,
+    reproTab,
+    setReproTab,
+    presentationTab,
+    setPresentationTab,
+    presentationChartType,
+    setPresentationChartType,
+    guideOpen,
+    setGuideOpen,
+    showSettings,
+    setShowSettings,
+    showAppFeedbackModal,
+    setShowAppFeedbackModal,
+    isMobileLayout,
+    setIsMobileLayout,
+    sidebarOpen,
+    setSidebarOpen,
+    confirmDialog,
+    setConfirmDialog,
+    toast,
+    setToast,
+    showToast,
+    theme,
+    setTheme,
+    toggleTheme,
+    headerMenuOpen,
+    setHeaderMenuOpen,
+    showDemoGallery,
+    setShowDemoGallery,
+    showSampleModal,
+    setShowSampleModal,
+    sampleDatasetSearch,
+    setSampleDatasetSearch,
+    showLoginModal,
+    setShowLoginModal,
+    loginModalInitialTab,
+    setLoginModalInitialTab,
+    showAccountDialog,
+    setShowAccountDialog,
+    archiveModalOpen,
+    setArchiveModalOpen,
+  } = useUIStore();
+  const {
+    correlationMethod,
+    setCorrelationMethod,
+    correlationBackendResult,
+    setCorrelationBackendResult,
+    correlationLoading,
+    setCorrelationLoading,
+    lastHypothesisResult,
+    setLastHypothesisResult,
+    descriptiveBackendResult,
+    setDescriptiveBackendResult,
+  } = useAnalysisStore();
+  const {
+    useBackend,
+    setUseBackend,
+    authConfig,
+    setAuthConfig,
+    authUser,
+    setAuthUser,
+    authLoading,
+    setAuthLoading,
+    analysisBackendAvailable,
+    setAnalysisBackendAvailable,
+    isOnline,
+    setIsOnline,
+    embedConfigGeneration,
+    setEmbedConfigGeneration,
+    workspacePullLoading,
+    setWorkspacePullLoading,
+    sidebarImportBusy,
+    setSidebarImportBusy,
+    archiveSearchResult,
+    setArchiveSearchResult,
+    archiveSearchLoading,
+    setArchiveSearchLoading,
+    archiveSearchError,
+    setArchiveSearchError,
+    archivePage,
+    setArchivePage,
+    selectedArchiveRequestId,
+    setSelectedArchiveRequestId,
+    selectedArchiveTitle,
+    setSelectedArchiveTitle,
+    archiveFiles,
+    setArchiveFiles,
+    archiveFilesLoading,
+    setArchiveFilesLoading,
+    archiveDownloadingFileId,
+    setArchiveDownloadingFileId,
+  } = useSyncStore();
+
   const headerMenuRef = useRef<HTMLDivElement>(null);
-  const [newWorkflowStepType, setNewWorkflowStepType] = useState<WorkflowStep["type"]>("import");
-  const [newWorkflowStepLabel, setNewWorkflowStepLabel] = useState("");
-  const [editingWorkflowNameId, setEditingWorkflowNameId] = useState<string | null>(null);
-  const [editingWorkflowName, setEditingWorkflowName] = useState("");
-  const [editingWorkflowDescriptionId, setEditingWorkflowDescriptionId] = useState<string | null>(null);
-  const [editingWorkflowDescription, setEditingWorkflowDescription] = useState("");
-  const [editingStepId, setEditingStepId] = useState<string | null>(null);
-  const [editingStepLabel, setEditingStepLabel] = useState("");
-  const [editingStepType, setEditingStepType] = useState<WorkflowStep["type"]>("import");
-  const [editingStepNote, setEditingStepNote] = useState("");
-  const [stepMenuOpenId, setStepMenuOpenId] = useState<string | null>(null);
-  const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
-  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
-  const [showDemoGallery, setShowDemoGallery] = useState(false);
-  const [showSampleModal, setShowSampleModal] = useState(false);
-  const [sampleDatasetSearch, setSampleDatasetSearch] = useState("");
-  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
-  const [archiveSearchResult, setArchiveSearchResult] = useState<ArchiveSearchItem[]>([]);
-  const [archiveSearchLoading, setArchiveSearchLoading] = useState(false);
-  const [archiveSearchError, setArchiveSearchError] = useState<string | null>(null);
-  const [archivePage, setArchivePage] = useState(1);
-  const [selectedArchiveRequestId, setSelectedArchiveRequestId] = useState<string | null>(null);
-  const [selectedArchiveTitle, setSelectedArchiveTitle] = useState("");
-  const [archiveFiles, setArchiveFiles] = useState<ArchiveFileItem[]>([]);
-  const [archiveFilesLoading, setArchiveFilesLoading] = useState(false);
-  const [archiveDownloadingFileId, setArchiveDownloadingFileId] = useState<string | null>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const hasReadUrlRef = useRef(false);
-  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : true));
   /** Đã kéo workspace từ server ít nhất một lần trong phiên canSync hiện tại (tránh GET lại khi vừa mất mạng rồi có — giữ chỉnh sửa offline). */
   const didPullServerWorkspaceRef = useRef(false);
   const prevCanSyncRef = useRef(false);
-  /** Tăng khi embed-config.json load — nhận diện Portal / basePath muộn sau mount. */
-  const [embedConfigGeneration, setEmbedConfigGeneration] = useState(0);
-  /** Đang GET workspace từ server (tác vụ có thể lâu trên Portal). */
-  const [workspacePullLoading, setWorkspacePullLoading] = useState(false);
-  /** Import Excel/SPSS/… qua backend — hiện overlay để không tưởng app treo. */
-  const [sidebarImportBusy, setSidebarImportBusy] = useState(false);
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
@@ -402,12 +601,10 @@ export default function App() {
   }, [workflows, selectedWorkflowId]);
   /* Khi chọn workflow: không tự chọn bước đầu; hiển thị trang thông tin workflow. User bấm "Bắt đầu" mới vào bước đầu. */
   useEffect(() => {
-    saveSelectedDatasetId(selectedDatasetId);
-  }, [selectedDatasetId]);
-  useEffect(() => {
-    const id = loadSelectedDatasetId();
-    if (id && !datasets.some((d) => d.id === id)) setSelectedDatasetId(null);
-  }, [datasets]);
+    if (selectedDatasetId && !datasets.some((d) => d.id === selectedDatasetId)) {
+      setSelectedDatasetId(null);
+    }
+  }, [datasets, selectedDatasetId, setSelectedDatasetId]);
 
   // Đọc trạng thái từ URL khi mount (F5 / mở link)
   useEffect(() => {
@@ -420,8 +617,8 @@ export default function App() {
     const at = params.get("at") as AnalysisTab | null;
     const rt = params.get("rt") as ReproducibilityTab | null;
     const pt = params.get("pt") as PresentationTab | null;
-    const workflowsList = loadWorkflows();
-    const datasetsList = loadDatasets();
+    const workflowsList = useWorkflowStore.getState().workflows;
+    const datasetsList = useDataStore.getState().datasets;
     if (w && workflowsList.some((wf) => wf.id === w)) setSelectedWorkflowId(w);
     if (d && datasetsList.some((ds) => ds.id === d)) setSelectedDatasetId(d);
     const selWorkflow = w ? workflowsList.find((wf) => wf.id === w) : null;
@@ -523,17 +720,7 @@ export default function App() {
     [useBackend, authConfig?.authEnabled, authUser]
   );
 
-  /** Chỉ ghi localStorage khi không đồng bộ server được HOẶC đang offline — khi online + canSync, bản chính là database qua backend. */
-  const persistWorkspaceLocally = !canSyncToServer || !isOnline;
 
-  useEffect(() => {
-    if (!persistWorkspaceLocally) return;
-    saveDatasets(datasets);
-  }, [datasets, persistWorkspaceLocally]);
-  useEffect(() => {
-    if (!persistWorkspaceLocally) return;
-    saveWorkflows(workflows);
-  }, [workflows, persistWorkspaceLocally]);
 
   // Auth: cấu hình + phiên khi có backend; Portal embed: __PORTAL_USER__ hoặc postMessage
   useEffect(() => {
@@ -655,15 +842,31 @@ export default function App() {
     };
   }, [canSyncToServer, isOnline]);
 
-  /** Ghi lên server khi online; offline chỉ giữ trong RAM + localStorage (persistWorkspaceLocally). */
+  /** Ghi lên server khi online qua store subscriptions */
   useEffect(() => {
-    if (!canSyncToServer || !isOnline) return;
-    const t = setTimeout(async () => {
-      const ok = await quantisApi.saveData({ datasets, workflows });
-      if (!ok) setUseBackend(false);
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [canSyncToServer, isOnline, datasets, workflows]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const triggerSync = () => {
+      const { isOnline: online, useBackend: backend, authConfig: ac, authUser: au } = useSyncStore.getState();
+      const canSync = backend && (!ac?.authEnabled || !!au);
+      if (!canSync || !online) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const d = useDataStore.getState().datasets;
+        const w = useWorkflowStore.getState().workflows;
+        const ok = await quantisApi.saveData({ datasets: d, workflows: w });
+        if (!ok) useSyncStore.getState().setUseBackend(false);
+      }, 1500);
+    };
+
+    const unsubData = useDataStore.subscribe(triggerSync);
+    const unsubWorkflow = useWorkflowStore.subscribe(triggerSync);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubData();
+      unsubWorkflow();
+    };
+  }, []);
 
   // Tải cấu hình dùng chung từ server (áp dụng cho mọi tài khoản)
   useEffect(() => {
@@ -696,17 +899,6 @@ export default function App() {
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [headerMenuOpen]);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2000);
-  };
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    applyPortalTheme(next);
-  };
 
   /** Mở xác nhận đặt lại toàn bộ (từ Cài đặt): local + cố gắng ghi rỗng lên server nếu đang đồng bộ. */
   const handleRequestFactoryReset = () => {
@@ -1079,8 +1271,8 @@ export default function App() {
                     await quantisApi.authLogout();
                     setAuthUser(null);
                     setShowAccountDialog(false);
-                    setDatasets(loadDatasets());
-                    setWorkflows(loadWorkflows());
+                    void useDataStore.persist.rehydrate();
+                    void useWorkflowStore.persist.rehydrate();
                     showToast(t("app.toastLoggedOut"));
                   }}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
