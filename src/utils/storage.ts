@@ -71,8 +71,6 @@ export function clearWorkspaceLocalData(): void {
   try {
     localStorage.removeItem(getKey("datasets"));
     localStorage.removeItem(getKey("workflows"));
-    localStorage.removeItem("quantis_data");
-    localStorage.removeItem("quantis_workflows_data");
   } catch {
     /* ignore */
   }

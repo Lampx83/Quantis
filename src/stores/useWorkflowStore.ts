@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workflow, WorkflowStep } from "@/types";
+import { useSyncStore } from "./useSyncStore";
 
 export interface WorkflowState {
   // --- Persisted State ---
@@ -165,19 +166,15 @@ export const useWorkflowStore = create<WorkflowState>()(
         } as WorkflowState),
       storage: {
         getItem: (name) => {
-          const newData = localStorage.getItem(name);
-          if (newData) {
-            try {
+          try {
+            const newData = localStorage.getItem(name);
+            if (newData) {
               return JSON.parse(newData);
-            } catch {
-              return null;
             }
-          }
 
-          // Fallback: migration từ key cũ quantis_workflows
-          const oldWorkflows = localStorage.getItem("quantis_workflows");
-          if (oldWorkflows) {
-            try {
+            // Fallback: migration từ key cũ quantis_workflows
+            const oldWorkflows = localStorage.getItem("quantis_workflows");
+            if (oldWorkflows) {
               const parsed = JSON.parse(oldWorkflows);
               const workflows = Array.isArray(parsed) ? parsed : (parsed.state?.workflows ?? []);
               const migrated = {
@@ -187,17 +184,43 @@ export const useWorkflowStore = create<WorkflowState>()(
                 },
                 version: 0,
               };
-              localStorage.setItem(name, JSON.stringify(migrated));
-              localStorage.removeItem("quantis_workflows");
+              try {
+                localStorage.setItem(name, JSON.stringify(migrated));
+                localStorage.removeItem("quantis_workflows");
+              } catch {}
               return migrated;
-            } catch {
-              return null;
             }
+          } catch {
+            return null;
           }
           return null;
         },
-        setItem: (name, value) => localStorage.setItem(name, JSON.stringify(value)),
-        removeItem: (name) => localStorage.removeItem(name),
+        setItem: (name, value) => {
+          try {
+            const syncState = useSyncStore.getState();
+            const canSyncToServer = syncState.useBackend && (!syncState.authConfig?.authEnabled || !!syncState.authUser);
+            const persistWorkspaceLocally = !canSyncToServer || !syncState.isOnline;
+            if (!persistWorkspaceLocally) {
+              const lightweightValue = {
+                ...value,
+                state: {
+                  ...value.state,
+                  workflows: [],
+                },
+              };
+              localStorage.setItem(name, JSON.stringify(lightweightValue));
+              return;
+            }
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch {
+            /* ignore QuotaExceededError giống bản cũ */
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name);
+          } catch {}
+        },
       },
     }
   )
