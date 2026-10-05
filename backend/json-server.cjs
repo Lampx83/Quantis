@@ -40,6 +40,34 @@ const ADMIN_EMAILS = new Set(
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
 );
+/**
+ * Container này (json-server.cjs) chạy tách biệt trên .232, không đi qua middleware của aiportal-backend
+ * nên không tự có X-User-Is-Admin đáng tin cậy. Xác thực admin bằng cách hỏi lại chính aiportal-backend
+ * (địa chỉ nội bộ, cùng mạng riêng) kèm cookie phiên gốc của trình duyệt — endpoint đó đã tự giải mã JWT
+ * phiên Portal server-side (xem AI-Portal backend/src/lib/mounted-apps.ts + Quantis backend/src/createApiRouter.ts).
+ */
+const PORTAL_ADMIN_STATUS_URL =
+  process.env.PORTAL_ADMIN_STATUS_URL || "http://10.2.13.54:3001/api/quantis/auth/admin-status";
+
+async function isAdminViaPortal(req) {
+  const cookie = req.headers.cookie;
+  if (!cookie) return false;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 4000);
+    const resp = await fetch(PORTAL_ADMIN_STATUS_URL, {
+      headers: { cookie },
+      signal: controller.signal,
+    });
+    clearTimeout(t);
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return Boolean(data?.isAdmin);
+  } catch (e) {
+    console.error("isAdminViaPortal:", e.message);
+    return false;
+  }
+}
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -488,8 +516,12 @@ function handleGetSettings(req, res) {
   }
 }
 
-function handlePutSettings(req, res) {
+async function handlePutSettings(req, res) {
   try {
+    if (!(await isAdminViaPortal(req))) {
+      res.status(403).json({ error: "Chỉ quản trị viên mới có quyền thay đổi cấu hình dùng chung." });
+      return;
+    }
     const body = req.body || {};
     const current = readSettings();
     const settings = {

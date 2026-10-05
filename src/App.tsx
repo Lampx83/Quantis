@@ -75,7 +75,7 @@ import { AiMarkdown } from "./ai-markdown";
 import { parseCSV, parseFileContent, getFormatFromFilename, isTextFormat, isBackendParseFormat, computeProfile, computeProfileWithOutliers, computeDescriptive, getDataRows, getUniqueValues, getColumnMode, computeTTest, computeChiSquare, computeMcNemar, computeCorrelationMatrix, computePartialCorrelation, computeOneWayANOVA, computeKruskalWallis, computeCronbachAlpha, computeTextStats, computeOutlierIqr, computeKeywordCounts, computeNgramFreq, computeCohensKappa, getBoxStatsByGroup, getHistogramBins, kernelDensityEstimate, binNumericForPie, MAX_ROWS_STORED, computeMannWhitneyU, computePairedTTest, computeWilcoxonSignedRank, computeFriedmanTest, computeLeveneTest, computeOLS, computeBetaPosterior, computeKMeans, getCrosstab, pairwisePostHoc, computeLogisticRegression, computeVIF, computeEFA, computeMediation, computeModeration, computeShapiroWilk, computePowerTTest, computeSampleSizeProportion, computeSampleSizeChiSquare, computeSampleSizeAnova, computeSampleSizeRegression, computeMulticlassLogisticOneVsRest, computeFeatureImportanceFromMulticlass, computePermutationImportanceMulticlass, computeBootstrapMeanCI, computeFisherExact, computeOneSampleTTest, computeBinomialTest, computeTwoProportionZTest, computeCorrelationCI, computeSignTest, computeOddsRatio } from "./utils/stats";
 import * as archiveApi from "./archive-api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "./archive-api";
-import { SAMPLE_DATASETS } from "./sampleDatasets";
+import type { SampleDatasetListItem } from "./api";
 import { getSampleWorkflowStandalone, getDefaultStandardWorkflow, getDemoWorkflowTemplates } from "./sample-data";
 import { OpenScienceProtocolPanel } from "./OpenScienceProtocolPanel";
 import type { DescriptiveRow, TTestResult, ChiSquareResult, ANOVAResult, BoxGroupStats, MannWhitneyResult, OLSResult, BetaPosteriorResult, KMeansResult, LogisticResult, EFAResult, MediationResult, ShapiroWilkResult, MulticlassLogisticResult, SampleSizeProportionResult, SampleSizeChiSquareResult, SampleSizeAnovaResult, SampleSizeRegressionResult, PairedTTestResult, WilcoxonSignedRankResult, FriedmanResult, LeveneResult, McNemarResult, FisherExactResult, OneSampleTTestResult, BinomialTestResult, TwoProportionZTestResult, SignTestResult } from "./utils/stats";
@@ -163,6 +163,23 @@ export default function App() {
   const [showDemoGallery, setShowDemoGallery] = useState(false);
   const [showSampleModal, setShowSampleModal] = useState(false);
   const [sampleDatasetSearch, setSampleDatasetSearch] = useState("");
+  /** Sample datasets: giờ do admin quản lý trên backend (quantis.sample_datasets), không còn nhúng tĩnh trong bundle. */
+  const [sampleDatasetsList, setSampleDatasetsList] = useState<SampleDatasetListItem[]>([]);
+  const [sampleDatasetsLoading, setSampleDatasetsLoading] = useState(false);
+  /** Chỉ để hiện/ẩn UI quản trị — chặn ghi thật luôn ở backend (X-User-Is-Admin do proxy Portal set). */
+  const [isPortalAdmin, setIsPortalAdmin] = useState(false);
+  const [showSampleAdminModal, setShowSampleAdminModal] = useState(false);
+  const [sampleAdminForm, setSampleAdminForm] = useState<{
+    id: string;
+    isNew: boolean;
+    name: string;
+    domain: string;
+    description: string;
+    tags: string;
+    csv: string;
+  } | null>(null);
+  const [sampleAdminSaving, setSampleAdminSaving] = useState(false);
+  const [sampleAdminError, setSampleAdminError] = useState<string | null>(null);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [archiveSearchResult, setArchiveSearchResult] = useState<ArchiveSearchItem[]>([]);
   const [archiveSearchLoading, setArchiveSearchLoading] = useState(false);
@@ -238,18 +255,43 @@ export default function App() {
     e.target.value = "";
   }, [selectedWorkflowId]);
 
-  const addSampleDatasetFromSidebar = useCallback((def: (typeof SAMPLE_DATASETS)[0]) => {
+  const refreshSampleDatasets = useCallback(async () => {
+    setSampleDatasetsLoading(true);
+    try {
+      const list = await quantisApi.fetchSampleDatasetsList();
+      setSampleDatasetsList(list);
+    } finally {
+      setSampleDatasetsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSampleDatasets();
+  }, [refreshSampleDatasets]);
+
+  /** Chỉ để hiện/ẩn UI quản trị (nút "Quản lý bộ dữ liệu mẫu") — chặn ghi thật luôn ở backend. */
+  useEffect(() => {
+    quantisApi.checkAdminStatus().then(setIsPortalAdmin);
+  }, [authUser, embedConfigGeneration]);
+
+  const addSampleDatasetFromSidebar = useCallback(async (def: SampleDatasetListItem) => {
+    const full = await quantisApi.fetchSampleDatasetFull(def.id);
+    if (!full) {
+      setToast(t("app.errCannotLoadFile"));
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
     /** Mỗi lần thêm = một dataset mới (cho phép thêm lại cùng mẫu). */
     const sourceKey = `sample:${def.id}:${generateId()}`;
     const id = generateId();
     const now = new Date().toISOString();
-    const fullData = def.getData();
-    const header = fullData[0];
-    const dataRows = fullData.slice(1);
+    const fullData = full.data;
+    const header = full.header;
+    const dataRows = full.rows_data;
     const preview = fullData.slice(0, 6);
     setDatasets((prev) => [
       ...prev,
-      { id, name: def.name, rows: dataRows.length, columns: header.length, columnNames: header, preview, data: fullData, sourceFormat: "csv", sourceKey, createdAt: now, updatedAt: now },
+      { id, name: full.name, rows: dataRows.length, columns: header.length, columnNames: header, preview, data: fullData, sourceFormat: "csv", sourceKey, createdAt: now, updatedAt: now },
     ]);
     setSelectedDatasetId(id);
     if (selectedWorkflowId) {
@@ -583,12 +625,15 @@ export default function App() {
     const t1 = setTimeout(requestUser, 1000);
     const t2 = setTimeout(requestUser, 2500);
     const onMessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; user?: { id?: string; email?: string; name?: string } } | null;
+      const d = e.data as { type?: string; user?: { id?: string; email?: string; name?: string; isAdmin?: boolean } } | null;
       if (d?.type !== "PORTAL_USER" || !d?.user || typeof d.user.id !== "string") return;
       setAuthUser({
         id: d.user.id.trim(),
         email: typeof d.user.email === "string" ? d.user.email : "",
         name: typeof d.user.name === "string" ? d.user.name : (d.user.email ?? ""),
+        /** Portal chưa gửi field này qua postMessage hôm nay — dự phòng khi được bổ sung.
+         * isPortalAdmin thật sự dựa vào checkAdminStatus() (header X-User-Is-Admin từ backend), không phải field này. */
+        isAdmin: Boolean(d.user.isAdmin),
       });
     };
     win.addEventListener("message", onMessage);
@@ -1806,8 +1851,14 @@ export default function App() {
                 <button
                   key={tpl.id}
                   type="button"
-                  onClick={() => {
-                    const { workflow, datasets: newDatasets } = tpl.getWorkflowAndData();
+                  onClick={async () => {
+                    const result = await tpl.getWorkflowAndData();
+                    if (!result) {
+                      setToast(t("app.errCannotLoadFile"));
+                      setTimeout(() => setToast(null), 2500);
+                      return;
+                    }
+                    const { workflow, datasets: newDatasets } = result;
                     setWorkflows((prev) => [...prev, workflow]);
                     setDatasets((prev) => [...prev, ...newDatasets]);
                     setSelectedWorkflowId(workflow.id);
@@ -1832,9 +1883,20 @@ export default function App() {
           <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
               <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("app.chooseSampleDataset")}</h2>
-              <button type="button" onClick={() => setShowSampleModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                {isPortalAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowSampleModal(false); setShowSampleAdminModal(true); }}
+                    className="px-2 py-1 rounded-lg text-xs font-medium text-brand border border-brand/40 hover:bg-brand/10"
+                  >
+                    {t("app.manageSampleDatasets")}
+                  </button>
+                )}
+                <button type="button" onClick={() => setShowSampleModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <div className="px-4 pb-2">
               <input
@@ -1846,18 +1908,21 @@ export default function App() {
               />
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {sampleDatasetsLoading && sampleDatasetsList.length === 0 && (
+                <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4">{t("app.loadingList")}</p>
+              )}
               {(() => {
                 const q = sampleDatasetSearch.trim().toLowerCase();
                 const list = !q
-                  ? SAMPLE_DATASETS
-                  : SAMPLE_DATASETS.filter((def) => {
+                  ? sampleDatasetsList
+                  : sampleDatasetsList.filter((def) => {
                       const name = def.name.toLowerCase();
                       const domain = def.domain.toLowerCase();
                       const desc = def.description.toLowerCase();
                       const tagsStr = (def.tags || []).join(" ").toLowerCase();
                       return name.includes(q) || domain.includes(q) || desc.includes(q) || tagsStr.includes(q);
                     });
-                if (list.length === 0) {
+                if (!sampleDatasetsLoading && list.length === 0) {
                   return <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4">{t("app.noSampleDatasetMatch")}</p>;
                 }
                 return list.map((def) => (
@@ -1873,6 +1938,174 @@ export default function App() {
                 ));
               })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showSampleAdminModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowSampleAdminModal(false); setSampleAdminForm(null); setSampleAdminError(null); }}>
+          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
+              <h2 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("app.manageSampleDatasets")}</h2>
+              <button type="button" onClick={() => { setShowSampleAdminModal(false); setSampleAdminForm(null); setSampleAdminError(null); }} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!sampleAdminForm ? (
+              <>
+                <div className="px-4 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => { setSampleAdminError(null); setSampleAdminForm({ id: "", isNew: true, name: "", domain: "", description: "", tags: "", csv: "col1,col2\nvalue1,value2" }); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90"
+                  >
+                    <Plus className="w-4 h-4" /> {t("app.addNew")}
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                  {sampleDatasetsList.length === 0 && (
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4">{t("app.noSampleDatasetMatch")}</p>
+                  )}
+                  {sampleDatasetsList.map((def) => (
+                    <div key={def.id} className="flex items-center justify-between gap-2 p-3 rounded-lg border border-neutral-200 dark:border-neutral-600">
+                      <div className="min-w-0">
+                        <p className="font-medium text-neutral-800 dark:text-neutral-200 truncate">{def.name}</p>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">{def.domain} · {def.rows}×{def.columns}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          title={t("app.edit")}
+                          onClick={async () => {
+                            setSampleAdminError(null);
+                            const full = await quantisApi.fetchSampleDatasetFull(def.id);
+                            if (!full) { setSampleAdminError(t("app.errCannotLoadFile")); return; }
+                            const csv = [full.header, ...full.rows_data].map((row) => row.map((c) => (c ?? "")).join(",")).join("\n");
+                            setSampleAdminForm({ id: full.id, isNew: false, name: full.name, domain: full.domain, description: full.description, tags: (full.tags || []).join(", "), csv });
+                          }}
+                          className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t("app.delete")}
+                          onClick={() => {
+                            setConfirmDialog({
+                              message: t("app.confirmDeleteSampleDataset").replace("{name}", def.name),
+                              onConfirm: async () => {
+                                setConfirmDialog(null);
+                                const result = await quantisApi.deleteSampleDatasetAdmin(def.id);
+                                if (!result.ok) { setToast(result.error || t("api.connectionError")); setTimeout(() => setToast(null), 2500); return; }
+                                await refreshSampleDatasets();
+                              },
+                            });
+                          }}
+                          className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {sampleAdminError && <p className="text-sm text-red-600 dark:text-red-400">{sampleAdminError}</p>}
+                <div>
+                  <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("app.sampleFormName")}</label>
+                  <input
+                    type="text"
+                    value={sampleAdminForm.name}
+                    onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, name: e.target.value } : f))}
+                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("app.sampleFormDomain")}</label>
+                    <input
+                      type="text"
+                      value={sampleAdminForm.domain}
+                      onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, domain: e.target.value } : f))}
+                      className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("app.sampleFormTags")}</label>
+                    <input
+                      type="text"
+                      value={sampleAdminForm.tags}
+                      onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, tags: e.target.value } : f))}
+                      placeholder="t-test, ANOVA, ..."
+                      className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("app.sampleFormDescription")}</label>
+                  <textarea
+                    value={sampleAdminForm.description}
+                    onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, description: e.target.value } : f))}
+                    rows={2}
+                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">{t("app.sampleFormCsv")}</label>
+                  <textarea
+                    value={sampleAdminForm.csv}
+                    onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, csv: e.target.value } : f))}
+                    rows={10}
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono"
+                  />
+                  <p className="text-xs text-neutral-400 mt-1">{t("app.sampleFormCsvHint")}</p>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setSampleAdminForm(null); setSampleAdminError(null); }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                  >
+                    {t("app.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={sampleAdminSaving}
+                    onClick={async () => {
+                      const form = sampleAdminForm;
+                      if (!form) return;
+                      const name = form.name.trim();
+                      if (!name) { setSampleAdminError(t("app.sampleFormNameRequired")); return; }
+                      const parsedRows = form.csv
+                        .split(/\r?\n/)
+                        .filter((line) => line.trim() !== "")
+                        .map((line) => line.split(/\t|,/).map((cell) => cell.trim()));
+                      if (parsedRows.length < 1) { setSampleAdminError(t("app.sampleFormCsvRequired")); return; }
+                      const header = parsedRows[0];
+                      const rows = parsedRows.slice(1);
+                      const tags = form.tags.split(",").map((s) => s.trim()).filter(Boolean);
+                      setSampleAdminSaving(true);
+                      setSampleAdminError(null);
+                      const payload = { name, domain: form.domain.trim(), description: form.description.trim(), tags, header, rows };
+                      const result = form.isNew
+                        ? await quantisApi.createSampleDatasetAdmin(payload)
+                        : await quantisApi.updateSampleDatasetAdmin(form.id, payload);
+                      setSampleAdminSaving(false);
+                      if ("error" in result) { setSampleAdminError(result.error); return; }
+                      setSampleAdminForm(null);
+                      await refreshSampleDatasets();
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90 disabled:opacity-60"
+                  >
+                    {sampleAdminSaving ? t("app.saving") : t("app.save")}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -8443,19 +8676,18 @@ function SettingsModal({
     saveSettingsToServer({ defaultAiModel: value || null });
   };
 
-  const saveSettingsToServer = async (overrides?: { defaultAiModel?: string | null }) => {
+  /**
+   * Chỉ gửi lên server đúng (các) trường được truyền vào `patch` — KHÔNG dựng lại cả khối
+   * settings từ state input hiện tại. Trước đây dựng lại cả khối (kể cả khi chỉ đổi model ở
+   * dropdown) đã vô tình ghi đè ollamaUpstreamUrl/archiveUrl/... dùng chung toàn hệ thống về
+   * rỗng mỗi khi các ô input local (vd ollamaUpstreamInput) chưa kịp nạp giá trị hiện có —
+   * gây mất cấu hình Ollama dùng chung nhiều lần trong thực tế.
+   */
+  const saveSettingsToServer = async (patch: Partial<import("./store").ServerSettings>) => {
     const base = backendUrlInput.trim().replace(/\/+$/, "") || quantisApi.getApiBase();
     if (!base) return;
-    const ou = ollamaUpstreamInput.trim().replace(/\/+$/, "").replace(/\/v1$/i, "") || null;
-    const settings = {
-      backendApiUrl: backendUrlInput.trim().replace(/\/+$/, "") || null,
-      archiveUrl: archiveUrlInput.trim().replace(/\/+$/, "") || null,
-      archiveFileUrl: archiveFileUrlInput.trim().replace(/\/+$/, "") || null,
-      ollamaUpstreamUrl: ou,
-      defaultAiModel: overrides?.defaultAiModel !== undefined ? overrides.defaultAiModel : (selectedModel || null),
-    };
-    const ok = await quantisApi.putQuantisSettings(settings, base);
-    if (ok) setServerSettings(settings);
+    const ok = await quantisApi.putQuantisSettings(patch, base);
+    if (ok) setServerSettings({ ...(getServerSettings() ?? {}), ...patch });
   };
 
   const handleSaveBackendUrl = () => {
@@ -8463,7 +8695,7 @@ function SettingsModal({
     if (url) saveBackendApiUrl(url);
     else saveBackendApiUrl(null);
     setBackendTestResult(null);
-    saveSettingsToServer();
+    saveSettingsToServer({ backendApiUrl: url || null });
   };
 
   const handleSaveArchiveUrl = () => {
@@ -8471,7 +8703,7 @@ function SettingsModal({
     if (url) saveArchiveUrl(url);
     else saveArchiveUrl(null);
     setArchiveTestResult(null);
-    saveSettingsToServer();
+    saveSettingsToServer({ archiveUrl: url || null });
   };
 
   const handleSaveArchiveFileUrl = () => {
@@ -8479,13 +8711,14 @@ function SettingsModal({
     if (url) saveArchiveFileUrl(url);
     else saveArchiveFileUrl(null);
     setArchiveFileTestResult(null);
-    saveSettingsToServer();
+    saveSettingsToServer({ archiveFileUrl: url || null });
   };
 
   const handleSaveOllamaUpstream = () => {
     setAiTestResult(null);
     setAiModelsKey((k) => k + 1);
-    void saveSettingsToServer();
+    const ou = ollamaUpstreamInput.trim().replace(/\/+$/, "").replace(/\/v1$/i, "") || null;
+    void saveSettingsToServer({ ollamaUpstreamUrl: ou });
   };
 
   const effectiveBackendUrl = (): string =>

@@ -191,12 +191,13 @@ export function isPortalEmbed(): boolean {
 /** User Portal inject (__PORTAL_USER__) khi mở embed. */
 export function getPortalUserFromWindow(): AuthUser | null {
   if (typeof window === "undefined") return null;
-  const u = (window as { __PORTAL_USER__?: { id?: string; email?: string; name?: string } }).__PORTAL_USER__;
+  const u = (window as { __PORTAL_USER__?: { id?: string; email?: string; name?: string; isAdmin?: boolean } }).__PORTAL_USER__;
   if (!u || typeof u.id !== "string" || !u.id.trim()) return null;
   return {
     id: u.id.trim(),
     email: typeof u.email === "string" ? u.email : "",
     name: typeof u.name === "string" ? u.name : u.email,
+    isAdmin: Boolean(u.isAdmin),
   };
 }
 
@@ -1492,6 +1493,152 @@ export async function saveData(payload: { datasets: Dataset[]; workflows: Workfl
   }
 }
 
+/**
+ * Trạng thái admin THẬT theo máy chủ — window.__PORTAL_USER__.isAdmin chỉ để hiện/ẩn UI (Portal có thể chưa
+ * gửi field này qua postMessage); nguồn đáng tin cậy là header X-User-Is-Admin mà proxy Portal luôn set
+ * server-side trước khi chuyển tới backend Quantis (không client nào spoof được — xem backend/src/routes/sample-datasets.ts).
+ * Chặn ghi THẬT vẫn luôn ở backend (403 nếu thiếu header), hàm này chỉ phục vụ hiện/ẩn nút Admin trên UI.
+ */
+/**
+ * Sample datasets and admin status are served by the Portal's in-process Quantis router
+ * (window.__DATA_API_BASE__ = /api/apps/quantis), not by the standalone quantis-backend that
+ * getBase() points at on research.neu.edu.vn — that backend has no such routes (404).
+ */
+function getSampleDataBase(): string {
+  const w = typeof window !== "undefined" ? (window as Window & { __DATA_API_BASE__?: string }) : undefined;
+  const portalBase = w?.__DATA_API_BASE__?.trim();
+  return portalBase ? portalBase.replace(/\/+$/, "") : getBase();
+}
+
+export async function checkAdminStatus(): Promise<boolean> {
+  const base = getSampleDataBase();
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/api/quantis/auth/admin-status`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data?.isAdmin);
+  } catch {
+    return false;
+  }
+}
+
+// ——— Sample datasets (admin-curated, browsable/importable bởi mọi user) ———
+
+export interface SampleDatasetListItem {
+  id: string;
+  name: string;
+  domain: string;
+  description: string;
+  tags: string[];
+  rows: number;
+  columns: number;
+  displayOrder: number;
+}
+
+export interface SampleDatasetFull extends SampleDatasetListItem {
+  header: string[];
+  rows_data: string[][];
+  /** [header, ...rows] — cùng hình dạng với SampleDatasetDef.getData() cũ. */
+  data: string[][];
+}
+
+/** Danh sách nhẹ (không kèm dữ liệu dòng) — dùng cho gallery chọn mẫu. */
+export async function fetchSampleDatasetsList(): Promise<SampleDatasetListItem[]> {
+  const base = getSampleDataBase();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.datasets) ? data.datasets : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Dữ liệu đầy đủ (kèm rows) của một sample dataset. */
+export async function fetchSampleDatasetFull(id: string): Promise<SampleDatasetFull | null> {
+  const base = getSampleDataBase();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets/${encodeURIComponent(id)}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export interface SampleDatasetWritePayload {
+  id?: string;
+  name: string;
+  domain?: string;
+  description?: string;
+  tags?: string[];
+  header: string[];
+  rows: string[][];
+  displayOrder?: number;
+}
+
+/** Tạo sample dataset mới (admin). Backend trả 403 nếu không phải admin. */
+export async function createSampleDatasetAdmin(payload: SampleDatasetWritePayload): Promise<SampleDatasetFull | { error: string }> {
+  const base = getSampleDataBase();
+  if (!base) return { error: t("api.backendNotConfigured") };
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data?.error || t("api.connectionError") };
+    return data as SampleDatasetFull;
+  } catch {
+    return { error: t("api.connectionError") };
+  }
+}
+
+/** Cập nhật sample dataset (admin). */
+export async function updateSampleDatasetAdmin(id: string, payload: Partial<SampleDatasetWritePayload>): Promise<SampleDatasetFull | { error: string }> {
+  const base = getSampleDataBase();
+  if (!base) return { error: t("api.backendNotConfigured") };
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data?.error || t("api.connectionError") };
+    return data as SampleDatasetFull;
+  } catch {
+    return { error: t("api.connectionError") };
+  }
+}
+
+/** Xóa sample dataset (admin). */
+export async function deleteSampleDatasetAdmin(id: string): Promise<{ ok: boolean; error?: string }> {
+  const base = getSampleDataBase();
+  if (!base) return { ok: false, error: t("api.backendNotConfigured") };
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data?.error || t("api.connectionError") };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: t("api.connectionError") };
+  }
+}
+
 /** Gọi LLM (OpenAI/Ollama). Có thể cấu hình địa chỉ API trong Cài đặt (hoặc .env OLLAMA_URL / VITE_OLLAMA_URL). */
 const DEFAULT_OLLAMA = "http://localhost:11434/v1";
 const defModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
@@ -1518,7 +1665,7 @@ export function getAiApiBase(): string {
   return DEFAULT_OLLAMA;
 }
 
-/** Mô hình AI mặc định khi không cấu hình: research.neu.edu.vn = qwen3:8b, còn lại = llama3.2:8b. */
+/** Mô hình AI mặc định khi không cấu hình: research.neu.edu.vn = qwen2.5:14b-instruct-ctx16k, còn lại = llama3.2:8b. */
 export function getDefaultAiModel(): string {
   if (isResearchNeu()) return RESEARCH_NEU_DEFAULT_MODEL;
   return "llama3.2:8b";
@@ -1648,6 +1795,24 @@ function extractContent(obj: unknown): string {
   return ""
 }
 
+/** Chặn lẫn ký tự Hán/Nhật/Hàn vào câu trả lời tiếng Việt/Anh (hiện tượng của mô hình Qwen đa ngôn ngữ). */
+const CJK_RE = /[⺀-⿟　-〿぀-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/
+const CJK_RUN_RE = /[⺀-⿟぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]+[　-〿＀-￯]*/g
+const CJK_RETRY_HINT =
+  "\n\nLƯU Ý: bản trả lời trước đã lẫn chữ Hán/Nhật/Hàn. Hãy viết lại HOÀN TOÀN bằng tiếng Việt hoặc tiếng Anh (theo ngôn ngữ người dùng), không một ký tự Hán/Nhật/Hàn nào."
+
+function hasCjk(s: string): boolean {
+  return CJK_RE.test(s || "")
+}
+
+function stripCjk(s: string): string {
+  return (s || "")
+    .replace(CJK_RUN_RE, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim()
+}
+
 function parseAiResponse(rawText: string): string {
   const data = (() => { try { return JSON.parse(rawText) as unknown } catch { return null } })()
   if (data !== null) {
@@ -1688,41 +1853,52 @@ export async function aiComplete(apiBase: string, prompt: string, systemHint?: s
   const isLocalOllama = /ollama/i.test(String(base)) || /localhost:11434/.test(String(base))
   const fallbackModel = isLocalOllama ? "llama3.2:8b" : "gpt-4o-mini"
   const model = modelOverride || defModel || fallbackModel
-  const messages = systemWithHint
-    ? [{ role: "system" as const, content: systemWithHint }, { role: "user" as const, content: promptToSend }]
-    : [{ role: "user" as const, content: promptToSend }]
-  const body = { model, messages, max_tokens: maxTokens, stream: false }
 
-  const doRequest = async (): Promise<Response> => {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal })
-      clearTimeout(timeoutId)
-      return res
-    } catch (e) {
-      clearTimeout(timeoutId)
-      throw e
-    }
-  }
+  const runOnce = async (systemToUse: string | undefined): Promise<string> => {
+    const messages = systemToUse
+      ? [{ role: "system" as const, content: systemToUse }, { role: "user" as const, content: promptToSend }]
+      : [{ role: "user" as const, content: promptToSend }]
+    const body = { model, messages, max_tokens: maxTokens, stream: false }
 
-  let lastError: Error | null = null
-  for (let attempt = 0; attempt <= 1; attempt++) {
-    try {
-      const res = await doRequest()
-      if (res.ok) {
-        const rawText = await res.text()
-        return parseAiResponse(rawText)
+    const doRequest = async (): Promise<Response> => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal })
+        clearTimeout(timeoutId)
+        return res
+      } catch (e) {
+        clearTimeout(timeoutId)
+        throw e
       }
-      const errText = await res.text()
-      const isRetryable = res.status >= 500 || res.status === 408 || /timeout|network|failed|refused/i.test(errText)
-      lastError = new Error(errText || `AI API error ${res.status}`)
-      if (!isRetryable || attempt === 1) throw lastError
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e))
-      const isRetryable = /abort|timeout|network|failed|refused/i.test(lastError.message)
-      if (attempt === 1 || !isRetryable) throw lastError
     }
+
+    let lastError: Error | null = null
+    for (let attempt = 0; attempt <= 1; attempt++) {
+      try {
+        const res = await doRequest()
+        if (res.ok) {
+          const rawText = await res.text()
+          return parseAiResponse(rawText)
+        }
+        const errText = await res.text()
+        const isRetryable = res.status >= 500 || res.status === 408 || /timeout|network|failed|refused/i.test(errText)
+        lastError = new Error(errText || `AI API error ${res.status}`)
+        if (!isRetryable || attempt === 1) throw lastError
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e))
+        const isRetryable = /abort|timeout|network|failed|refused/i.test(lastError.message)
+        if (attempt === 1 || !isRetryable) throw lastError
+      }
+    }
+    throw lastError || new Error(t("api.aiConnectionError"))
   }
-  throw lastError || new Error(t("api.aiConnectionError"))
+
+  const out = await runOnce(systemWithHint)
+  if (hasCjk(out) && !hasCjk(promptToSend)) {
+    const retrySystem = (systemWithHint ?? "") + CJK_RETRY_HINT
+    const retried = await runOnce(retrySystem).catch(() => out)
+    return hasCjk(retried) ? stripCjk(retried) : retried
+  }
+  return out
 }

@@ -4,22 +4,23 @@
 
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import { generateId } from "./store";
-import { SAMPLE_DATASETS, type SampleDatasetDef } from "./sampleDatasets";
+import { fetchSampleDatasetFull } from "./api";
 import { t } from "./i18n";
 
 const now = new Date().toISOString();
 
-/** Tạo Dataset từ định nghĩa mẫu (SAMPLE_DATASETS) */
-function datasetFromSampleDef(def: SampleDatasetDef): Dataset {
+/** Tạo Dataset từ một sample dataset (admin-curated, tải từ backend) theo id. Trả về null nếu không tải được. */
+async function datasetFromSampleId(sampleId: string): Promise<Dataset | null> {
+  const full = await fetchSampleDatasetFull(sampleId);
+  if (!full) return null;
   const id = generateId();
-  const raw = def.getData();
-  const headers = raw[0];
-  const dataRows = raw.slice(1);
-  const data = raw;
+  const headers = full.header;
+  const dataRows = full.rows_data;
+  const data = full.data;
   const preview = data.slice(0, 8);
   return {
     id,
-    name: def.name,
+    name: full.name,
     rows: dataRows.length,
     columns: headers.length,
     columnNames: headers,
@@ -267,19 +268,20 @@ export function getDemoWorkflow(): Workflow {
   };
 }
 
-/** Một mẫu workflow theo lĩnh vực: chọn trong gallery, tải workflow + dữ liệu vào luôn */
+/** Một mẫu workflow theo lĩnh vực: chọn trong gallery, tải workflow + dữ liệu vào luôn.
+ * `getWorkflowAndData` là async vì dataset nguồn giờ do admin quản lý trên backend (không còn nhúng tĩnh trong bundle);
+ * trả về null nếu dataset nguồn không còn tồn tại (vd. admin vừa xóa). */
 export interface DemoWorkflowTemplate {
   id: string;
   domain: string;
   name: string;
   description: string;
-  getWorkflowAndData: () => { workflow: Workflow; datasets: Dataset[] };
+  getWorkflowAndData: () => Promise<{ workflow: Workflow; datasets: Dataset[] } | null>;
 }
 
-/** Danh sách mẫu workflow đa lĩnh vực — hiển thị trong cửa sổ chọn mẫu */
+/** Danh sách mẫu workflow đa lĩnh vực — hiển thị trong cửa sổ chọn mẫu. Mỗi mẫu tham chiếu tới id
+ * của một sample dataset admin-curated (xem backend quantis.sample_datasets); dữ liệu được tải qua API. */
 export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
-  const def = (key: string) => SAMPLE_DATASETS.find((d) => d.id === key)!;
-
   function makeSteps(
     summaries: Record<number, string>,
     datasetRows: number,
@@ -304,8 +306,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.eduAB.domain"),
       name: t("sampleData.demoTemplates.eduAB.name"),
       description: t("sampleData.demoTemplates.eduAB.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("edu-scores"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("edu-scores");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.eduAB.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.eduAB.steps.describe.resultSummary"), 4: t("sampleData.demoTemplates.eduAB.steps.test.resultSummary") },
           d.rows,
@@ -320,8 +323,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.econRevenue.domain"),
       name: t("sampleData.demoTemplates.econRevenue.name"),
       description: t("sampleData.demoTemplates.econRevenue.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("sales-branch"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("sales-branch");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.econRevenue.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.econRevenue.steps.describe.resultSummary"), 4: t("sampleData.demoTemplates.econRevenue.steps.test.resultSummary") },
           d.rows,
@@ -336,8 +340,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.socialSurvey.domain"),
       name: t("sampleData.demoTemplates.socialSurvey.name"),
       description: t("sampleData.demoTemplates.socialSurvey.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("survey-likert"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("survey-likert");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.socialSurvey.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.socialSurvey.steps.describe.resultSummary"), 4: t("sampleData.demoTemplates.socialSurvey.steps.test.resultSummary") },
           d.rows,
@@ -352,8 +357,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.techEnv.domain"),
       name: t("sampleData.demoTemplates.techEnv.name"),
       description: t("sampleData.demoTemplates.techEnv.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("env-temp"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("env-temp");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.techEnv.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.techEnv.steps.describe.resultSummary"), 6: t("sampleData.demoTemplates.techEnv.steps.visualize.resultSummary") },
           d.rows,
@@ -368,8 +374,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.itAbTest.domain"),
       name: t("sampleData.demoTemplates.itAbTest.name"),
       description: t("sampleData.demoTemplates.itAbTest.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("marketing-ab"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("marketing-ab");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.itAbTest.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.itAbTest.steps.describe.resultSummary"), 4: t("sampleData.demoTemplates.itAbTest.steps.test.resultSummary") },
           d.rows,
@@ -384,8 +391,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.healthBmi.domain"),
       name: t("sampleData.demoTemplates.healthBmi.name"),
       description: t("sampleData.demoTemplates.healthBmi.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("health-bmi"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("health-bmi");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.healthBmi.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.healthBmi.steps.describe.resultSummary"), 4: t("sampleData.demoTemplates.healthBmi.steps.test.resultSummary") },
           d.rows,
@@ -400,8 +408,9 @@ export function getDemoWorkflowTemplates(): DemoWorkflowTemplate[] {
       domain: t("sampleData.demoTemplates.crmSegmentation.domain"),
       name: t("sampleData.demoTemplates.crmSegmentation.name"),
       description: t("sampleData.demoTemplates.crmSegmentation.description"),
-      getWorkflowAndData: () => {
-        const d = datasetFromSampleDef(def("customer-seg"));
+      getWorkflowAndData: async () => {
+        const d = await datasetFromSampleId("customer-seg");
+        if (!d) return null;
         const steps = makeSteps(
           { 0: t("sampleData.demoTemplates.crmSegmentation.steps.import.resultSummary"), 3: t("sampleData.demoTemplates.crmSegmentation.steps.describe.resultSummary"), 5: t("sampleData.demoTemplates.crmSegmentation.steps.model.resultSummary") },
           d.rows,

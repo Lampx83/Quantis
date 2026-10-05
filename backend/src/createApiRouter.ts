@@ -5,6 +5,13 @@ import * as auth from "./routes/auth.js"
 import { getData, postData } from "./routes/data.js"
 import { getSettings, putSettings } from "./routes/settings.js"
 import { createOllamaProxyRouter } from "./routes/ollamaProxy.js"
+import {
+  listSampleDatasets,
+  getSampleDataset,
+  createSampleDataset,
+  updateSampleDataset,
+  deleteSampleDataset,
+} from "./routes/sample-datasets.js"
 
 /** Router mount tại /api/quantis — các route: /health, /data, /auth/*, /settings, /ollama/* */
 export function createQuantisApiRouter(): Router {
@@ -34,6 +41,17 @@ export function createQuantisApiRouter(): Router {
 
   r.get("/data", requireAuth, getData)
   r.post("/data", requireAuth, postData)
+
+  /** AI Portal proxy đặt X-User-Is-Admin server-side (không client nào spoof được) — chỉ để hiện/ẩn UI admin. */
+  r.get("/auth/admin-status", (req, res) => {
+    res.json({ isAdmin: req.headers["x-user-is-admin"] === "1" })
+  })
+
+  r.get("/sample-datasets", listSampleDatasets)
+  r.get("/sample-datasets/:id", getSampleDataset)
+  r.post("/sample-datasets", createSampleDataset)
+  r.put("/sample-datasets/:id", updateSampleDataset)
+  r.delete("/sample-datasets/:id", deleteSampleDataset)
 
   return r
 }
