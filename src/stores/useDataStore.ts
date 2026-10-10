@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Dataset } from "@/types";
-import { useSyncStore } from "./useSyncStore";
+import { useSyncStore, canSyncToServer } from "./useSyncStore";
 
 export interface DataState {
   // --- State ---
@@ -85,8 +85,8 @@ export const useDataStore = create<DataState>()(
         setItem: (name, value) => {
           try {
             const syncState = useSyncStore.getState();
-            const canSyncToServer = syncState.useBackend && (!syncState.authConfig?.authEnabled || !!syncState.authUser);
-            const persistWorkspaceLocally = !canSyncToServer || !syncState.isOnline;
+            const canSync = canSyncToServer(syncState);
+            const persistWorkspaceLocally = !canSync || !syncState.isOnline;
             if (!persistWorkspaceLocally) {
               // Khi online và kết nối server: Server/DB là nguồn chính, chỉ lưu selectedDatasetId xuống localStorage để giữ ngữ cảnh
               const lightweightValue = {

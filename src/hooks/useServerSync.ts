@@ -5,6 +5,7 @@ import {
   useAnalysisStore,
   useSyncStore,
   useUIStore,
+  canSyncToServer as checkCanSyncToServer,
 } from "@/stores";
 import * as quantisApi from "@/api";
 import { clearWorkspaceLocalData, setServerSettings } from "@/utils/storage";
@@ -54,8 +55,8 @@ export function useServerSync() {
   }, []);
 
   const canSyncToServer = useMemo(
-    () => useBackend && (!authConfig?.authEnabled || !!authUser),
-    [useBackend, authConfig?.authEnabled, authUser]
+    () => checkCanSyncToServer({ useBackend, authConfig, authUser }),
+    [useBackend, authConfig, authUser]
   );
 
   // Kéo workspace từ server

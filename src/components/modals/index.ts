@@ -5,5 +5,6 @@ export * from "./AccountModal";
 export * from "./ConfirmDialog";
 export * from "./DemoGalleryModal";
 export * from "./SampleDatasetModal";
+export * from "./SampleAdminModal";
 export * from "./ArchiveModal";
 export * from "./AppModals";

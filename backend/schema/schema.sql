@@ -37,3 +37,19 @@ CREATE TABLE IF NOT EXISTS __SCHEMA__.app_settings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quantis_users_email ON __SCHEMA__.users(email);
+
+-- Admin-curated sample datasets, browsable/importable by every user (xem thêm 002_sample_datasets.sql
+-- cho migration thủ công trên DB đã tồn tại từ trước — schema.sql chỉ tự áp dụng khi DB chưa có bảng workspaces).
+CREATE TABLE IF NOT EXISTS __SCHEMA__.sample_datasets (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  domain text,
+  description text,
+  tags text[] NOT NULL DEFAULT '{}',
+  header text[] NOT NULL DEFAULT '{}',
+  rows_data jsonb NOT NULL DEFAULT '[]',
+  display_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_quantis_sample_datasets_order ON __SCHEMA__.sample_datasets(display_order);

@@ -47,6 +47,7 @@ export interface UIState {
   showAppFeedbackModal: boolean;
   showDemoGallery: boolean;
   showSampleModal: boolean;
+  showSampleAdminModal: boolean;
   showLoginModal: boolean;
   loginModalInitialTab: "login" | "register";
   showAccountDialog: boolean;
@@ -76,6 +77,7 @@ export interface UIState {
   setShowAppFeedbackModal: (show: boolean) => void;
   setShowDemoGallery: (show: boolean) => void;
   setShowSampleModal: (show: boolean) => void;
+  setShowSampleAdminModal: (show: boolean) => void;
   setShowLoginModal: (show: boolean) => void;
   setLoginModalInitialTab: (tab: "login" | "register") => void;
   setShowAccountDialog: (show: boolean) => void;
@@ -110,6 +112,7 @@ export const useUIStore = create<UIState>()(
       showAppFeedbackModal: false,
       showDemoGallery: false,
       showSampleModal: false,
+      showSampleAdminModal: false,
       showLoginModal: false,
       loginModalInitialTab: "login",
       showAccountDialog: false,
@@ -150,6 +153,7 @@ export const useUIStore = create<UIState>()(
       setShowAppFeedbackModal: (showAppFeedbackModal) => set({ showAppFeedbackModal }),
       setShowDemoGallery: (showDemoGallery) => set({ showDemoGallery }),
       setShowSampleModal: (showSampleModal) => set({ showSampleModal }),
+      setShowSampleAdminModal: (showSampleAdminModal) => set({ showSampleAdminModal }),
       setShowLoginModal: (showLoginModal) => set({ showLoginModal }),
       setLoginModalInitialTab: (loginModalInitialTab) => set({ loginModalInitialTab }),
       setShowAccountDialog: (showAccountDialog) => set({ showAccountDialog }),

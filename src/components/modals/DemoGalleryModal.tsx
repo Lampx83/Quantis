@@ -40,8 +40,10 @@ export function DemoGalleryModal() {
             <button
               key={tpl.id}
               type="button"
-              onClick={() => {
-                const { workflow, datasets: newDatasets } = tpl.getWorkflowAndData();
+              onClick={async () => {
+                const result = await tpl.getWorkflowAndData();
+                if (!result) return;
+                const { workflow, datasets: newDatasets } = result;
                 setWorkflows((prev) => [...prev, workflow]);
                 setDatasets((prev) => [...prev, ...newDatasets]);
                 setSelectedWorkflowId(workflow.id);

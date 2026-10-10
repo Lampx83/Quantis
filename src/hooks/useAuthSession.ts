@@ -11,7 +11,13 @@ export function useAuthSession() {
     authUser,
     setAuthUser,
     setAuthLoading,
+    setIsPortalAdmin,
   } = useSyncStore();
+
+  // Kiểm tra cờ admin mỗi khi authUser hoặc embedConfigGeneration thay đổi
+  useEffect(() => {
+    quantisApi.checkAdminStatus().then(setIsPortalAdmin);
+  }, [authUser, embedConfigGeneration, setIsPortalAdmin]);
 
   // Auth: cấu hình + phiên khi có backend; Portal embed: __PORTAL_USER__ hoặc postMessage
   useEffect(() => {
@@ -64,12 +70,13 @@ export function useAuthSession() {
     const t1 = setTimeout(requestUser, 1000);
     const t2 = setTimeout(requestUser, 2500);
     const onMessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; user?: { id?: string; email?: string; name?: string } } | null;
+      const d = e.data as { type?: string; user?: { id?: string; email?: string; name?: string; isAdmin?: boolean } } | null;
       if (d?.type !== "PORTAL_USER" || !d?.user || typeof d.user.id !== "string") return;
       setAuthUser({
         id: d.user.id.trim(),
         email: typeof d.user.email === "string" ? d.user.email : "",
         name: typeof d.user.name === "string" ? d.user.name : d.user.email ?? "",
+        isAdmin: Boolean(d.user.isAdmin),
       });
     };
     win.addEventListener("message", onMessage);

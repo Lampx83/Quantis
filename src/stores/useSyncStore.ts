@@ -1,6 +1,8 @@
 import { create } from "zustand";
-import type { AuthConfig, AuthUser } from "@/api";
+import type { AuthConfig, AuthUser, SampleDatasetListItem } from "@/api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
+import * as quantisApi from "@/api";
+import { SAMPLE_DATASETS } from "@/sampleDatasets";
 
 export interface SyncState {
   // Connection
@@ -8,10 +10,15 @@ export interface SyncState {
   useBackend: boolean;
   analysisBackendAvailable: boolean;
 
-  // Auth
+  // Auth & Admin
   authConfig: AuthConfig | null;
   authUser: AuthUser | null;
   authLoading: boolean;
+  isPortalAdmin: boolean;
+
+  // Sample datasets
+  sampleDatasetsList: SampleDatasetListItem[];
+  sampleDatasetsLoading: boolean;
 
   // Sync status
   workspacePullLoading: boolean;
@@ -36,6 +43,10 @@ export interface SyncState {
   setAuthConfig: (config: AuthConfig | null) => void;
   setAuthUser: (user: AuthUser | null) => void;
   setAuthLoading: (loading: boolean) => void;
+  setIsPortalAdmin: (isAdmin: boolean) => void;
+  setSampleDatasetsList: (list: SampleDatasetListItem[]) => void;
+  setSampleDatasetsLoading: (loading: boolean) => void;
+  refreshSampleDatasets: () => Promise<void>;
   setWorkspacePullLoading: (loading: boolean) => void;
   setSidebarImportBusy: (busy: boolean) => void;
   setEmbedConfigGeneration: (gen: number | ((prev: number) => number)) => void;
@@ -59,6 +70,10 @@ export const useSyncStore = create<SyncState>((set) => ({
   authConfig: null,
   authUser: null,
   authLoading: true,
+  isPortalAdmin: false,
+
+  sampleDatasetsList: [],
+  sampleDatasetsLoading: false,
 
   workspacePullLoading: false,
   sidebarImportBusy: false,
@@ -80,6 +95,43 @@ export const useSyncStore = create<SyncState>((set) => ({
   setAuthConfig: (authConfig) => set({ authConfig }),
   setAuthUser: (authUser) => set({ authUser }),
   setAuthLoading: (authLoading) => set({ authLoading }),
+  setIsPortalAdmin: (isPortalAdmin) => set({ isPortalAdmin }),
+  setSampleDatasetsList: (sampleDatasetsList) => set({ sampleDatasetsList }),
+  setSampleDatasetsLoading: (sampleDatasetsLoading) => set({ sampleDatasetsLoading }),
+  refreshSampleDatasets: async () => {
+    set({ sampleDatasetsLoading: true });
+    try {
+      const list = await quantisApi.fetchSampleDatasetsList();
+      if (list && list.length > 0) {
+        set({ sampleDatasetsList: list });
+      } else {
+        // Fallback về SAMPLE_DATASETS tĩnh cục bộ nếu API trả về rỗng
+        const fallbackList: SampleDatasetListItem[] = SAMPLE_DATASETS.map((d) => ({
+          id: d.id,
+          name: d.name,
+          domain: d.domain,
+          description: d.description,
+          tags: d.tags,
+          rows: d.rows,
+          columns: d.columns,
+        }));
+        set({ sampleDatasetsList: fallbackList });
+      }
+    } catch {
+      const fallbackList: SampleDatasetListItem[] = SAMPLE_DATASETS.map((d) => ({
+        id: d.id,
+        name: d.name,
+        domain: d.domain,
+        description: d.description,
+        tags: d.tags,
+        rows: d.rows,
+        columns: d.columns,
+      }));
+      set({ sampleDatasetsList: fallbackList });
+    } finally {
+      set({ sampleDatasetsLoading: false });
+    }
+  },
   setWorkspacePullLoading: (workspacePullLoading) => set({ workspacePullLoading }),
   setSidebarImportBusy: (sidebarImportBusy) => set({ sidebarImportBusy }),
   setEmbedConfigGeneration: (embedConfigGeneration) =>
@@ -114,3 +166,22 @@ export const useSyncStore = create<SyncState>((set) => ({
   setArchiveFilesLoading: (archiveFilesLoading) => set({ archiveFilesLoading }),
   setArchiveDownloadingFileId: (archiveDownloadingFileId) => set({ archiveDownloadingFileId }),
 }));
+
+/**
+ * Kiểm tra xem client có đủ điều kiện đồng bộ workspace lên server không.
+ * - Embed + backend PostgreSQL: `/auth/config` trả authEnabled=false — luôn sync khi có backend.
+ * - Embed + JSON backend bật auth: cần authUser.
+ * - Portal embed: chỉ tài khoản thật được sync (email khác rỗng và không kết thúc bằng @local).
+ */
+export function canSyncToServer(syncState: {
+  useBackend: boolean;
+  authConfig: AuthConfig | null;
+  authUser: AuthUser | null;
+}): boolean {
+  if (!syncState.useBackend) return false;
+  if (quantisApi.isPortalEmbed()) {
+    const email = (syncState.authUser?.email ?? "").trim().toLowerCase();
+    return !!syncState.authUser && !!email && !email.endsWith("@local");
+  }
+  return !syncState.authConfig?.authEnabled || !!syncState.authUser;
+}

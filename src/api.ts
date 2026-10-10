@@ -5,14 +5,13 @@
  */
 import type { Dataset, Workflow } from "./types";
 import type { MediationResult } from "./utils/stats";
-import { loadBackendApiUrl, type ServerSettings } from "./utils/storage";
+import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
 
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). Mặc định research.neu.edu.vn */
 const RESEARCH_NEU_HOST = "research.neu.edu.vn";
 const RESEARCH_NEU_BACKEND = "https://research.neu.edu.vn/api/quantis/backend";
 const RESEARCH_NEU_BACKEND_PYTHON = "https://research.neu.edu.vn/api/quantis/backend-python";
-const RESEARCH_NEU_DEFAULT_MODEL = "qwen2.5:14b-instruct-ctx16k";
 
 function isResearchNeu(): boolean {
   return typeof window !== "undefined" && window.location.hostname.toLowerCase() === RESEARCH_NEU_HOST;
@@ -191,12 +190,13 @@ export function isPortalEmbed(): boolean {
 /** User Portal inject (__PORTAL_USER__) khi mở embed. */
 export function getPortalUserFromWindow(): AuthUser | null {
   if (typeof window === "undefined") return null;
-  const u = (window as { __PORTAL_USER__?: { id?: string; email?: string; name?: string } }).__PORTAL_USER__;
+  const u = (window as { __PORTAL_USER__?: { id?: string; email?: string; name?: string; isAdmin?: boolean } }).__PORTAL_USER__;
   if (!u || typeof u.id !== "string" || !u.id.trim()) return null;
   return {
     id: u.id.trim(),
     email: typeof u.email === "string" ? u.email : "",
     name: typeof u.name === "string" ? u.name : u.email,
+    isAdmin: Boolean(u.isAdmin),
   };
 }
 
@@ -246,6 +246,19 @@ export async function putQuantisSettings(settings: ServerSettings, baseUrl?: str
 function getAPI_BASE(): string {
   const b = getBase();
   return b ? `${b}/api/quantis` : "";
+}
+
+/**
+ * Workspace (datasets + workflows) của người dùng: khi chạy trong AI Portal dùng router Quantis chạy TRONG Portal
+ * (`window.__DATA_API_BASE__` = /api/apps/quantis) — danh tính do Portal đặt (X-User-Id), lưu theo từng user.
+ * KHÔNG dùng backend json-server công khai (/api/quantis/backend) vì kho dữ liệu của nó là kho chung toàn cục, không xác thực.
+ */
+function getWorkspaceDataUrl(): string {
+  const w = typeof window !== "undefined" ? (window as Window & { __DATA_API_BASE__?: string }) : undefined;
+  const portalBase = w?.__DATA_API_BASE__?.trim();
+  if (portalBase) return `${portalBase.replace(/\/+$/, "")}/api/quantis/data`;
+  const api = getAPI_BASE();
+  return api ? `${api}/data` : "";
 }
 
 function getANALYZE_BASE(): string {
@@ -1460,7 +1473,9 @@ export async function analyzeZTestTwoMeans(
 /** Lấy toàn bộ datasets + workflows (cần đăng nhập). Trả về null nếu 401/lỗi. */
 export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workflow[] } | null> {
   try {
-    const res = await fetch(`${getAPI_BASE()}/data`, { method: "GET", credentials: "include" });
+    const url = getWorkspaceDataUrl();
+    if (!url) return null;
+    const res = await fetch(url, { method: "GET", credentials: "include", cache: "no-store" });
     if (!res.ok) return null;
     const json = await res.json();
     return {
@@ -1474,10 +1489,10 @@ export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workf
 
 /** Ghi đè toàn bộ datasets + workflows lên server (cần đăng nhập). Trả về true nếu thành công. */
 export async function saveData(payload: { datasets: Dataset[]; workflows: Workflow[] }): Promise<boolean> {
-  const base = getBase();
-  if (!base || String(base).trim() === "") return false;
+  const url = getWorkspaceDataUrl();
+  if (!url) return false;
   try {
-    const res = await fetch(`${getAPI_BASE()}/data`, {
+    const res = await fetch(url, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
@@ -1492,11 +1507,184 @@ export async function saveData(payload: { datasets: Dataset[]; workflows: Workfl
   }
 }
 
-/** Gọi LLM (OpenAI/Ollama). Có thể cấu hình địa chỉ API trong Cài đặt (hoặc .env OLLAMA_URL / VITE_OLLAMA_URL). */
-const DEFAULT_OLLAMA = "http://localhost:11434/v1";
+/**
+ * Trạng thái admin THẬT theo máy chủ — window.__PORTAL_USER__.isAdmin chỉ để hiện/ẩn UI (Portal có thể chưa
+ * gửi field này qua postMessage); nguồn đáng tin cậy là header X-User-Is-Admin mà proxy Portal luôn set
+ * server-side trước khi chuyển tới backend Quantis (không client nào spoof được — xem backend/src/routes/sample-datasets.ts).
+ * Chặn ghi THẬT vẫn luôn ở backend (403 nếu thiếu header), hàm này chỉ phục vụ hiện/ẩn nút Admin trên UI.
+ */
+/**
+ * Sample datasets and admin status are served by the Portal's in-process Quantis router
+ * (window.__DATA_API_BASE__ = /api/apps/quantis), not by the standalone quantis-backend that
+ * getBase() points at on research.neu.edu.vn — that backend has no such routes (404).
+ */
+function getSampleDataBase(): string {
+  const w = typeof window !== "undefined" ? (window as Window & { __DATA_API_BASE__?: string }) : undefined;
+  const portalBase = w?.__DATA_API_BASE__?.trim();
+  return portalBase ? portalBase.replace(/\/+$/, "") : getBase();
+}
+
+export async function checkAdminStatus(): Promise<boolean> {
+  const base = getSampleDataBase();
+  if (!base) return false;
+  try {
+    const res = await fetch(`${base}/api/quantis/auth/admin-status`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Boolean(data?.isAdmin);
+  } catch {
+    return false;
+  }
+}
+
+// ——— Sample datasets (admin-curated, browsable/importable bởi mọi user) ———
+
+export interface SampleDatasetListItem {
+  id: string;
+  name: string;
+  domain: string;
+  description: string;
+  tags: string[];
+  rows: number;
+  columns: number;
+  displayOrder: number;
+}
+
+export interface SampleDatasetFull extends SampleDatasetListItem {
+  header: string[];
+  rows_data: string[][];
+  /** [header, ...rows] — cùng hình dạng với SampleDatasetDef.getData() cũ. */
+  data: string[][];
+}
+
+/** Danh sách nhẹ (không kèm dữ liệu dòng) — dùng cho gallery chọn mẫu. */
+export async function fetchSampleDatasetsList(): Promise<SampleDatasetListItem[]> {
+  const base = getSampleDataBase();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets`, { credentials: "include", cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.datasets) ? data.datasets : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Dữ liệu đầy đủ (kèm rows) của một sample dataset. */
+export async function fetchSampleDatasetFull(id: string): Promise<SampleDatasetFull | null> {
+  const base = getSampleDataBase();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets/${encodeURIComponent(id)}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return normalizeSampleDatasetFull(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Chịu lỗi hình dạng phản hồi: backend trả `rows` (mảng) + `data` = [header, ...rows] + `rowsCount`,
+ * bản cũ trả `rows_data`. Trả null nếu không có dữ liệu dùng được (để UI hiện toast thay vì ném lỗi).
+ */
+function normalizeSampleDatasetFull(raw: unknown): SampleDatasetFull | null {
+  const j = (raw && typeof raw === "object" ? ((raw as Record<string, unknown>).dataset ?? raw) : null) as Record<string, unknown> | null;
+  if (!j || typeof j !== "object") return null;
+  const asGrid = (v: unknown): string[][] | null => (Array.isArray(v) && v.every((r) => Array.isArray(r)) ? (v as string[][]) : null);
+  const data0 = asGrid(j.data);
+  const header: string[] | null = Array.isArray(j.header) ? (j.header as string[]) : data0 && data0.length > 0 ? data0[0] : null;
+  const rows: string[][] | null = asGrid(j.rows) ?? asGrid(j.rows_data) ?? (data0 ? data0.slice(1) : null);
+  if (!header || header.length === 0 || !rows) return null;
+  return {
+    ...(j as unknown as SampleDatasetFull),
+    header,
+    rows_data: rows,
+    data: data0 && data0.length > 0 ? data0 : [header, ...rows],
+    rows: rows.length,
+    columns: header.length,
+    tags: Array.isArray(j.tags) ? (j.tags as string[]) : [],
+  };
+}
+
+export interface SampleDatasetWritePayload {
+  id?: string;
+  name: string;
+  domain?: string;
+  description?: string;
+  tags?: string[];
+  header: string[];
+  rows: string[][];
+  displayOrder?: number;
+}
+
+/** Tạo sample dataset mới (admin). Backend trả 403 nếu không phải admin. */
+export async function createSampleDatasetAdmin(payload: SampleDatasetWritePayload): Promise<SampleDatasetFull | { error: string }> {
+  const base = getSampleDataBase();
+  if (!base) return { error: t("api.backendNotConfigured") };
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data?.error || t("api.connectionError") };
+    return data as SampleDatasetFull;
+  } catch {
+    return { error: t("api.connectionError") };
+  }
+}
+
+/** Cập nhật sample dataset (admin). */
+export async function updateSampleDatasetAdmin(id: string, payload: Partial<SampleDatasetWritePayload>): Promise<SampleDatasetFull | { error: string }> {
+  const base = getSampleDataBase();
+  if (!base) return { error: t("api.backendNotConfigured") };
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { error: data?.error || t("api.connectionError") };
+    return data as SampleDatasetFull;
+  } catch {
+    return { error: t("api.connectionError") };
+  }
+}
+
+/** Xóa sample dataset (admin). */
+export async function deleteSampleDatasetAdmin(id: string): Promise<{ ok: boolean; error?: string }> {
+  const base = getSampleDataBase();
+  if (!base) return { ok: false, error: t("api.backendNotConfigured") };
+  try {
+    const res = await fetch(`${base}/api/quantis/sample-datasets/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data?.error || t("api.connectionError") };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: t("api.connectionError") };
+  }
+}
+
+/**
+ * Gọi LLM sinh văn bản qua vLLM (OpenAI-compatible: /v1/chat/completions, /v1/models).
+ * Địa chỉ upstream cấu hình ở backend (Cài đặt → ollamaUpstreamUrl, hoặc env OLLAMA_URL); tên trường giữ nguyên để tương thích ngược.
+ * Embedding (nếu có) vẫn dùng Ollama.
+ */
+const DEFAULT_OLLAMA = "http://localhost:8000/v1";
 const defModel = (import.meta as { env?: { VITE_QUANTIS_AI_MODEL?: string } }).env?.VITE_QUANTIS_AI_MODEL;
 
-/** Chuẩn hóa base Ollama thành URL API (có /v1). */
+/** Chuẩn hóa base LLM thành URL API (có /v1). */
 function normalizeOllamaApiBase(url: string): string {
   const u = String(url).trim().replace(/\/+$/, "");
   if (!u) return "";
@@ -1504,11 +1692,11 @@ function normalizeOllamaApiBase(url: string): string {
 }
 
 /**
- * Base URL API AI (OpenAI-compatible) mà **trình duyệt** gọi tới — luôn là backend Node (proxy), không gọi thẳng Ollama.
+ * Base URL API AI (OpenAI-compatible) mà **trình duyệt** gọi tới — luôn là backend Node (proxy), không gọi thẳng vLLM.
  * Khi `getBase()` là gốc API đã mount (vd. `https://host/api/quantis/backend`), nối thêm `/api/quantis/ollama` vì
  * trong app Express route proxy nằm dưới path đó; reverse proxy giữ nguyên path → URL có thể trông lặp `/api/quantis` nhưng đúng với cách deploy.
- * Ollama thật chỉ do **Node** gọi theo `ollamaUpstreamUrl` / `OLLAMA_URL`.
- * Không có backend: dev dùng `VITE_OLLAMA_URL` hoặc mặc định localhost:11434.
+ * vLLM thật chỉ do **Node** gọi theo `ollamaUpstreamUrl` / `OLLAMA_URL`.
+ * Không có backend: dev dùng `VITE_OLLAMA_URL` hoặc mặc định localhost:8000.
  */
 export function getAiApiBase(): string {
   const b = getBase().replace(/\/+$/, "");
@@ -1518,13 +1706,12 @@ export function getAiApiBase(): string {
   return DEFAULT_OLLAMA;
 }
 
-/** Mô hình AI mặc định khi không cấu hình: research.neu.edu.vn = qwen3:8b, còn lại = llama3.2:8b. */
+/** Mô hình AI mặc định khi không cấu hình (vLLM). */
 export function getDefaultAiModel(): string {
-  if (isResearchNeu()) return RESEARCH_NEU_DEFAULT_MODEL;
-  return "llama3.2:8b";
+  return DEFAULT_AI_MODEL;
 }
 
-/** Kiểm tra API AI (Ollama) có phản hồi /api/tags không. */
+/** Kiểm tra API AI (vLLM) có phản hồi GET /v1/models không. */
 export async function checkAiApiAvailable(apiBase?: string): Promise<boolean> {
   const base = (apiBase != null && String(apiBase).trim() !== "") ? String(apiBase).trim().replace(/\/+$/, "") : getAiApiBase();
   if (!base) return false;
@@ -1532,7 +1719,7 @@ export async function checkAiApiAvailable(apiBase?: string): Promise<boolean> {
     const urlBase = base.replace(/\/v1\/?$/, "");
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${urlBase.replace(/\/+$/, "")}/api/tags`, { signal: controller.signal });
+    const res = await fetch(`${urlBase.replace(/\/+$/, "")}/v1/models`, { signal: controller.signal });
     clearTimeout(t);
     return res.ok;
   } catch {
@@ -1555,27 +1742,33 @@ export function filterModelsMinSize(models: string[], minB: number): string[] {
   })
 }
 
-/** Lấy danh sách model từ Ollama API /api/tags. apiBase thường là .../v1, sẽ gọi .../api/tags. */
+/** Rút danh sách tên model từ phản hồi OpenAI (`data[].id`) hoặc dạng Ollama cũ (`models[].name`). */
+function parseModelList(data: unknown): string[] {
+  const o = (data ?? {}) as { data?: Array<{ id?: string }>; models?: Array<{ name?: string }> }
+  const fromOpenAi = Array.isArray(o.data) ? o.data.map((m) => String(m?.id ?? "")).filter(Boolean) : []
+  if (fromOpenAi.length > 0) return fromOpenAi
+  return Array.isArray(o.models) ? o.models.map((m) => String(m?.name ?? "")).filter(Boolean) : []
+}
+
+/** Lấy danh sách model từ vLLM `GET /v1/models`. apiBase thường là .../v1. */
 export async function getOllamaModels(apiBase: string): Promise<string[]> {
   const base = (apiBase || DEFAULT_OLLAMA).replace(/\/v1\/?$/, "")
-  const url = `${base.replace(/\/+$/, "")}/api/tags`
+  const url = `${base.replace(/\/+$/, "")}/v1/models`
   try {
     const res = await fetch(url)
     if (!res.ok) return []
-    const data = (await res.json()) as { models?: Array<{ name: string }> }
-    const list = data?.models?.map((m) => m.name) ?? []
-    return list
+    return parseModelList(await res.json())
   } catch {
     return []
   }
 }
 
-/** Kiểm tra proxy Ollama trên backend Quantis (`GET .../api/quantis/ollama/api/tags`). */
+/** Kiểm tra proxy LLM trên backend Quantis (`GET .../api/quantis/ollama/v1/models`). */
 export async function checkOllamaProxyAvailable(backendBase: string): Promise<boolean> {
   const base = (backendBase || "").replace(/\/+$/, "");
   if (!base) return false;
   try {
-    const res = await fetch(`${base}/api/quantis/ollama/api/tags`, {
+    const res = await fetch(`${base}/api/quantis/ollama/v1/models`, {
       credentials: "include",
       cache: "no-store",
     });
@@ -1585,16 +1778,15 @@ export async function checkOllamaProxyAvailable(backendBase: string): Promise<bo
   }
 }
 
-/** Lấy danh sách model qua proxy backend Quantis (tránh CORS khi Ollama ở domain khác). */
+/** Lấy danh sách model qua proxy backend Quantis (tránh CORS khi vLLM ở domain khác). */
 export async function getOllamaModelsViaProxy(backendBase: string): Promise<string[]> {
   const base = (backendBase || "").replace(/\/+$/, "");
   if (!base) return [];
-  const url = `${base}/api/quantis/ollama/api/tags`;
+  const url = `${base}/api/quantis/ollama/v1/models`;
   try {
     const res = await fetch(url, { credentials: "include", cache: "no-store" });
     if (!res.ok) return [];
-    const data = (await res.json()) as { models?: Array<{ name: string }> };
-    return data?.models?.map((m) => m.name) ?? [];
+    return parseModelList(await res.json());
   } catch {
     return [];
   }
@@ -1648,7 +1840,47 @@ function extractContent(obj: unknown): string {
   return ""
 }
 
+/** Chặn lẫn ký tự Hán/Nhật/Hàn vào câu trả lời tiếng Việt/Anh (hiện tượng của mô hình Qwen đa ngôn ngữ). */
+const CJK_RE = /[⺀-⿟　-〿぀-ヿ㐀-䶿一-鿿가-힯豈-﫿＀-￯]/
+const CJK_RUN_RE = /[⺀-⿟぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]+[　-〿＀-￯]*/g
+const CJK_RETRY_HINT =
+  "\n\nLƯU Ý: bản trả lời trước đã lẫn chữ Hán/Nhật/Hàn. Hãy viết lại HOÀN TOÀN bằng tiếng Việt hoặc tiếng Anh (theo ngôn ngữ người dùng), không một ký tự Hán/Nhật/Hàn nào."
+
+/** Tập ký tự CJK có trong chuỗi (dùng để không coi chữ Hán do chính người dùng/dữ liệu nhập là "lạ"). */
+function cjkCharSet(s: string): Set<string> {
+  const set = new Set<string>()
+  for (const ch of s || "") if (CJK_RE.test(ch)) set.add(ch)
+  return set
+}
+
+/** Câu trả lời có ký tự CJK KHÔNG xuất hiện trong prompt (tránh bỏ qua guard khi prompt vô tình có chữ Hán). */
+function hasForeignCjk(out: string, promptCjk: Set<string>): boolean {
+  for (const ch of out || "") if (CJK_RE.test(ch) && !promptCjk.has(ch)) return true
+  return false
+}
+
+function stripCjk(s: string, keep?: Set<string>): string {
+  return (s || "")
+    .replace(CJK_RUN_RE, (run) => (keep && keep.size > 0 && [...run].every((c) => keep.has(c) || !CJK_RE.test(c)) ? run : " "))
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim()
+}
+
+/** Bỏ khối <think>…</think> (và thẻ <think> chưa đóng) nếu mô hình để lọt vào nội dung. */
+export function stripThinkBlocks(s: string): string {
+  return (s || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^[\s\S]*?<\/think>/i, "")
+    .replace(/<think>[\s\S]*$/i, "")
+    .trim()
+}
+
 function parseAiResponse(rawText: string): string {
+  return stripThinkBlocks(parseAiResponseRaw(rawText))
+}
+
+function parseAiResponseRaw(rawText: string): string {
   const data = (() => { try { return JSON.parse(rawText) as unknown } catch { return null } })()
   if (data !== null) {
     const single = extractContent(data)
@@ -1685,44 +1917,55 @@ export async function aiComplete(apiBase: string, prompt: string, systemHint?: s
 
   const base = apiBase || DEFAULT_OLLAMA
   const url = String(base).includes("completions") ? base : `${String(base).replace(/\/+$/, "")}/chat/completions`
-  const isLocalOllama = /ollama/i.test(String(base)) || /localhost:11434/.test(String(base))
-  const fallbackModel = isLocalOllama ? "llama3.2:8b" : "gpt-4o-mini"
-  const model = modelOverride || defModel || fallbackModel
-  const messages = systemWithHint
-    ? [{ role: "system" as const, content: systemWithHint }, { role: "user" as const, content: promptToSend }]
-    : [{ role: "user" as const, content: promptToSend }]
-  const body = { model, messages, max_tokens: maxTokens, stream: false }
+  const model = normalizeAiModelName(modelOverride || defModel || DEFAULT_AI_MODEL)
 
-  const doRequest = async (): Promise<Response> => {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal })
-      clearTimeout(timeoutId)
-      return res
-    } catch (e) {
-      clearTimeout(timeoutId)
-      throw e
-    }
-  }
+  const runOnce = async (systemToUse: string | undefined): Promise<string> => {
+    const messages = systemToUse
+      ? [{ role: "system" as const, content: systemToUse }, { role: "user" as const, content: promptToSend }]
+      : [{ role: "user" as const, content: promptToSend }]
+    // vLLM: tắt chế độ thinking của Qwen3.x để nhận ngay câu trả lời.
+    const body = { model, messages, max_tokens: maxTokens, stream: false, chat_template_kwargs: { enable_thinking: false } }
 
-  let lastError: Error | null = null
-  for (let attempt = 0; attempt <= 1; attempt++) {
-    try {
-      const res = await doRequest()
-      if (res.ok) {
-        const rawText = await res.text()
-        return parseAiResponse(rawText)
+    const doRequest = async (): Promise<Response> => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal })
+        clearTimeout(timeoutId)
+        return res
+      } catch (e) {
+        clearTimeout(timeoutId)
+        throw e
       }
-      const errText = await res.text()
-      const isRetryable = res.status >= 500 || res.status === 408 || /timeout|network|failed|refused/i.test(errText)
-      lastError = new Error(errText || `AI API error ${res.status}`)
-      if (!isRetryable || attempt === 1) throw lastError
-    } catch (e) {
-      lastError = e instanceof Error ? e : new Error(String(e))
-      const isRetryable = /abort|timeout|network|failed|refused/i.test(lastError.message)
-      if (attempt === 1 || !isRetryable) throw lastError
     }
+
+    let lastError: Error | null = null
+    for (let attempt = 0; attempt <= 1; attempt++) {
+      try {
+        const res = await doRequest()
+        if (res.ok) {
+          const rawText = await res.text()
+          return parseAiResponse(rawText)
+        }
+        const errText = await res.text()
+        const isRetryable = res.status >= 500 || res.status === 408 || /timeout|network|failed|refused/i.test(errText)
+        lastError = new Error(errText || `AI API error ${res.status}`)
+        if (!isRetryable || attempt === 1) throw lastError
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e))
+        const isRetryable = /abort|timeout|network|failed|refused/i.test(lastError.message)
+        if (attempt === 1 || !isRetryable) throw lastError
+      }
+    }
+    throw lastError || new Error(t("api.aiConnectionError"))
   }
-  throw lastError || new Error(t("api.aiConnectionError"))
+
+  const out = await runOnce(systemWithHint)
+  const promptCjk = cjkCharSet(promptToSend)
+  if (hasForeignCjk(out, promptCjk)) {
+    const retrySystem = (systemWithHint ?? "") + CJK_RETRY_HINT
+    const retried = await runOnce(retrySystem).catch(() => out)
+    return hasForeignCjk(retried, promptCjk) ? stripCjk(retried, promptCjk) : retried
+  }
+  return out
 }

@@ -184,19 +184,18 @@ export function SettingsModal({
     saveSettingsToServer({ defaultAiModel: value || null });
   };
 
-  const saveSettingsToServer = async (overrides?: { defaultAiModel?: string | null }) => {
+  /**
+   * Chỉ gửi lên server đúng (các) trường được truyền vào `patch` — KHÔNG dựng lại cả khối
+   * settings từ state input hiện tại. Trước đây dựng lại cả khối (kể cả khi chỉ đổi model ở
+   * dropdown) đã vô tình ghi đè ollamaUpstreamUrl/archiveUrl/... dùng chung toàn hệ thống về
+   * rỗng mỗi khi các ô input local (vd ollamaUpstreamInput) chưa kịp nạp giá trị hiện có —
+   * gây mất cấu hình Ollama dùng chung nhiều lần trong thực tế.
+   */
+  const saveSettingsToServer = async (patch: Partial<import("@/utils/storage").ServerSettings>) => {
     const base = backendUrlInput.trim().replace(/\/+$/, "") || quantisApi.getApiBase();
     if (!base) return;
-    const ou = ollamaUpstreamInput.trim().replace(/\/+$/, "").replace(/\/v1$/i, "") || null;
-    const settings = {
-      backendApiUrl: backendUrlInput.trim().replace(/\/+$/, "") || null,
-      archiveUrl: archiveUrlInput.trim().replace(/\/+$/, "") || null,
-      archiveFileUrl: archiveFileUrlInput.trim().replace(/\/+$/, "") || null,
-      ollamaUpstreamUrl: ou,
-      defaultAiModel: overrides?.defaultAiModel !== undefined ? overrides.defaultAiModel : (selectedModel || null),
-    };
-    const ok = await quantisApi.putQuantisSettings(settings, base);
-    if (ok) setServerSettings(settings);
+    const ok = await quantisApi.putQuantisSettings(patch, base);
+    if (ok) setServerSettings({ ...(getServerSettings() ?? {}), ...patch });
   };
 
   const handleSaveBackendUrl = () => {
@@ -204,7 +203,7 @@ export function SettingsModal({
     if (url) saveBackendApiUrl(url);
     else saveBackendApiUrl(null);
     setBackendTestResult(null);
-    saveSettingsToServer();
+    saveSettingsToServer({ backendApiUrl: url || null });
   };
 
   const handleSaveArchiveUrl = () => {
@@ -212,7 +211,7 @@ export function SettingsModal({
     if (url) saveArchiveUrl(url);
     else saveArchiveUrl(null);
     setArchiveTestResult(null);
-    saveSettingsToServer();
+    saveSettingsToServer({ archiveUrl: url || null });
   };
 
   const handleSaveArchiveFileUrl = () => {
@@ -220,13 +219,14 @@ export function SettingsModal({
     if (url) saveArchiveFileUrl(url);
     else saveArchiveFileUrl(null);
     setArchiveFileTestResult(null);
-    saveSettingsToServer();
+    saveSettingsToServer({ archiveFileUrl: url || null });
   };
 
   const handleSaveOllamaUpstream = () => {
     setAiTestResult(null);
     setAiModelsKey((k) => k + 1);
-    void saveSettingsToServer();
+    const ou = ollamaUpstreamInput.trim().replace(/\/+$/, "").replace(/\/v1$/i, "") || null;
+    void saveSettingsToServer({ ollamaUpstreamUrl: ou });
   };
 
   const effectiveBackendUrl = (): string =>
@@ -489,7 +489,7 @@ export function SettingsModal({
                 value={ollamaUpstreamInput}
                 onChange={(e) => setOllamaUpstreamInput(e.target.value)}
                 onBlur={handleSaveOllamaUpstream}
-                placeholder="http://127.0.0.1:11434"
+                placeholder="http://127.0.0.1:8000"
                 className={inputClass}
               />
               <button type="button" onClick={handleSaveOllamaUpstream} className={btnClass}>{t("settingsModal.saveButton")}</button>

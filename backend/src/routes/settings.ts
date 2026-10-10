@@ -1,6 +1,11 @@
 import { Request, Response } from "express"
 import { query, withSchema } from "../db.js"
 
+/** AI Portal proxy đặt X-User-Is-Admin server-side (không client nào spoof được) — cùng gate với PaperFinder embed.mjs. */
+function isAdminRequest(req: Request): boolean {
+  return req.headers["x-user-is-admin"] === "1"
+}
+
 type ServerSettings = {
   backendApiUrl?: string | null
   archiveUrl?: string | null
@@ -38,6 +43,17 @@ export async function getSettings(_req: Request, res: Response): Promise<void> {
 
 export async function putSettings(req: Request, res: Response): Promise<void> {
   try {
+    /**
+     * BUG đã vá: trước đây route này không kiểm tra quyền — bất kỳ user embedded nào đăng nhập
+     * cũng ghi đè được cấu hình dùng chung (kể cả ollamaSeckey). Chỉ áp dụng gate khi RUN_MODE=embedded
+     * (Portal proxy luôn set X-User-Is-Admin server-side, không client nào spoof được — xem
+     * routes/sample-datasets.ts / PaperFinder backend/embed.mjs isAdminRequest()); standalone
+     * (self-hosted, không qua Portal) không có header này nên giữ nguyên hành vi cũ để không phá vỡ triển khai đơn lẻ.
+     */
+    if (process.env.RUN_MODE === "embedded" && !isAdminRequest(req)) {
+      res.status(403).json({ error: "Chỉ quản trị viên mới có quyền thay đổi cấu hình dùng chung." })
+      return
+    }
     const body = req.body as ServerSettings | null
     const currentR = await query<{ settings: unknown }>(
       withSchema(`SELECT settings FROM __SCHEMA__.app_settings WHERE id = 1`)

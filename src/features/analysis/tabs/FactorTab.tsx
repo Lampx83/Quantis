@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows, computeEFA, type EFAResult } from "@/utils/stats";
+import { getDataRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -31,6 +31,7 @@ export function FactorTab({
   const [nFactors, setNFactors] = useState<number | "">("");
   const [result, setResult] = useState<EFAResult | null>(null);
   const [efaLoading, setEfaLoading] = useState(false);
+  const [kmoResult, setKmoResult] = useState<KMOBartlettResult | null>(null);
 
   const toggleCol = (c: string) =>
     setSelectedCols((prev) =>
@@ -40,6 +41,8 @@ export function FactorTab({
   const runEFA = async () => {
     if (selectedCols.length < 2) return;
     const k = typeof nFactors === "number" && nFactors >= 1 ? nFactors : undefined;
+    // KMO + Bartlett luôn tính ở frontend (độc lập backend Python) trên đúng các biến được chọn.
+    setKmoResult(computeKMOBartlett(rows, selectedCols));
     if (analysisBackendAvailable) {
       setEfaLoading(true);
       try {
@@ -103,6 +106,7 @@ export function FactorTab({
                   const v = e.target.value;
                   setNFactors(v === "" ? "" : Math.max(1, parseInt(v, 10) || 1));
                   setResult(null);
+                  setKmoResult(null);
                 }}
                 className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
                 placeholder="Auto"
@@ -137,7 +141,19 @@ export function FactorTab({
                     .join(", ") ?? "—"
                 }. Loadings (varimax) cho các biến: ${result.columnNames
                   .slice(0, 6)
-                  .join(", ")}${result.columnNames.length > 6 ? "..." : ""}.`}
+                  .join(", ")}${result.columnNames.length > 6 ? "..." : ""}.${
+                  kmoResult && kmoResult.kmo != null
+                    ? ` KMO = ${kmoResult.kmo.toFixed(3)}; Bartlett χ²(${kmoResult.bartlettDf}) = ${
+                        kmoResult.bartlettChi2?.toFixed(2) ?? "—"
+                      }, p ${
+                        kmoResult.bartlettP != null && kmoResult.bartlettP < 0.001
+                          ? "< 0.001"
+                          : "= " + (kmoResult.bartlettP?.toFixed(3) ?? "—")
+                      }; MSA thấp (<0.5): ${
+                        kmoResult.columnNames.filter((_, i) => (kmoResult.msa[i] ?? 1) < 0.5).join(", ") || "không có"
+                      }.`
+                    : ""
+                }`}
                 quickPrompts={[
                   {
                     label: t("factorTab.explainResultsLabel"),
@@ -146,6 +162,60 @@ export function FactorTab({
                 ]}
                 title={t("factorTab.askAiTitle")}
               />
+              {kmoResult && (
+                <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm" data-testid="kmo-bartlett">
+                  <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
+                    {t("factorTab.kmoTitle")}
+                    <span className="ml-2 font-normal text-neutral-500">({t("factorTab.casesLabel")}: {kmoResult.n})</span>
+                  </p>
+                  {kmoResult.singular || kmoResult.kmo == null ? (
+                    <p className="p-3 text-amber-700 dark:text-amber-400">{t("factorTab.kmoSingular")}</p>
+                  ) : (
+                    <>
+                      <table className="w-full">
+                        <tbody>
+                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
+                            <td className="p-2">{t("factorTab.kmoLabel")}</td>
+                            <td className={`p-2 text-right font-semibold ${kmoResult.kmo >= 0.5 ? "" : "text-red-600 dark:text-red-400"}`}>{kmoResult.kmo.toFixed(3)}</td>
+                          </tr>
+                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
+                            <td className="p-2">{t("factorTab.bartlettChi2Label")}</td>
+                            <td className="p-2 text-right">{kmoResult.bartlettChi2 != null ? kmoResult.bartlettChi2.toFixed(3) : "—"}</td>
+                          </tr>
+                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
+                            <td className="p-2">{t("factorTab.bartlettDfLabel")}</td>
+                            <td className="p-2 text-right">{kmoResult.bartlettDf}</td>
+                          </tr>
+                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
+                            <td className="p-2">{t("factorTab.bartlettSigLabel")}</td>
+                            <td className={`p-2 text-right font-semibold ${kmoResult.bartlettP != null && kmoResult.bartlettP < 0.05 ? "" : "text-red-600 dark:text-red-400"}`}>
+                              {kmoResult.bartlettP == null ? "—" : kmoResult.bartlettP < 0.001 ? "< 0.001" : kmoResult.bartlettP.toFixed(3)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div className="p-2 border-t border-neutral-100 dark:border-neutral-700/50">
+                        <p className="font-medium mb-1">{t("factorTab.msaHeader")}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                          {kmoResult.columnNames.map((name, i) => {
+                            const m = kmoResult.msa[i];
+                            return (
+                              <span key={name} className={m != null && m < 0.5 ? "text-red-600 dark:text-red-400 font-semibold" : ""}>
+                                {name}: {m != null ? m.toFixed(3) : "—"}{m != null && m < 0.5 ? ` (${t("factorTab.msaLowFlag")})` : ""}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="p-2 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
+                        <p>{kmoResult.kmo >= 0.9 ? t("factorTab.kmoMarvelous") : kmoResult.kmo >= 0.8 ? t("factorTab.kmoMeritorious") : kmoResult.kmo >= 0.7 ? t("factorTab.kmoMiddling") : kmoResult.kmo >= 0.6 ? t("factorTab.kmoMediocre") : kmoResult.kmo >= 0.5 ? t("factorTab.kmoMiserable") : t("factorTab.kmoUnacceptable")}</p>
+                        {kmoResult.bartlettP != null && <p>{kmoResult.bartlettP < 0.05 ? t("factorTab.bartlettSignificant") : t("factorTab.bartlettNotSignificant")}</p>}
+                        <p>{t("factorTab.kmoCriteria")}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
                 <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
                   {t("factorTab.eigenvaluesHeader")}

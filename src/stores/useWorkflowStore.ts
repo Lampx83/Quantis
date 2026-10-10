@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workflow, WorkflowStep } from "@/types";
-import { useSyncStore } from "./useSyncStore";
+import { useSyncStore, canSyncToServer } from "./useSyncStore";
 
 export interface WorkflowState {
   // --- Persisted State ---
@@ -198,8 +198,8 @@ export const useWorkflowStore = create<WorkflowState>()(
         setItem: (name, value) => {
           try {
             const syncState = useSyncStore.getState();
-            const canSyncToServer = syncState.useBackend && (!syncState.authConfig?.authEnabled || !!syncState.authUser);
-            const persistWorkspaceLocally = !canSyncToServer || !syncState.isOnline;
+            const canSync = canSyncToServer(syncState);
+            const persistWorkspaceLocally = !canSync || !syncState.isOnline;
             if (!persistWorkspaceLocally) {
               const lightweightValue = {
                 ...value,

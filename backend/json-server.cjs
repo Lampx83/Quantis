@@ -33,6 +33,13 @@ const QUANTIS_AUTH_ENABLED = process.env.QUANTIS_AUTH_ENABLED === "1" || process
 const QUANTIS_AUTH_REQUIRED = process.env.QUANTIS_AUTH_REQUIRED === "1" || process.env.QUANTIS_AUTH_REQUIRED === "true";
 const QUANTIS_SSO_LABEL = process.env.QUANTIS_SSO_LABEL || "Đăng nhập SSO";
 const QUANTIS_SSO_REDIRECT_URL = (process.env.QUANTIS_SSO_REDIRECT_URL || "").trim();
+/**
+ * BẢO MẬT: kho dữ liệu CHUNG toàn cục (store.json) không có xác thực -> ai cũng đọc/ghi đè được qua URL công khai.
+ * Mặc định TẮT (403). Chỉ bật khi chạy một người dùng cục bộ/dev: QUANTIS_ALLOW_GLOBAL_DATA=1.
+ * Chế độ theo-user (QUANTIS_AUTH_ENABLED + phiên đăng nhập) không bị ảnh hưởng. Trên Portal, workspace lưu theo user
+ * ở router Quantis chạy trong Portal (/api/apps/quantis/api/quantis/data), không qua backend này.
+ */
+const QUANTIS_ALLOW_GLOBAL_DATA = process.env.QUANTIS_ALLOW_GLOBAL_DATA === "1" || process.env.QUANTIS_ALLOW_GLOBAL_DATA === "true";
 const SESSION_SECRET = process.env.SESSION_SECRET || "quantis-dev-secret-change-in-production";
 const ADMIN_EMAILS = new Set(
   (process.env.QUANTIS_ADMIN_EMAILS || "")
@@ -40,6 +47,34 @@ const ADMIN_EMAILS = new Set(
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
 );
+/**
+ * Container này (json-server.cjs) chạy tách biệt trên .232, không đi qua middleware của aiportal-backend
+ * nên không tự có X-User-Is-Admin đáng tin cậy. Xác thực admin bằng cách hỏi lại chính aiportal-backend
+ * (địa chỉ nội bộ, cùng mạng riêng) kèm cookie phiên gốc của trình duyệt — endpoint đó đã tự giải mã JWT
+ * phiên Portal server-side (xem AI-Portal backend/src/lib/mounted-apps.ts + Quantis backend/src/createApiRouter.ts).
+ */
+const PORTAL_ADMIN_STATUS_URL =
+  process.env.PORTAL_ADMIN_STATUS_URL || "http://10.2.13.54:3001/api/quantis/auth/admin-status";
+
+async function isAdminViaPortal(req) {
+  const cookie = req.headers.cookie;
+  if (!cookie) return false;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 4000);
+    const resp = await fetch(PORTAL_ADMIN_STATUS_URL, {
+      headers: { cookie },
+      signal: controller.signal,
+    });
+    clearTimeout(t);
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return Boolean(data?.isAdmin);
+  } catch (e) {
+    console.error("isAdminViaPortal:", e.message);
+    return false;
+  }
+}
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -88,7 +123,7 @@ const INFO_HTML = `<!DOCTYPE html>
     <ul>
       <li><strong>Lưu trữ dữ liệu:</strong> Lưu datasets và workflows của Quantis vào file JSON (<code>backend/data/store.json</code>), đồng bộ với frontend qua API.</li>
       <li><strong>Proxy Archive NEU:</strong> Chuyển tiếp các request tới Archive NEU (<code>/api/quantis/archive/*</code>) để tìm và tải dataset, tránh CORS.</li>
-      <li><strong>Proxy Ollama (AI):</strong> Chuyển tiếp <code>/api/quantis/ollama/*</code> tới Ollama theo <code>settings.json → ollamaUpstreamUrl</code> (Cấu hình kết nối) hoặc <code>OLLAMA_URL</code> nếu có, tránh CORS.</li>
+      <li><strong>Proxy LLM (AI, vLLM):</strong> Chuyển tiếp <code>/api/quantis/ollama/*</code> tới vLLM (OpenAI-compatible: <code>/v1/chat/completions</code>, <code>/v1/models</code>; embedding vẫn Ollama) theo <code>settings.json → ollamaUpstreamUrl</code> (Cấu hình kết nối) hoặc <code>OLLAMA_URL</code> nếu có, tránh CORS.</li>
       <li><strong>Proxy phân tích (tùy chọn):</strong> Khi cấu hình <code>ANALYZE_PYTHON_URL</code>, chuyển tiếp <code>/api/quantis/analyze/*</code> tới backend Python (R/stats).</li>
     </ul>
   </section>
@@ -101,7 +136,7 @@ const INFO_HTML = `<!DOCTYPE html>
       <li><span class="method post">POST</span> <code>/api/quantis/data</code> — Lưu datasets và workflows. Body: <code>{ "datasets": [...], "workflows": [...] }</code>.</li>
       <li><span class="method post">POST</span> <code>/api/quantis/parse-file</code> — Parse file (Excel, ODS, SPSS, Stata, SAS, R) thành bảng. Gửi multipart <code>file</code>. Cần Python backend (<code>ANALYZE_PYTHON_URL</code>).</li>
       <li><span class="method any">*</span> <code>/api/quantis/archive/*</code> — Proxy tới Archive NEU (<code>api/v1/*</code>). Dùng để tìm kiếm và tải dataset vào Quantis.</li>
-      <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới Ollama (ưu tiên cấu hình admin / <code>settings.json</code>, sau đó <code>OLLAMA_URL</code>).</li>
+      <li><span class="method any">*</span> <code>/api/quantis/ollama/*</code> — Proxy tới vLLM (ưu tiên cấu hình admin / <code>settings.json</code>, sau đó <code>OLLAMA_URL</code>).</li>
       <li><span class="method any">*</span> <code>/api/quantis/analyze/*</code> — Proxy tới backend phân tích Python (nếu đã cấu hình <code>ANALYZE_PYTHON_URL</code>).</li>
     </ul>
   </section>
@@ -143,7 +178,7 @@ app.get("/api/quantis", (req, res) => {
       { method: "POST", path: "/api/quantis/auth/logout", description: "Đăng xuất" },
       { method: "GET", path: "/api/quantis/auth/sso", description: "Redirect SSO (khi QUANTIS_SSO_REDIRECT_URL)" },
       { method: "*", path: "/api/quantis/archive/*", description: "Proxy Archive NEU" },
-      { method: "*", path: "/api/quantis/ollama/*", description: "Proxy Ollama (settings ollamaUpstreamUrl || OLLAMA_URL)" },
+      { method: "*", path: "/api/quantis/ollama/*", description: "Proxy LLM vLLM (settings ollamaUpstreamUrl || OLLAMA_URL; /api/tags -> /v1/models)" },
       { method: "*", path: "/api/quantis/analyze/*", description: "Proxy backend phân tích (khi cấu hình ANALYZE_PYTHON_URL)" },
     ],
     docs: "Truy cập GET / để xem trang thông tin đầy đủ.",
@@ -198,7 +233,7 @@ function readSettings() {
       backendApiUrl: `${base}/api/quantis/backend`,
       archiveUrl: `${base}/api/archive`,
       archiveFileUrl: `${base}/api/archive-file`,
-      defaultAiModel: "qwen2.5:14b-instruct-ctx16k",
+      defaultAiModel: "qwen3.5-35b-a3b-int4",
     };
   }
   return {};
@@ -444,6 +479,10 @@ function handleGetData(req, res) {
       return;
     }
     const ctx = resolveDataForRequest(req);
+    if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
+      res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
+      return;
+    }
     if (ctx.mode === "user") {
       const store = readUserStore(ctx.userId);
       res.json({ datasets: store.datasets, workflows: store.workflows });
@@ -466,6 +505,10 @@ function handlePostData(req, res) {
     const datasets = Array.isArray(req.body?.datasets) ? req.body.datasets : [];
     const workflows = Array.isArray(req.body?.workflows) ? req.body.workflows : [];
     const ctx = resolveDataForRequest(req);
+    if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
+      res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
+      return;
+    }
     if (ctx.mode === "user") {
       writeUserStore(ctx.userId, datasets, workflows);
     } else {
@@ -488,8 +531,12 @@ function handleGetSettings(req, res) {
   }
 }
 
-function handlePutSettings(req, res) {
+async function handlePutSettings(req, res) {
   try {
+    if (!(await isAdminViaPortal(req))) {
+      res.status(403).json({ error: "Chỉ quản trị viên mới có quyền thay đổi cấu hình dùng chung." });
+      return;
+    }
     const body = req.body || {};
     const current = readSettings();
     const settings = {
@@ -599,15 +646,45 @@ app.use("/api/quantis/analyze", async (req, res) => {
   }
 });
 
+/**
+ * Chuẩn hoá upstream LLM (vLLM): bỏ "/v1" đuôi; nếu base kết thúc bằng "/ollama" (cấu hình cũ) thì đổi thành "/vllm".
+ * Tên cấu hình (ollamaUpstreamUrl / OLLAMA_URL) giữ nguyên để không phải sửa tay.
+ */
+function normalizeLlmUpstream(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/v1$/i, "")
+    .replace(/\/ollama$/i, "/vllm");
+}
+
+/** Model mặc định (vLLM) và chuẩn hoá tên model kiểu Ollama ("a:b" hoặc "qwen2.5…") → model mặc định. */
+const DEFAULT_LLM_MODEL = "qwen3.5-35b-a3b-int4";
+function normalizeLlmModel(model) {
+  const m = String(model == null ? "" : model).trim();
+  if (!m) return DEFAULT_LLM_MODEL;
+  if (m.includes(":") || /^qwen2\.5/i.test(m) || /^llama3/i.test(m)) return DEFAULT_LLM_MODEL;
+  return m;
+}
+
+/** Bỏ khối <think>…</think> (nếu lọt vào nội dung). */
+function stripThinkBlocks(s) {
+  return String(s || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^[\s\S]*?<\/think>/i, "")
+    .replace(/<think>[\s\S]*$/i, "")
+    .trim();
+}
+
 function effectiveOllamaUpstream() {
   try {
     const s = readSettings();
     const u = s.ollamaUpstreamUrl != null ? String(s.ollamaUpstreamUrl).trim() : "";
-    if (u) return u.replace(/\/+$/, "").replace(/\/v1$/i, "");
+    if (u) return normalizeLlmUpstream(u);
   } catch (_) {
     /* ignore */
   }
-  return OLLAMA_URL.replace(/\/+$/, "").replace(/\/v1$/i, "");
+  return normalizeLlmUpstream(OLLAMA_URL);
 }
 
 function effectiveOllamaSeckey() {
@@ -621,17 +698,32 @@ function effectiveOllamaSeckey() {
   return OLLAMA_SECKEY;
 }
 
+/**
+ * Proxy LLM: giữ nguyên đường dẫn frontend đang dùng (/api/quantis/ollama/*) nhưng upstream là vLLM (OpenAI-compatible).
+ *  - POST /v1/chat/completions -> chuyển tiếp; chuẩn hoá model, mặc định chat_template_kwargs.enable_thinking=false;
+ *    lọc <think>…</think> khỏi nội dung (không stream); stream SSE được pipe nguyên.
+ *  - GET /v1/models            -> chuyển tiếp.
+ *  - GET /api/tags (cũ)        -> ánh xạ sang /v1/models, trả {models:[{name}]} (+ data) cho client cũ.
+ *  - /api/embed*, /api/embeddings, /v1/embeddings -> vẫn Ollama (cùng gateway, đổi "/vllm" -> "/ollama").
+ */
 function createOllamaProxyHandler() {
   return async (req, res) => {
-    const upstream = effectiveOllamaUpstream();
-    if (!upstream || !String(upstream).trim()) {
+    const llmUpstream = effectiveOllamaUpstream();
+    if (!llmUpstream || !String(llmUpstream).trim()) {
       return res.status(503).json({
-        error: "Ollama upstream not configured",
+        error: "LLM upstream not configured",
         detail: "Set ollamaUpstreamUrl in Quantis admin (Cấu hình kết nối) or OLLAMA_URL env.",
       });
     }
     const pathAndQuery = req.url.startsWith("/") ? req.url : "/" + req.url;
-    const targetUrl = `${upstream}${pathAndQuery}`;
+    const qIdx = pathAndQuery.indexOf("?");
+    const pathname = (qIdx >= 0 ? pathAndQuery.slice(0, qIdx) : pathAndQuery).replace(/\/+$/, "");
+    const search = qIdx >= 0 ? pathAndQuery.slice(qIdx) : "";
+    const isEmbedding = /^\/(api\/embed(dings)?|v1\/embeddings)$/i.test(pathname);
+    const isTagsLegacy = req.method === "GET" && /^\/api\/tags$/i.test(pathname);
+    const isChat = req.method === "POST" && /^\/v1\/chat\/completions$/i.test(pathname);
+    const upstream = isEmbedding ? llmUpstream.replace(/\/vllm$/i, "/ollama") : llmUpstream;
+    const targetUrl = `${upstream}${isTagsLegacy ? "/v1/models" : pathname}${search}`;
     let host;
     try {
       host = new URL(upstream).host;
@@ -644,14 +736,22 @@ function createOllamaProxyHandler() {
     delete headers["cookie"];
     // Body được serialize lại bên dưới nên content-length cũ không còn đúng.
     delete headers["content-length"];
+    delete headers["accept-encoding"];
     delete headers["x-ollama-seckey"];
     const seckey = effectiveOllamaSeckey();
     if (seckey) headers["x-ollama-seckey"] = seckey;
+    let wantsStream = false;
     try {
       const opt = { method: req.method, headers, redirect: "follow" };
       if (req.method !== "GET" && req.method !== "HEAD") {
         if (req.body != null && typeof req.body === "object" && !Array.isArray(req.body) && !Buffer.isBuffer(req.body)) {
-          opt.body = JSON.stringify(req.body);
+          const body = { ...req.body };
+          if (isChat) {
+            body.model = normalizeLlmModel(body.model);
+            body.chat_template_kwargs = { enable_thinking: false, ...(body.chat_template_kwargs || {}) };
+            wantsStream = body.stream === true;
+          }
+          opt.body = JSON.stringify(body);
           if (!headers["content-type"]) headers["content-type"] = "application/json";
         } else if (Buffer.isBuffer(req.body) || (typeof req.body === "object" && req.body?.length)) {
           opt.body = req.body;
@@ -663,22 +763,41 @@ function createOllamaProxyHandler() {
       proxyRes.headers.forEach((v, k) => {
         const lower = k.toLowerCase();
         if (lower === "transfer-encoding" || lower === "connection") return;
+        if (lower === "content-length" || lower === "content-encoding") return;
         if (lower.startsWith("access-control-")) return;
         res.setHeader(k, v);
       });
+      if (wantsStream && proxyRes.ok && proxyRes.body && contentType.includes("text/event-stream")) {
+        const { Readable } = require("stream");
+        const stream = Readable.fromWeb(proxyRes.body);
+        stream.on("error", () => res.end());
+        req.on("close", () => stream.destroy());
+        return stream.pipe(res);
+      }
       if (contentType.includes("application/json")) {
-        return res.json(await proxyRes.json());
+        const data = await proxyRes.json();
+        if (proxyRes.ok && isTagsLegacy && data && Array.isArray(data.data)) {
+          const models = data.data.map((m) => ({ name: m.id, model: m.id }));
+          return res.json({ models, data: data.data });
+        }
+        if (proxyRes.ok && isChat && data && Array.isArray(data.choices)) {
+          for (const c of data.choices) {
+            if (c && c.message && typeof c.message.content === "string") c.message.content = stripThinkBlocks(c.message.content);
+          }
+        }
+        return res.json(data);
       }
       const buf = Buffer.from(await proxyRes.arrayBuffer());
       res.send(buf);
     } catch (e) {
-      console.error("Ollama proxy error:", e.message);
-      res.status(502).json({ error: "Ollama proxy failed", detail: e.message });
+      console.error("LLM proxy error:", e.message);
+      if (res.headersSent) return res.end();
+      res.status(502).json({ error: "LLM proxy failed", detail: e.message });
     }
   };
 }
 
-// Proxy Ollama: frontend chỉ gọi backend; upstream từ settings.ollamaUpstreamUrl hoặc OLLAMA_URL
+// Proxy LLM (vLLM): frontend chỉ gọi backend; upstream từ settings.ollamaUpstreamUrl hoặc OLLAMA_URL
 app.use("/api/quantis/ollama", createOllamaProxyHandler());
 app.use("/api/quantis/backend/api/quantis/ollama", createOllamaProxyHandler());
 

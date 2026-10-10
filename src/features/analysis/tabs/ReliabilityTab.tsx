@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type { Dataset } from "@/types";
-import { computeCronbachAlpha } from "@/utils/stats";
+import { computeCronbachAlpha, computeCronbachDetail } from "@/utils/stats";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -37,6 +37,13 @@ export function ReliabilityTab({
   const alpha =
     (analysisBackendAvailable ? cronbachBackendResult : null) ??
     (selectedItems.length >= 2 ? computeCronbachAlpha(rows, selectedItems) : null);
+
+  // Bảng theo từng biến (Item-Total Statistics) luôn tính ở frontend, độc lập backend Python.
+  const itemKey = selectedItems.join("\u0001");
+  const detail = useMemo(() => (selectedItems.length >= 2 ? computeCronbachDetail(rows, selectedItems) : null), [rows, itemKey]);
+  const lowItems = detail ? detail.items.filter((it) => it.lowItemTotal).map((it) => it.name) : [];
+  const raiseItems = detail ? detail.items.filter((it) => it.raisesAlphaIfDeleted).map((it) => it.name) : [];
+  const fmtNum = (x: number | null | undefined, d = 3) => (x == null || Number.isNaN(x) ? "—" : x.toFixed(d));
 
   return (
     <div className="w-full max-w-full">
@@ -91,7 +98,7 @@ export function ReliabilityTab({
                 : alpha >= 0.6
                 ? t("reliabilityTab.evalNeedsImprovement")
                 : t("reliabilityTab.evalLow")
-            }. Các item: ${selectedItems.join(", ")}.`}
+            }. Các item: ${selectedItems.join(", ")}.${detail ? ` Bảng biến–tổng: ${detail.items.map((it) => `${it.name} (corrected item-total=${fmtNum(it.correctedItemTotal)}, α nếu loại=${fmtNum(it.alphaIfDeleted)})`).join("; ")}.${lowItems.length ? ` ${t("reliabilityTab.aiFlaggedPrefix")} ${lowItems.join(", ")}.` : ""}${raiseItems.length ? ` ${t("reliabilityTab.aiRaisesPrefix")} ${raiseItems.join(", ")}.` : ""}` : ""}`}
             quickPrompts={[
               {
                 label: t("reliabilityTab.interpretAlphaLabel"),
@@ -112,6 +119,46 @@ export function ReliabilityTab({
               ? t("reliabilityTab.resultNeedsImprovement")
               : t("reliabilityTab.resultLow")}
           </p>
+        </div>
+      )}
+      {detail && (
+        <div className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm" data-testid="item-total-table">
+          <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
+            {t("reliabilityTab.itemTotalTitle")}
+            <span className="ml-2 font-normal text-neutral-500">({t("reliabilityTab.nCasesLabel")}: {detail.nCases})</span>
+          </p>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-200 dark:border-neutral-600">
+                <th className="text-left p-2">{t("reliabilityTab.colItem")}</th>
+                <th className="text-right p-2">{t("reliabilityTab.colScaleMean")}</th>
+                <th className="text-right p-2">{t("reliabilityTab.colScaleVar")}</th>
+                <th className="text-right p-2">{t("reliabilityTab.colCitc")}</th>
+                <th className="text-right p-2">{t("reliabilityTab.colAlphaDel")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.items.map((it) => (
+                <tr key={it.name} className={`border-b border-neutral-100 dark:border-neutral-700/50 ${it.lowItemTotal || it.raisesAlphaIfDeleted ? "bg-amber-50 dark:bg-amber-900/20" : ""}`}>
+                  <td className="p-2 font-medium">{it.name}</td>
+                  <td className="p-2 text-right">{fmtNum(it.scaleMeanIfDeleted)}</td>
+                  <td className="p-2 text-right">{fmtNum(it.scaleVarianceIfDeleted)}</td>
+                  <td className={`p-2 text-right ${it.lowItemTotal ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`}>
+                    {fmtNum(it.correctedItemTotal)}{it.lowItemTotal ? ` (${t("reliabilityTab.flagLowCitc")})` : ""}
+                  </td>
+                  <td className={`p-2 text-right ${it.raisesAlphaIfDeleted ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`}>
+                    {fmtNum(it.alphaIfDeleted)}{it.raisesAlphaIfDeleted ? ` (${t("reliabilityTab.flagRaisesAlpha")})` : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="p-2 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
+            {lowItems.length === 0 && raiseItems.length === 0 && <p>{t("reliabilityTab.noteAllGood")}</p>}
+            {lowItems.length > 0 && <p>{t("reliabilityTab.noteLowCitc")} ({lowItems.join(", ")})</p>}
+            {raiseItems.length > 0 && <p>{t("reliabilityTab.noteRaisesAlpha")} ({raiseItems.join(", ")})</p>}
+            {detail.nItems < 3 && <p>{t("reliabilityTab.needThreeItems")}</p>}
+          </div>
         </div>
       )}
     </div>

@@ -8,7 +8,7 @@
 #   4. Branch:            main
 #   5. (Tùy chọn) Environment variables:
 #      DOCKERHUB_USER         = username Docker Hub (mặc định: Lampx83)
-#      OLLAMA_URL = (tùy chọn) URL Ollama khi chưa có trong Cấu hình kết nối; ưu tiên ollamaUpstreamUrl admin lưu trên server
+#      OLLAMA_URL = (tùy chọn) URL vLLM (vd. http://<gateway>:8037/vllm) khi chưa có trong Cấu hình kết nối; ưu tiên ollamaUpstreamUrl admin lưu trên server
 #
 
 services:

@@ -17,6 +17,7 @@ import { AccountModal } from "./AccountModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DemoGalleryModal } from "./DemoGalleryModal";
 import { SampleDatasetModal } from "./SampleDatasetModal";
+import { SampleAdminModal } from "./SampleAdminModal";
 import { ArchiveModal } from "./ArchiveModal";
 import { t } from "@/i18n";
 
@@ -127,6 +128,7 @@ export function AppModals() {
       <ConfirmDialog />
       <DemoGalleryModal />
       <SampleDatasetModal />
+      <SampleAdminModal />
       <ArchiveModal />
 
       {guideOpen && (

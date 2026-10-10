@@ -30,16 +30,28 @@ async function ensureUserExistsBeforeTransaction(userId: string, req: Request): 
     [userId]
   )
   if ((existing?.rows?.length ?? 0) > 0) return
-  const email = (req.headers["x-user-email"] as string)?.trim() || `user-${userId}@portal.local`
+  let email = (req.headers["x-user-email"] as string)?.trim().toLowerCase() || `user-${userId}@portal.local`
   const name = (req.headers["x-user-name"] as string)?.trim() || email
+  // Email đã thuộc id khác (vd. khách dùng chung "guest@local") -> dùng email tổng hợp, không gộp/chiếm dữ liệu.
+  const taken = await query<{ n: number }>(
+    withSchema(`SELECT 1 AS n FROM __SCHEMA__.users WHERE email = $1 AND id <> $2::uuid LIMIT 1`),
+    [email, userId]
+  )
+  if ((taken?.rows?.length ?? 0) > 0) email = `user-${userId}@portal.local`
   await query(
     withSchema(
       `INSERT INTO __SCHEMA__.users (id, email, name, created_at)
        VALUES ($1::uuid, $2, $3, now())
-       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, name = EXCLUDED.name`
+       ON CONFLICT (id) DO NOTHING`
     ),
     [userId, email, name || "User"]
   )
+}
+
+/** Khách Portal (email "guest@local", id ngẫu nhiên mỗi request) không được lưu workspace lên DB. */
+function isGuestRequest(req: Request): boolean {
+  const email = ((req.headers["x-user-email"] as string) ?? "").trim().toLowerCase()
+  return !email || email.endsWith("@local")
 }
 
 function mustHaveUserForEmbedded(userId: string | null, res: Response): userId is string {
@@ -101,6 +113,11 @@ export async function postData(req: Request, res: Response): Promise<void> {
     }
 
     if (process.env.RUN_MODE === "embedded" && !mustHaveUserForEmbedded(userId, res)) return
+    // Có x-user-id = request qua Portal (RUN_MODE có thể chưa kịp = embedded trong bundle) -> khách không được ghi DB.
+    if (((req.headers["x-user-id"] as string) ?? "").trim() && isGuestRequest(req)) {
+      res.status(401).json({ error: "Cần đăng nhập để lưu workspace", code: "LOGIN_REQUIRED" })
+      return
+    }
 
     const body = req.body
     if (body == null || typeof body !== "object") {
