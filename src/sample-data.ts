@@ -14,9 +14,10 @@ async function datasetFromSampleId(sampleId: string): Promise<Dataset | null> {
   const full = await fetchSampleDatasetFull(sampleId);
   if (!full) return null;
   const id = generateId();
-  const headers = full.header;
-  const dataRows = full.rows_data;
-  const data = full.data;
+  const headers = full.header ?? full.data?.[0] ?? [];
+  const dataRows = full.rows_data ?? (full.data ?? []).slice(1);
+  const data = full.data ?? [headers, ...dataRows];
+  if (!headers.length) return null;
   const preview = data.slice(0, 8);
   return {
     id,

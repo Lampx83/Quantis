@@ -9,7 +9,8 @@ services:
     environment:
       PORT: "4001"
       ARCHIVE_NEU_URL: "https://archive.neu.edu.vn"
-      # OLLAMA_URL: "http://host.docker.internal:11434"
+      # OLLAMA_URL: "http://host.docker.internal:8000"   # vLLM (OpenAI-compatible); cấu hình cũ .../ollama tự đổi thành .../vllm
+      # OLLAMA_SECKEY: ""   # header x-ollama-seckey của gateway Kong
       ANALYZE_PYTHON_URL: "http://quantis-python:8000"
     volumes:
       - quantis-data:/app/data

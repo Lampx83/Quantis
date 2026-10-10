@@ -31,7 +31,7 @@ Xem thêm khối **Tài khoản & đăng nhập** trong menu **⋮ → Cấu hì
 - **Workflow:** Save workflow, generate R script, versioning.
 - **Reproducibility:** Tab **Pre-reg & tái lập** — pre-registration và checklist open science, đồng bộ `localStorage` với Writium (Đề cương nghiên cứu).
 - **Mobile / màn hình nhỏ:** Layout `100dvh`, safe-area (notch), sidebar dạng overlay + nút footer; tab header nhãn rút gọn; thanh công cụ cuộn ngang; vùng chạm ~44px ở chỗ chính.
-- **Cấu hình kết nối (menu ⋮):** Kiểm tra Backend + Ollama, lưu URL; cuối cửa sổ có **Đặt lại ứng dụng** — xóa toàn bộ dữ liệu cục bộ (`quantis_*` trong localStorage, v.v.) như mới cài; nếu đang đăng nhập có thể ghi workspace rỗng lên server (có hộp thoại xác nhận).
+- **Cấu hình kết nối (menu ⋮):** Kiểm tra Backend + LLM (vLLM), lưu URL; cuối cửa sổ có **Đặt lại ứng dụng** — xóa toàn bộ dữ liệu cục bộ (`quantis_*` trong localStorage, v.v.) như mới cài; nếu đang đăng nhập có thể ghi workspace rỗng lên server (có hộp thoại xác nhận).
 
 ## Run
 
@@ -66,7 +66,7 @@ Chi tiết: [`docs/QUANTIS-DATABASE.md`](docs/QUANTIS-DATABASE.md). **Nhúng Por
 
 #### B) JSON + proxy — dev nhanh (`json-server.cjs`, port **4001**)
 
-Lưu `data/store.json` + tùy chọn auth file-based. Proxy Archive, Ollama, parse-file → Python.
+Lưu `data/store.json` + tùy chọn auth file-based. Proxy Archive, LLM (vLLM, OpenAI-compatible; `/api/quantis/ollama/*` → `/v1/chat/completions`, `/v1/models`), parse-file → Python.
 
 ```bash
 cd Quantis/backend

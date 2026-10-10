@@ -33,6 +33,13 @@ const QUANTIS_AUTH_ENABLED = process.env.QUANTIS_AUTH_ENABLED === "1" || process
 const QUANTIS_AUTH_REQUIRED = process.env.QUANTIS_AUTH_REQUIRED === "1" || process.env.QUANTIS_AUTH_REQUIRED === "true";
 const QUANTIS_SSO_LABEL = process.env.QUANTIS_SSO_LABEL || "Đăng nhập SSO";
 const QUANTIS_SSO_REDIRECT_URL = (process.env.QUANTIS_SSO_REDIRECT_URL || "").trim();
+/**
+ * BẢO MẬT: kho dữ liệu CHUNG toàn cục (store.json) không có xác thực -> ai cũng đọc/ghi đè được qua URL công khai.
+ * Mặc định TẮT (403). Chỉ bật khi chạy một người dùng cục bộ/dev: QUANTIS_ALLOW_GLOBAL_DATA=1.
+ * Chế độ theo-user (QUANTIS_AUTH_ENABLED + phiên đăng nhập) không bị ảnh hưởng. Trên Portal, workspace lưu theo user
+ * ở router Quantis chạy trong Portal (/api/apps/quantis/api/quantis/data), không qua backend này.
+ */
+const QUANTIS_ALLOW_GLOBAL_DATA = process.env.QUANTIS_ALLOW_GLOBAL_DATA === "1" || process.env.QUANTIS_ALLOW_GLOBAL_DATA === "true";
 const SESSION_SECRET = process.env.SESSION_SECRET || "quantis-dev-secret-change-in-production";
 const ADMIN_EMAILS = new Set(
   (process.env.QUANTIS_ADMIN_EMAILS || "")
@@ -472,6 +479,10 @@ function handleGetData(req, res) {
       return;
     }
     const ctx = resolveDataForRequest(req);
+    if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
+      res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
+      return;
+    }
     if (ctx.mode === "user") {
       const store = readUserStore(ctx.userId);
       res.json({ datasets: store.datasets, workflows: store.workflows });
@@ -494,6 +505,10 @@ function handlePostData(req, res) {
     const datasets = Array.isArray(req.body?.datasets) ? req.body.datasets : [];
     const workflows = Array.isArray(req.body?.workflows) ? req.body.workflows : [];
     const ctx = resolveDataForRequest(req);
+    if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
+      res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
+      return;
+    }
     if (ctx.mode === "user") {
       writeUserStore(ctx.userId, datasets, workflows);
     } else {

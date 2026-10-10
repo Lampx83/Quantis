@@ -1413,6 +1413,96 @@ export function computeCronbachAlpha(rows: string[][], columnNames: string[]): n
   return (k / (k - 1)) * (1 - sumVar / totalVar);
 }
 
+/** Một dòng của bảng "Item-Total Statistics" (kiểu SPSS) cho một biến quan sát. */
+export interface CronbachItemRow {
+  name: string;
+  /** Trung bình thang đo khi loại biến này (Scale Mean if Item Deleted) */
+  scaleMeanIfDeleted: number;
+  /** Phương sai thang đo khi loại biến này (Scale Variance if Item Deleted, mẫu n−1) */
+  scaleVarianceIfDeleted: number;
+  /** Tương quan biến–tổng hiệu chỉnh: Pearson giữa biến i và tổng các biến còn lại */
+  correctedItemTotal: number | null;
+  /** Cronbach's alpha tính lại khi loại biến này (null nếu chỉ còn <2 biến) */
+  alphaIfDeleted: number | null;
+  /** Corrected Item-Total < 0,3 */
+  lowItemTotal: boolean;
+  /** Loại biến này làm α tăng (so với α hiện tại, làm tròn 3 chữ số) */
+  raisesAlphaIfDeleted: boolean;
+}
+
+export interface CronbachDetail {
+  alpha: number;
+  nItems: number;
+  /** Số quan sát đầy đủ (listwise) dùng để tính */
+  nCases: number;
+  items: CronbachItemRow[];
+}
+
+/**
+ * Cronbach's alpha + bảng theo từng biến (Scale Mean/Variance if Item Deleted,
+ * Corrected Item-Total Correlation, Cronbach's Alpha if Item Deleted).
+ * Chỉ dùng các dòng có đủ giá trị số ở mọi biến được chọn (listwise, giống SPSS/backend Python).
+ */
+export function computeCronbachDetail(rows: string[][], columnNames: string[]): CronbachDetail | null {
+  if (rows.length < 4 || columnNames.length < 2) return null;
+  const headers = rows[0] || [];
+  const names = columnNames.filter((c) => headers.indexOf(c) >= 0);
+  const idx = names.map((c) => headers.indexOf(c));
+  const k = idx.length;
+  if (k < 2) return null;
+  const data: number[][] = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const vals: number[] = new Array(k);
+    let ok = true;
+    for (let j = 0; j < k; j++) {
+      const raw = row[idx[j]];
+      const v = raw === undefined || raw === null || String(raw).trim() === "" ? NaN : Number(raw);
+      if (Number.isNaN(v)) { ok = false; break; }
+      vals[j] = v;
+    }
+    if (ok) data.push(vals);
+  }
+  const n = data.length;
+  if (n < 3) return null;
+  const total = data.map((r) => r.reduce((a, b) => a + b, 0));
+  const meanOf = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  const varOf = (a: number[]) => { const m = meanOf(a); return a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1); };
+  const itemCols = names.map((_, j) => data.map((r) => r[j]));
+  const itemVar = itemCols.map(varOf);
+  const totalVar = varOf(total);
+  if (!(totalVar > 0)) return null;
+  const alphaOf = (kk: number, sumItemVar: number, tv: number) => (kk / (kk - 1)) * (1 - sumItemVar / tv);
+  const sumVar = itemVar.reduce((a, b) => a + b, 0);
+  const alpha = alphaOf(k, sumVar, totalVar);
+  const round3 = (x: number) => Math.round(x * 1000) / 1000;
+  const items: CronbachItemRow[] = names.map((name, j) => {
+    const rest = total.map((tt, i) => tt - data[i][j]);
+    const restMean = meanOf(rest);
+    const restVar = varOf(rest);
+    let corrected: number | null = null;
+    if (itemVar[j] > 0 && restVar > 0) {
+      const mi = meanOf(itemCols[j]);
+      let cov = 0;
+      for (let i = 0; i < n; i++) cov += (itemCols[j][i] - mi) * (rest[i] - restMean);
+      cov /= n - 1;
+      corrected = cov / Math.sqrt(itemVar[j] * restVar);
+    }
+    let alphaIfDeleted: number | null = null;
+    if (k >= 3 && restVar > 0) alphaIfDeleted = alphaOf(k - 1, sumVar - itemVar[j], restVar);
+    return {
+      name,
+      scaleMeanIfDeleted: restMean,
+      scaleVarianceIfDeleted: restVar,
+      correctedItemTotal: corrected,
+      alphaIfDeleted,
+      lowItemTotal: corrected != null && corrected < 0.3,
+      raisesAlphaIfDeleted: alphaIfDeleted != null && round3(alphaIfDeleted) > round3(alpha),
+    };
+  });
+  return { alpha, nItems: k, nCases: n, items };
+}
+
 /** OLS regression: coefficients (intercept + each predictor), R², adj R², SE, t, p-value. ciLower/ciUpper khi có từ backend. */
 export interface OLSResult {
   coefficients: Record<string, number>;
@@ -1957,6 +2047,132 @@ export function computeEFA(rows: string[][], columnNames: string[], nFactors?: n
   const totalVar = eigenvalues.reduce((a, b) => a + b, 0);
   const varianceExplained = eigenvalues.slice(0, K).map((e) => (e / totalVar) * 100);
   return { eigenvalues: eigenvalues.slice(0, p), varianceExplained, loadings: rotated, columnNames: colNames, nFactors: K };
+}
+
+/** Xác suất đuôi phải của χ² (survival function), chính xác cả khi p rất nhỏ. */
+function chiSquareSurvival(x: number, df: number): number {
+  if (df <= 0) return NaN;
+  if (x <= 0) return 1;
+  const a = df / 2;
+  const xx = x / 2;
+  const lg = logGamma(a);
+  if (xx < a + 1) {
+    // chuỗi cho P(a, x), Q = 1 − P
+    let ap = a; let sum = 1 / a; let del = sum;
+    for (let n = 0; n < 1000; n++) {
+      ap += 1; del *= xx / ap; sum += del;
+      if (Math.abs(del) < Math.abs(sum) * 1e-15) break;
+    }
+    return Math.max(0, Math.min(1, 1 - sum * Math.exp(-xx + a * Math.log(xx) - lg)));
+  }
+  // phân số liên tục (Lentz) cho Q(a, x)
+  const tiny = 1e-300;
+  let b = xx + 1 - a; let c = 1 / tiny; let d = 1 / b; let h = d;
+  for (let i = 1; i <= 1000; i++) {
+    const an = -i * (i - a);
+    b += 2;
+    d = an * d + b; if (Math.abs(d) < tiny) d = tiny;
+    c = b + an / c; if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    const delta = d * c; h *= delta;
+    if (Math.abs(delta - 1) < 1e-15) break;
+  }
+  return Math.max(0, Math.min(1, Math.exp(-xx + a * Math.log(xx) - lg) * h));
+}
+
+export interface KMOBartlettResult {
+  columnNames: string[];
+  /** Số quan sát đầy đủ (listwise) */
+  n: number;
+  /** KMO tổng thể; null nếu ma trận tương quan suy biến (không nghịch đảo được) */
+  kmo: number | null;
+  /** MSA theo từng biến (đường chéo anti-image) */
+  msa: (number | null)[];
+  /** Bartlett: χ², df, p; null nếu det(R) ≤ 0 */
+  bartlettChi2: number | null;
+  bartlettDf: number;
+  bartlettP: number | null;
+  /** det(R) */
+  determinant: number;
+  singular: boolean;
+}
+
+/** KMO (tổng thể + MSA từng biến) và kiểm định cầu Bartlett từ ma trận tương quan R. */
+export function computeKMOBartlett(rows: string[][], columnNames: string[]): KMOBartlettResult | null {
+  if (rows.length < 4 || columnNames.length < 2) return null;
+  const headers = rows[0] || [];
+  const names = columnNames.filter((c) => headers.indexOf(c) >= 0);
+  const idx = names.map((c) => headers.indexOf(c));
+  const p = idx.length;
+  if (p < 2) return null;
+  const data: number[][] = [];
+  for (let r = 1; r < rows.length; r++) {
+    const vals: number[] = new Array(p);
+    let ok = true;
+    for (let j = 0; j < p; j++) {
+      const raw = rows[r][idx[j]];
+      const v = raw === undefined || raw === null || String(raw).trim() === "" ? NaN : Number(raw);
+      if (Number.isNaN(v)) { ok = false; break; }
+      vals[j] = v;
+    }
+    if (ok) data.push(vals);
+  }
+  const n = data.length;
+  if (n <= p) return null;
+  const mean = names.map((_, j) => data.reduce((s, r) => s + r[j], 0) / n);
+  const sd = names.map((_, j) => Math.sqrt(data.reduce((s, r) => s + (r[j] - mean[j]) ** 2, 0) / (n - 1)));
+  if (sd.some((x) => !(x > 0))) return { columnNames: names, n, kmo: null, msa: names.map(() => null), bartlettChi2: null, bartlettDf: (p * (p - 1)) / 2, bartlettP: null, determinant: 0, singular: true };
+  const R: number[][] = Array.from({ length: p }, () => Array(p).fill(0));
+  for (let i = 0; i < p; i++) {
+    R[i][i] = 1;
+    for (let j = i + 1; j < p; j++) {
+      let s = 0;
+      for (let r = 0; r < n; r++) s += (data[r][i] - mean[i]) * (data[r][j] - mean[j]);
+      R[i][j] = R[j][i] = s / (n - 1) / (sd[i] * sd[j]);
+    }
+  }
+  // log|R| và nghịch đảo bằng Gauss-Jordan có chọn pivot
+  let logDet = 0; let sign = 1; let singular = false;
+  const aug: number[][] = R.map((row, i) => [...row, ...Array.from({ length: p }, (_, j) => (i === j ? 1 : 0))]);
+  for (let col = 0; col < p; col++) {
+    let piv = col;
+    for (let r = col + 1; r < p; r++) if (Math.abs(aug[r][col]) > Math.abs(aug[piv][col])) piv = r;
+    if (Math.abs(aug[piv][col]) < 1e-12) { singular = true; break; }
+    if (piv !== col) { [aug[col], aug[piv]] = [aug[piv], aug[col]]; sign = -sign; }
+    const d = aug[col][col];
+    logDet += Math.log(Math.abs(d)); if (d < 0) sign = -sign;
+    for (let j = 0; j < 2 * p; j++) aug[col][j] /= d;
+    for (let r = 0; r < p; r++) {
+      if (r === col) continue;
+      const f = aug[r][col];
+      if (f !== 0) for (let j = 0; j < 2 * p; j++) aug[r][j] -= f * aug[col][j];
+    }
+  }
+  const df = (p * (p - 1)) / 2;
+  if (singular || sign < 0) {
+    return { columnNames: names, n, kmo: null, msa: names.map(() => null), bartlettChi2: null, bartlettDf: df, bartlettP: null, determinant: singular ? 0 : sign * Math.exp(logDet), singular: true };
+  }
+  const S = aug.map((row) => row.slice(p));
+  let rSq = 0; let qSq = 0;
+  const rSqI = Array(p).fill(0); const qSqI = Array(p).fill(0);
+  for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) {
+    if (i === j) continue;
+    const q = -S[i][j] / Math.sqrt(S[i][i] * S[j][j]);
+    rSq += R[i][j] ** 2; qSq += q * q;
+    rSqI[i] += R[i][j] ** 2; qSqI[i] += q * q;
+  }
+  const chi2 = -(n - 1 - (2 * p + 5) / 6) * logDet;
+  return {
+    columnNames: names,
+    n,
+    kmo: rSq / (rSq + qSq),
+    msa: rSqI.map((r, i) => r / (r + qSqI[i])),
+    bartlettChi2: chi2,
+    bartlettDf: df,
+    bartlettP: chiSquareSurvival(Math.max(0, chi2), df),
+    determinant: Math.exp(logDet),
+    singular: false,
+  };
 }
 
 function eigenDecomposition(matrix: number[][]): { eigenvalues: number[]; eigenvectors: number[][] } {

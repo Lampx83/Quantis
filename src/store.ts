@@ -131,12 +131,27 @@ export function clearWorkspaceLocalData(): void {
   }
 }
 
+/** Mô hình LLM mặc định (vLLM, OpenAI-compatible). */
+export const DEFAULT_AI_MODEL = "qwen3.5-35b-a3b-int4";
+
+/**
+ * Tương thích ngược: cấu hình đã lưu có thể còn tên model kiểu Ollama (chứa ":" hoặc bắt đầu "qwen2.5",
+ * vd. "qwen2.5:14b-instruct-ctx16k", "llama3.2:8b") → đổi sang model vLLM mặc định.
+ */
+export function normalizeAiModelName(model: string | null | undefined): string {
+  const m = String(model ?? "").trim();
+  if (!m) return DEFAULT_AI_MODEL;
+  if (m.includes(":") || /^qwen2\.5/i.test(m) || /^llama3/i.test(m)) return DEFAULT_AI_MODEL;
+  return m;
+}
+
 /** Mô hình AI đã chọn. Ưu tiên: server defaultAiModel → localStorage → env. */
 export function loadAiModel(): string | null {
   const fromServer = getServerSettings()?.defaultAiModel;
-  if (fromServer != null && String(fromServer).trim() !== "") return String(fromServer).trim();
+  if (fromServer != null && String(fromServer).trim() !== "") return normalizeAiModelName(fromServer);
   try {
-    return localStorage.getItem(getKey("aiModel"));
+    const v = localStorage.getItem(getKey("aiModel"));
+    return v ? normalizeAiModelName(v) : null;
   } catch {
     return null;
   }
