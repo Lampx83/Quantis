@@ -58,6 +58,10 @@ export interface UIState {
   archiveModalOpen: boolean;
   sampleDatasetSearch: string;
 
+  // Data editor view & display options
+  dataEditorView: "data" | "variable";
+  showValueLabels: boolean;
+
   // Actions
   setMainSection: (section: MainSection) => void;
   setDataTab: (tab: DataTab) => void;
@@ -88,6 +92,11 @@ export interface UIState {
 
   setArchiveModalOpen: (open: boolean) => void;
   setSampleDatasetSearch: (search: string) => void;
+
+  setDataEditorView: (view: "data" | "variable") => void;
+  toggleDataEditorView: () => void;
+  setShowValueLabels: (show: boolean) => void;
+  toggleShowValueLabels: () => void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -121,6 +130,9 @@ export const useUIStore = create<UIState>()(
 
       archiveModalOpen: false,
       sampleDatasetSearch: "",
+
+      dataEditorView: "data",
+      showValueLabels: false,
 
       setMainSection: (mainSection) => set({ mainSection }),
       setDataTab: (dataTab) => set({ dataTab }),
@@ -171,10 +183,24 @@ export const useUIStore = create<UIState>()(
 
       setArchiveModalOpen: (archiveModalOpen) => set({ archiveModalOpen }),
       setSampleDatasetSearch: (sampleDatasetSearch) => set({ sampleDatasetSearch }),
+
+      setDataEditorView: (dataEditorView) => set({ dataEditorView }),
+      toggleDataEditorView: () =>
+        set((s) => ({
+          dataEditorView: s.dataEditorView === "data" ? "variable" : "data",
+        })),
+      setShowValueLabels: (showValueLabels) => set({ showValueLabels }),
+      toggleShowValueLabels: () =>
+        set((s) => ({ showValueLabels: !s.showValueLabels })),
     }),
     {
       name: "quantis_ui",
-      partialize: (s) => ({ theme: s.theme } as UIState),
+      partialize: (s) =>
+        ({
+          theme: s.theme,
+          dataEditorView: s.dataEditorView,
+          showValueLabels: s.showValueLabels,
+        } as UIState),
     }
   )
 );
