@@ -287,11 +287,19 @@ def run_ancova(rows: list, factor_col: str, value_col: str, covariate_cols: list
         model = ols(formula, data=df).fit()
         a = anova_lm(model, typ=2)
         group_means = []
+        cov_means = {c: float(df[c].mean()) for c in covariate_cols}
         for name, g in df.groupby(factor_col)[value_col]:
+            # Trung bình hiệu chỉnh (estimated marginal mean): giá trị dự đoán của mô hình khi covariate = trung bình chung.
+            try:
+                newd = pd.DataFrame({factor_col: [name], **{c: [cov_means[c]] for c in covariate_cols}})
+                adj = float(model.predict(newd).iloc[0])
+            except Exception:
+                adj = float(g.mean())
             group_means.append({
                 "group": str(name),
                 "n": int(len(g)),
-                "mean": float(g.mean()),
+                "mean": adj,
+                "rawMean": float(g.mean()),
                 "std": float(g.std()) if len(g) > 1 else 0.0,
             })
         # Hàng factor (C(factor))
@@ -324,6 +332,25 @@ def run_ancova(rows: list, factor_col: str, value_col: str, covariate_cols: list
         return None
 
 
+def _mv_factor_text(result, key: str) -> str:
+    """Chuyển bảng kiểm định đa biến (Wilks, Pillai, Hotelling-Lawley, Roy) của statsmodels thành một dòng dễ đọc."""
+    try:
+        stat = result.results[key]["stat"]
+        parts = []
+        for name in stat.index:
+            row = stat.loc[name]
+            val = float(row["Value"])
+            f = float(row["F Value"])
+            ndf = float(row["Num DF"])
+            ddf = float(row["Den DF"])
+            pv = float(row["Pr > F"])
+            ptxt = "< .001" if pv < 0.001 else f"= {pv:.4f}"
+            parts.append(f"{name} = {val:.4f}, F({ndf:g}, {ddf:g}) = {f:.3f}, p {ptxt}")
+        return "; ".join(parts)
+    except Exception:
+        return str(result.results[key])
+
+
 def run_manova(rows: list, factor_col: str, value_cols: list[str]):
     """MANOVA: Multivariate Analysis of Variance — nhiều biến phụ thuộc (DV), một nhân tố (IV)."""
     try:
@@ -353,7 +380,7 @@ def run_manova(rows: list, factor_col: str, value_cols: list[str]):
             if "Intercept" in r:
                 out["intercept"] = str(r["Intercept"])
             if "C(" + factor_col + ")" in r:
-                out["factorTest"] = str(r["C(" + factor_col + ")"])
+                out["factorTest"] = _mv_factor_text(result, "C(" + factor_col + ")")
             out["summary"] = str(result)
         else:
             out["summary"] = str(result)
@@ -397,7 +424,7 @@ def run_mancova(rows: list, factor_col: str, value_cols: list[str], covariate_co
             if "Intercept" in r:
                 out["intercept"] = str(r["Intercept"])
             if "C(" + factor_col + ")" in r:
-                out["factorTest"] = str(r["C(" + factor_col + ")"])
+                out["factorTest"] = _mv_factor_text(result, "C(" + factor_col + ")")
             out["summary"] = str(result)
         else:
             out["summary"] = str(result)
