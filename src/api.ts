@@ -3,7 +3,7 @@
  * Khi backend không có hoặc chưa đăng nhập: dữ liệu chỉ lưu localStorage.
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
-import type { Dataset, Workflow } from "./types";
+import type { Dataset, Workflow, VariableMetadata } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
@@ -311,7 +311,9 @@ export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> 
 }
 
 /** Gửi file lên backend để parse (Excel, ODS, SPSS, Stata, SAS, R). Cần backend Node + Python. */
-export async function parseFileViaBackend(file: File): Promise<{ rows: string[][]; format: string }> {
+export async function parseFileViaBackend(
+  file: File
+): Promise<{ rows: string[][]; format: string; variables?: Record<string, VariableMetadata> }> {
   const base = getBase();
   if (!base) throw new Error(t("api.backendNotConfiguredForImport"));
   const form = new FormData();
@@ -332,7 +334,11 @@ export async function parseFileViaBackend(file: File): Promise<{ rows: string[][
     throw new Error(JSON.stringify(msg));
   }
   if (!Array.isArray(errBody.rows)) throw new Error("Invalid response: missing rows");
-  return { rows: errBody.rows, format: errBody.format ?? "unknown" };
+  return {
+    rows: errBody.rows,
+    format: errBody.format ?? "unknown",
+    variables: errBody.variables && typeof errBody.variables === "object" ? errBody.variables : undefined,
+  };
 }
 
 /** Kiểm tra backend phân tích Python (qua proxy Node) có sẵn không. */

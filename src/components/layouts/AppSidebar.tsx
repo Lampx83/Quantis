@@ -20,6 +20,8 @@ import {
 import * as quantisApi from "@/api";
 import * as archiveApi from "@/archive-api";
 import { t } from "@/i18n";
+import { ensureDatasetMetadata } from "@/utils/metadata";
+import type { VariableMetadata } from "@/types";
 
 export function AppSidebar() {
   const {
@@ -65,7 +67,11 @@ export function AppSidebar() {
       if (!file) return;
       const format = getFormatFromFilename(file.name);
 
-      const applyRows = (rows: string[][], fmt: string) => {
+      const applyRows = (
+        rows: string[][],
+        fmt: string,
+        extractedVariables?: Record<string, VariableMetadata>
+      ) => {
         if (!rows || rows.length < 2) return;
         const headers = rows[0];
         const kept = rows.slice(1, MAX_ROWS_STORED + 1);
@@ -73,21 +79,21 @@ export function AppSidebar() {
         const now = new Date().toISOString();
         const baseName =
           file.name.replace(/\.(csv|tsv|json|txt|xlsx|xls|ods|sav|dta|sas7bdat|rds|rdata)$/i, "") || file.name;
-        setDatasets((prev) => [
-          ...prev,
-          {
-            id,
-            name: baseName,
-            rows: kept.length,
-            columns: headers.length,
-            columnNames: headers,
-            preview: rows.slice(0, 6),
-            data: [headers, ...kept],
-            sourceFormat: fmt,
-            createdAt: now,
-            updatedAt: now,
-          },
-        ]);
+        const initialDataset = {
+          id,
+          name: baseName,
+          rows: kept.length,
+          columns: headers.length,
+          columnNames: headers,
+          preview: rows.slice(0, 6),
+          data: [headers, ...kept],
+          variables: extractedVariables,
+          sourceFormat: fmt,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const datasetWithMeta = ensureDatasetMetadata(initialDataset);
+        setDatasets((prev) => [...prev, datasetWithMeta]);
         setSelectedDatasetId(id);
         if (selectedWorkflowId) {
           setWorkflows((prev) =>
@@ -108,7 +114,7 @@ export function AppSidebar() {
         setSidebarImportBusy(true);
         quantisApi
           .parseFileViaBackend(file)
-          .then(({ rows, format: fmt }) => applyRows(rows, fmt))
+          .then(({ rows, format: fmt, variables }) => applyRows(rows, fmt, variables))
           .catch((err) => {
             showToast?.(err?.message ?? t("app.errCannotReadFileNeedBackend"));
           })
