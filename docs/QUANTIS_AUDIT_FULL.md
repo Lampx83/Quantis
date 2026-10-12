@@ -11,7 +11,7 @@ Tài liệu này liệt kê **đã có**, **thiếu / chưa đủ**, và **check
 | **Data Layer** | Import, Profiling, Transform, Preview | Có đủ 4 tab, chức năng cơ bản ổn |
 | **Analysis Engine** | Thống kê mô tả, Kiểm định giả thuyết, Hồi quy & SEM, Tương quan, Cronbach, ML, Bayesian | Mô tả + Hồi quy + ML + Bayesian chưa đủ |
 | **Reproducibility** | Workflows, Versioning | Workflows có; Versioning chỉ text |
-| **Presentation** | Visualization, Reports | Có scatter/bar/line/pie/box/histogram; Report HTML có |
+| **Presentation** | Visualization, Reports | Có scatter/bar/line/pie/box/histogram; Báo cáo HTML chưa có trên UI |
 | **Khác** | AI hỗ trợ, So sánh công cụ, Hướng dẫn | ✅ AI tích hợp Ollama/OpenAI; prompt chuẩn APA + Giải thích ở mọi kết quả |
 
 ---
@@ -82,9 +82,9 @@ Tài liệu này liệt kê **đã có**, **thiếu / chưa đủ**, và **check
 | Box plot (theo nhóm) | ✅ | Bảng min/q1/median/q3/max kèm bar median |
 | Histogram | ✅ | Cột số, bins tự động |
 | Xuất biểu đồ (PNG/SVG) | ✅ | Nút Xuất SVG, Xuất PNG; Heatmap xuất CSV |
-| Báo cáo HTML | ✅ | Thống kê mô tả + kết quả kiểm định APA |
+| Báo cáo HTML | ❌ | Chưa có trên UI (từng có ở bản prototype, đã gỡ khi refactor; còn lưu trữ SavedReportChart trong storage.ts) |
 | **Sao chép bảng / kết quả** | ✅ | Nút "Sao chép bảng" (thống kê mô tả TSV); "Sao chép" cho t-test, ANOVA, **Chi-square** (χ², df, p, Phi, Cramer V, OR+CI khi 2×2), **OLS** (bảng hệ số TSV + R², n) — dán vào Excel/Word |
-| Báo cáo PDF | ❌ | Chưa (có thể in từ HTML) |
+| Báo cáo PDF | ❌ | Chưa |
 | Correlation heatmap (màu) | ✅ | Có, kèm xuất CSV |
 
 ---
@@ -124,7 +124,7 @@ Tài liệu này liệt kê **đã có**, **thiếu / chưa đủ**, và **check
 - [x] Ma trận tương quan (Pearson, Spearman)
 - [x] Cronbach alpha
 - [x] Nhiều loại biểu đồ
-- [x] Báo cáo HTML + APA
+- [ ] Báo cáo HTML + APA (chưa có trên UI)
 - [x] **Hồi quy tuyến tính OLS** (bảng hệ số, R², p-value)
 - [x] **ML cơ bản** (ít nhất K-means hoặc OLS trong tab ML)
 - [x] **Bayesian cơ bản** (ít nhất Beta-Binomial tỉ lệ)

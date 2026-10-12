@@ -5,7 +5,7 @@
  * - Tải file: dùng địa chỉ trong Cài đặt (hoặc env VITE_ARCHIVE_FILE_BASE_URL). Không fix cứng.
  */
 
-import { loadArchiveUrl, loadArchiveFileUrl, loadBackendApiUrl } from "./store";
+import { loadArchiveUrl, loadArchiveFileUrl, loadBackendApiUrl } from "./utils/storage";
 import { t } from "./i18n";
 
 const _env = typeof import.meta !== "undefined" ? (import.meta as { env?: { VITE_ARCHIVE_NEU_URL?: string; VITE_QUANTIS_API_URL?: string; VITE_RESEARCH_NEU_ARCHIVE?: string; VITE_RESEARCH_NEU_ARCHIVE_FILE?: string } }).env : undefined;

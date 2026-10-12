@@ -48,3 +48,10 @@ htmlcov/
 *.swp
 *.swo
 *.bak
+
+# CodeGraph
+.codegraph/
+
+# Documentation
+dev-docs/
+
