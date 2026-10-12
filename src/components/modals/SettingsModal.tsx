@@ -344,7 +344,7 @@ export function SettingsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4" role="presentation">
       <div
-        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full max-h-[min(90vh,85dvh)] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-lg w-full max-h-[min(90vh,85dvh)] flex flex-col overflow-hidden"
         role="dialog"
         aria-labelledby="quantis-settings-title"
         aria-describedby="quantis-settings-desc"
@@ -358,7 +358,7 @@ export function SettingsModal({
               {t("settingsModal.descPrefix")} <strong>{t("settingsModal.descStrong")}</strong> {t("settingsModal.descSuffix")}
             </p>
           </div>
-          <button type="button" onClick={handleClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label={t("app.close")}>
+          <button type="button" onClick={handleClose} className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label={t("app.close")}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -424,7 +424,7 @@ export function SettingsModal({
             type="button"
             onClick={handleQuickTestConnectivity}
             disabled={quickTestLoading || !effectiveBackendUrl()}
-            className="shrink-0 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="shrink-0 rounded-md bg-brand px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
             {quickTestLoading ? t("settingsModal.testingEllipsis") : t("settingsModal.quickTestButton")}
           </button>
@@ -537,7 +537,7 @@ export function SettingsModal({
             <button
               type="button"
               onClick={() => onFactoryResetRequest?.()}
-              className="w-full sm:w-auto rounded-lg border-2 border-red-400 dark:border-red-700 bg-white dark:bg-neutral-900 text-red-800 dark:text-red-200 px-4 py-2.5 text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
+              className="w-full sm:w-auto rounded-md border-2 border-red-400 dark:border-red-700 bg-white dark:bg-neutral-900 text-red-800 dark:text-red-200 px-4 py-2.5 text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
             >
               {t("settingsModal.resetButton")}
             </button>
@@ -545,7 +545,7 @@ export function SettingsModal({
         </div>
         </div>
         <div className="p-4 border-t border-neutral-200 dark:border-neutral-700 shrink-0">
-          <button type="button" onClick={handleClose} className="rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90">{t("app.close")}</button>
+          <button type="button" onClick={handleClose} className="rounded-md bg-brand text-white px-4 py-2 text-sm hover:opacity-90">{t("app.close")}</button>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   getDataRows,
   computeOLS,
   computeLogisticRegression,
@@ -40,7 +41,7 @@ export function RegressionTab({
     if (ci === -1) return false;
     const vals = rows
       .slice(1)
-      .map((r) => Number(r[ci]))
+      .map((r) => numCell(r[ci]))
       .filter((v) => !Number.isNaN(v));
     const uniq = [...new Set(vals)];
     return uniq.length === 2 && uniq.every((v) => v === 0 || v === 1);
@@ -186,7 +187,7 @@ export function RegressionTab({
                   setOlsYCol(e.target.value);
                   setOlsResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
               >
                 <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {numericCols.map((c) => (
@@ -223,7 +224,7 @@ export function RegressionTab({
               type="button"
               onClick={runOLS}
               disabled={regressionLoading !== null}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {regressionLoading === "ols" ? (
                 <>
@@ -444,7 +445,7 @@ export function RegressionTab({
                   setLogYCol(e.target.value);
                   setLogResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
               >
                 <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {yBinaryOptions.map((c) => (
@@ -481,7 +482,7 @@ export function RegressionTab({
               type="button"
               onClick={runLogistic}
               disabled={regressionLoading !== null}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {regressionLoading === "logistic" ? (
                 <>
@@ -628,7 +629,7 @@ export function RegressionTab({
                   setPoissonYCol(e.target.value);
                   setPoissonResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
               >
                 <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {numericCols.map((c) => (
@@ -678,7 +679,7 @@ export function RegressionTab({
                   setRegressionLoading(null);
                 }
               }}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {regressionLoading === "poisson" ? (
                 <>
@@ -779,7 +780,7 @@ export function RegressionTab({
                   setRidgeYCol(e.target.value);
                   setRidgeResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
               >
                 <option value="">{t("regressionExplainer.selectYPlaceholder")}</option>
                 {numericCols.map((c) => (
@@ -825,7 +826,7 @@ export function RegressionTab({
                   setRidgeAlpha(Math.max(0.01, parseFloat(e.target.value) || 1));
                   setRidgeResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24"
               />
             </div>
             <button
@@ -850,7 +851,7 @@ export function RegressionTab({
                   setRegressionLoading(null);
                 }
               }}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {regressionLoading === "ridge" ? (
                 <>

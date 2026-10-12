@@ -115,9 +115,9 @@ export function WorkflowDetailView() {
 
   return (
     <div className="w-full max-w-full max-w-2xl">
-      <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
+      <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden">
         <div className="p-6 border-b border-neutral-200 dark:border-neutral-700">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               {editingWorkflowNameId === selectedWorkflow.id ? (
                 <div className="space-y-3">
@@ -128,7 +128,7 @@ export function WorkflowDetailView() {
                       type="text"
                       value={editingWorkflowName}
                       onChange={(e) => setEditingWorkflowName(e.target.value)}
-                      className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200"
+                      className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200"
                       placeholder={t("app.workflowNameLabel")}
                       autoFocus
                     />
@@ -139,7 +139,7 @@ export function WorkflowDetailView() {
                       value={editingWorkflowDescription}
                       onChange={(e) => setEditingWorkflowDescription(e.target.value)}
                       rows={2}
-                      className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200 resize-none"
+                      className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200 resize-none"
                       placeholder={t("app.descriptionOptionalPlaceholder")}
                     />
                   </div>
@@ -164,7 +164,7 @@ export function WorkflowDetailView() {
                           setEditingWorkflowDescriptionId(null);
                         }
                       }}
-                      className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90"
+                      className="rounded-md bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90"
                     >
                       {t("app.save")}
                     </button>
@@ -174,7 +174,7 @@ export function WorkflowDetailView() {
                         setEditingWorkflowNameId(null);
                         setEditingWorkflowDescriptionId(null);
                       }}
-                      className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                      className="rounded-md border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                     >
                       {t("app.cancel")}
                     </button>
@@ -202,7 +202,7 @@ export function WorkflowDetailView() {
                     setEditingWorkflowDescriptionId(selectedWorkflow.id);
                     setEditingWorkflowDescription(selectedWorkflow.description ?? "");
                   }}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-neutral-700 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-neutral-700 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                 >
                   <Edit2 className="w-4 h-4 shrink-0" /> {t("app.edit")}
                 </button>
@@ -219,7 +219,7 @@ export function WorkflowDetailView() {
                       },
                     });
                   }}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   <Trash2 className="w-4 h-4 shrink-0" /> {t("app.deleteWorkflow")}
                 </button>
@@ -261,7 +261,7 @@ export function WorkflowDetailView() {
                       )
                     );
                   }}
-                  className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90"
+                  className="rounded-md bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90"
                 >
                   {t("app.initFromStandardProcess")}
                 </button>
@@ -333,7 +333,7 @@ export function WorkflowDetailView() {
                               <select
                                 value={editingStepType}
                                 onChange={(e) => setEditingStepType(e.target.value as WorkflowStep["type"])}
-                                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm"
+                                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm"
                               >
                                 {(Object.keys(STEP_TYPE_LABELS) as WorkflowStep["type"][]).map((typeKey) => (
                                   <option key={typeKey} value={typeKey}>
@@ -346,7 +346,7 @@ export function WorkflowDetailView() {
                                 value={editingStepLabel}
                                 onChange={(e) => setEditingStepLabel(e.target.value)}
                                 placeholder={t("app.stepLabelPlaceholder")}
-                                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm flex-1 min-w-[140px]"
+                                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm flex-1 min-w-[140px]"
                               />
                             </div>
                             <textarea
@@ -354,7 +354,7 @@ export function WorkflowDetailView() {
                               onChange={(e) => setEditingStepNote(e.target.value)}
                               placeholder={t("app.noteOptionalPlaceholder")}
                               rows={2}
-                              className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm resize-none"
+                              className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm resize-none"
                             />
                             <div className="flex items-center gap-2">
                               <button
@@ -380,7 +380,7 @@ export function WorkflowDetailView() {
                                   );
                                   setEditingStepId(null);
                                 }}
-                                className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90"
+                                className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90"
                               >
                                 {t("app.save")}
                               </button>
@@ -389,7 +389,7 @@ export function WorkflowDetailView() {
                                 onClick={() => {
                                   setEditingStepId(null);
                                 }}
-                                className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300"
+                                className="rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300"
                               >
                                 {t("app.cancel")}
                               </button>
@@ -507,7 +507,7 @@ export function WorkflowDetailView() {
                   <select
                     value={newWorkflowStepType}
                     onChange={(e) => setNewWorkflowStepType(e.target.value as WorkflowStep["type"])}
-                    className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm"
+                    className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm"
                   >
                     {(Object.keys(STEP_TYPE_LABELS) as WorkflowStep["type"][]).map((typeKey) => (
                       <option key={typeKey} value={typeKey}>
@@ -520,7 +520,7 @@ export function WorkflowDetailView() {
                     value={newWorkflowStepLabel}
                     onChange={(e) => setNewWorkflowStepLabel(e.target.value)}
                     placeholder={t("app.stepLabelOptionalPlaceholder")}
-                    className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm w-44"
+                    className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm w-44"
                   />
                   <button
                     type="button"
@@ -544,7 +544,7 @@ export function WorkflowDetailView() {
                       );
                       setNewWorkflowStepLabel("");
                     }}
-                    className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90"
+                    className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-medium hover:opacity-90"
                   >
                     {t("app.addStep")}
                   </button>

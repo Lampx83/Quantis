@@ -165,7 +165,7 @@ export function AppSidebar() {
                     setSelectedWorkflowId(v);
                     setSelectedWorkflowStepId(null);
                   }}
-                  className="flex-1 min-w-0 text-sm rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 truncate"
+                  className="flex-1 min-w-0 text-sm rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 truncate"
                   title={selectedWorkflow?.name}
                 >
                   <option value="">{t("app.selectWorkflowPlaceholder")}</option>
@@ -183,7 +183,7 @@ export function AppSidebar() {
                     setSelectedWorkflowId(w.id);
                     setSelectedWorkflowStepId(null);
                   }}
-                  className="flex-shrink-0 flex items-center justify-center p-2 rounded-lg border border-brand bg-brand/10 dark:bg-brand/20 text-brand text-sm font-medium hover:bg-brand/20 dark:hover:bg-brand/30"
+                  className="flex-shrink-0 flex items-center justify-center p-2 rounded-md border border-brand bg-brand/10 dark:bg-brand/20 text-brand text-sm font-medium hover:bg-brand/20 dark:hover:bg-brand/30"
                   title={t("app.createNewWorkflow")}
                 >
                   <FilePlus className="w-4 h-4" />
@@ -208,14 +208,14 @@ export function AppSidebar() {
                 <button
                   type="button"
                   onClick={() => csvFileInputRef.current?.click()}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-brand text-white text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-md bg-brand text-white text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                 >
                   <Upload className="w-4 h-4" /> {t("app.uploadFile")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowSampleModal(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
                 >
                   <Plus className="w-4 h-4" /> {t("app.addSampleDataset")}
                 </button>
@@ -240,7 +240,7 @@ export function AppSidebar() {
                         setArchiveSearchLoading(false);
                       });
                   }}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-sky-300 dark:border-sky-600 bg-sky-50 dark:bg-sky-900/20 text-sky-800 dark:text-sky-200 text-sm hover:bg-sky-100 dark:hover:bg-sky-800/30"
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-md border border-sky-300 dark:border-sky-600 bg-sky-50 dark:bg-sky-900/20 text-sky-800 dark:text-sky-200 text-sm hover:bg-sky-100 dark:hover:bg-sky-800/30"
                 >
                   <Cloud className="w-4 h-4" /> {t("app.getFromArchiveNeu")}
                 </button>

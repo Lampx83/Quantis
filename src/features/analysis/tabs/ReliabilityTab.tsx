@@ -74,7 +74,7 @@ export function ReliabilityTab({
               key={c}
               type="button"
               onClick={() => toggle(c)}
-              className={`rounded-lg px-3 py-1.5 text-sm ${
+              className={`rounded-md px-3 py-1.5 text-sm ${
                 selectedItems.includes(c)
                   ? "bg-brand text-white"
                   : "border border-neutral-300 dark:border-neutral-600"

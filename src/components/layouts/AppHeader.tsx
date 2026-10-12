@@ -184,7 +184,7 @@ export function AppHeader() {
   }, [headerMenuOpen, setHeaderMenuOpen]);
 
   return (
-    <header className="flex-shrink-0 min-h-14 pt-[env(safe-area-inset-top,0px)] px-2 sm:px-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 flex items-center gap-1">
+    <header className="flex-shrink-0 min-h-14 pt-[env(safe-area-inset-top,0px)] px-2 sm:px-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-gray-950 flex flex-wrap md:flex-nowrap items-center gap-x-1">
       <button
         type="button"
         onClick={() => {
@@ -192,21 +192,19 @@ export function AppHeader() {
           setSelectedWorkflowId(null);
           setSelectedWorkflowStepId(null);
         }}
-        className="flex items-center gap-1.5 sm:gap-2 min-w-0 rounded-lg hover:opacity-90 transition-opacity text-left flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+        className="order-1 flex items-center gap-2 min-w-0 rounded-md hover:opacity-90 transition-opacity text-left flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         title={t("app.backToResearchWorkflow")}
       >
-        <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center flex-shrink-0">
-          <Sigma className="w-4 h-4 text-white" />
-        </div>
+        <Sigma className="w-4 h-4 text-brand shrink-0" />
         <div className="min-w-0">
-          <h1 className="font-semibold text-sm sm:text-base truncate leading-tight">Quantis</h1>
-          <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 truncate hidden sm:block">
+          <h1 className="font-semibold text-lg tracking-tight truncate leading-tight">Quantis</h1>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate hidden sm:block">
             {t("app.tagline")}
           </p>
         </div>
       </button>
 
-      <div className="flex-1 flex items-center justify-center min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] snap-x snap-mandatory">
+      <div className="order-3 basis-full md:order-2 md:basis-0 md:flex-1 flex items-center justify-start md:[justify-content:safe_center] min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin] snap-x snap-mandatory border-t border-slate-100 dark:border-slate-800 md:border-t-0">
         <div className="flex items-center h-full gap-0.5 px-0.5">
           {MAIN_TABS.map((tab) => {
             const isActive = mainSection === tab.section;
@@ -231,11 +229,11 @@ export function AppHeader() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 flex-shrink-0" ref={headerMenuRef}>
+      <div className="order-2 ml-auto md:order-3 md:ml-0 flex items-center gap-1 flex-shrink-0" ref={headerMenuRef}>
         <button
           type="button"
           onClick={toggleTheme}
-          className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+          className="p-2 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           title={theme === "dark" ? t("app.lightMode") : t("app.darkMode")}
           aria-label={theme === "dark" ? t("app.lightMode") : t("app.darkMode")}
         >
@@ -250,7 +248,7 @@ export function AppHeader() {
                 setLoginModalInitialTab("login");
                 setShowLoginModal(true);
               }}
-              className="flex min-h-[40px] items-center justify-center gap-1 rounded-lg px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+              className="flex min-h-[40px] items-center justify-center gap-1 rounded-md px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               title={t("app.login")}
               aria-label={t("app.login")}
             >
@@ -263,7 +261,7 @@ export function AppHeader() {
                 setLoginModalInitialTab("register");
                 setShowLoginModal(true);
               }}
-              className="flex min-h-[40px] items-center justify-center rounded-lg px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-semibold text-brand hover:bg-brand/10 dark:hover:bg-brand/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+              className="flex min-h-[40px] items-center justify-center rounded-md px-2 sm:px-2.5 py-2 text-xs sm:text-sm font-semibold text-brand hover:bg-brand/10 dark:hover:bg-brand/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               title={t("app.registerAccount")}
               aria-label={t("app.register")}
             >
@@ -276,7 +274,7 @@ export function AppHeader() {
           <button
             type="button"
             onClick={() => setHeaderMenuOpen((v) => !v)}
-            className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            className="p-2 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             title={t("app.menuHelpConfigSampleWorkflow")}
             aria-label={t("app.openMenuHelpConfigMore")}
             aria-expanded={headerMenuOpen}

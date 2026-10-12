@@ -224,7 +224,7 @@ export function AIAssistPanel({
         onClick={() => setOpen((o) => !o)}
         disabled={isDisabled}
         title={title}
-        className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/90 hover:bg-amber-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        className="inline-flex items-center justify-center w-9 h-9 rounded-md bg-amber-500/90 hover:bg-amber-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
           <Loader2 className="w-5 h-5 shrink-0 animate-spin" aria-hidden />
@@ -234,7 +234,7 @@ export function AIAssistPanel({
       </button>
       {open && dialogPosition && (
         <div
-          className="fixed z-20 flex flex-col min-w-[320px] max-w-[min(480px,calc(100vw-2rem))] rounded-xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-lg overflow-hidden"
+          className="fixed z-20 flex flex-col min-w-[320px] max-w-[min(480px,calc(100vw-2rem))] rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-lg overflow-hidden"
           style={{
             left: dialogPosition.left,
             top: dialogPosition.top,
@@ -283,7 +283,7 @@ export function AIAssistPanel({
                 type="button"
                 onClick={() => handleQuickPrompt(p)}
                 disabled={loading || (!hasContext && !(p.userMessage ?? "").trim())}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 hover:bg-amber-200 dark:hover:bg-amber-800/60 disabled:opacity-50"
+                className="px-2.5 py-1.5 rounded-md text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 hover:bg-amber-200 dark:hover:bg-amber-800/60 disabled:opacity-50"
               >
                 {p.label}
               </button>
@@ -296,13 +296,13 @@ export function AIAssistPanel({
             onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleCustomSubmit(); } }}
             placeholder={t("aiAssistPanel.customQuestionPlaceholder")}
             rows={3}
-            className="w-full min-h-[5rem] rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm mb-2 resize-y"
+            className="w-full min-h-[5rem] rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-sm mb-2 resize-y"
           />
           <button
             type="button"
             onClick={handleCustomSubmit}
             disabled={!customPrompt.trim() || loading}
-            className="w-full py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+            className="w-full py-1.5 rounded-md text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
           >
             {t("aiAssistPanel.sendButton")}
           </button>
@@ -375,7 +375,7 @@ export function AIAssistPanel({
                       placeholder={t("aiAssistPanel.dislikeCommentPlaceholder")}
                       rows={2}
                       maxLength={2000}
-                      className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs mb-2 resize-none"
+                      className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2.5 py-2 text-xs mb-2 resize-none"
                     />
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -397,7 +397,7 @@ export function AIAssistPanel({
                           setDislikeComment("");
                           setDislikeSubmitting(false);
                         }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                        className="px-2.5 py-1.5 rounded-md text-xs font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
                       >
                         {dislikeSubmitting ? t("aiAssistPanel.submittingDislike") : t("aiAssistPanel.submitDislikeButton")}
                       </button>
@@ -405,7 +405,7 @@ export function AIAssistPanel({
                         type="button"
                         disabled={dislikeSubmitting}
                         onClick={() => { setShowDislikeForm(false); setDislikeReason(null); setDislikeComment(""); }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                        className="px-2.5 py-1.5 rounded-md text-xs border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                       >
                         {t("aiAssistPanel.cancelDislikeButton")}
                       </button>

@@ -44,7 +44,7 @@ export function ReproducibilityView({
           key={x.id}
           type="button"
           onClick={() => onTabChange(x.id)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
             tab === x.id ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700"
           }`}
         >
@@ -81,15 +81,15 @@ export function ReproducibilityView({
         {reproSubTabs}
         <h2 className="text-xl font-semibold mb-2">{t("reproducibilityView.tabWorkflows")}</h2>
         <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reproducibilityView.workflowsDesc")}</p>
-        <button type="button" onClick={() => { setShowNewWorkflowDialog(true); setNewWorkflowName(`Workflow ${workflows.length + 1}`); }} className="rounded-lg bg-brand text-white px-4 py-2 flex items-center gap-2 hover:opacity-90">
+        <button type="button" onClick={() => { setShowNewWorkflowDialog(true); setNewWorkflowName(`Workflow ${workflows.length + 1}`); }} className="rounded-md bg-brand text-white px-4 py-2 flex items-center gap-2 hover:opacity-90">
           <GitBranch className="w-4 h-4" /> {t("app.createNewWorkflow")}
         </button>
         {showNewWorkflowDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }}>
-            <div className="rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-xl max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 shadow-xl max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
                 <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("app.createNewWorkflow")}</h3>
-                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("app.close")}>
+                <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("app.close")}>
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -101,12 +101,12 @@ export function ReproducibilityView({
                   onChange={(e) => setNewWorkflowName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") addWorkflow(newWorkflowName); if (e.key === "Escape") { setShowNewWorkflowDialog(false); setNewWorkflowName(""); } }}
                   placeholder={t("reproducibilityView.workflowNamePlaceholder")}
-                  className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
+                  className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
                   autoFocus
                 />
                 <div className="flex justify-end gap-2 mt-4">
-                  <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600">{t("reproducibilityView.cancelButton")}</button>
-                  <button type="button" onClick={() => addWorkflow(newWorkflowName)} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90">{t("reproducibilityView.createButton")}</button>
+                  <button type="button" onClick={() => { setShowNewWorkflowDialog(false); setNewWorkflowName(""); }} className="px-3 py-1.5 rounded-md text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600">{t("reproducibilityView.cancelButton")}</button>
+                  <button type="button" onClick={() => addWorkflow(newWorkflowName)} className="px-3 py-1.5 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90">{t("reproducibilityView.createButton")}</button>
                 </div>
               </div>
             </div>
@@ -159,14 +159,14 @@ export function ReproducibilityView({
                 />
               )}
               <div className="flex flex-wrap items-end gap-2 mb-3">
-                <select value={newStepType} onChange={(e) => setNewStepType(e.target.value as WorkflowStep["type"])} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
+                <select value={newStepType} onChange={(e) => setNewStepType(e.target.value as WorkflowStep["type"])} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
                   {(["import", "clean", "transform", "describe", "test", "model", "visualize", "report"] as const).map((st) => (
                     <option key={st} value={st}>{stepLabels[st]}</option>
                   ))}
                 </select>
-                <input type="text" value={newStepLabel} onChange={(e) => setNewStepLabel(e.target.value)} placeholder={t("reproducibilityView.newStepLabelPlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-40" />
-                <button type="button" onClick={addStep} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm">{t("reproducibilityView.addStepButton")}</button>
-                <button type="button" onClick={() => { navigator.clipboard.writeText(rScript); showToast(t("reproducibilityView.copiedRScriptToast")); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">{t("reproducibilityView.copyRScriptButton")}</button>
+                <input type="text" value={newStepLabel} onChange={(e) => setNewStepLabel(e.target.value)} placeholder={t("reproducibilityView.newStepLabelPlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-40" />
+                <button type="button" onClick={addStep} className="rounded-md bg-brand text-white px-3 py-1.5 text-sm">{t("reproducibilityView.addStepButton")}</button>
+                <button type="button" onClick={() => { navigator.clipboard.writeText(rScript); showToast(t("reproducibilityView.copiedRScriptToast")); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm">{t("reproducibilityView.copyRScriptButton")}</button>
               </div>
               {w.steps.length === 0 ? <p className="text-sm text-neutral-500">{t("reproducibilityView.noStepsHint")}</p> : (
                 <ol className="list-decimal list-inside space-y-1 text-sm">

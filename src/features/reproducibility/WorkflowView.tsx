@@ -58,7 +58,7 @@ export function WorkflowView({
               key={step.id}
               type="button"
               onClick={() => onStepClick?.(step.id)}
-              className="w-full flex items-center gap-3 p-3 rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 hover:border-brand/30 transition-colors text-left"
+              className="w-full flex items-center gap-3 p-3 rounded-md bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700/50 hover:border-brand/30 transition-colors text-left"
             >
               <span className="w-8 h-8 rounded-full bg-brand/10 dark:bg-brand/20 flex items-center justify-center text-brand font-medium">{i + 1}</span>
               <StepIcon className="w-5 h-5 text-neutral-500 flex-shrink-0" />

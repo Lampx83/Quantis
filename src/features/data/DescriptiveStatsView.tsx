@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   type DescriptiveRow,
   getDataRows,
   computeDescriptive,
@@ -108,7 +109,7 @@ export function DescriptiveStatsView({
         <h2 className="text-xl font-semibold">{t("descriptiveStats.title")}</h2>
         <div className="flex items-center gap-2">
           {stats.length > 0 && (
-            <button type="button" onClick={copyDescriptiveTsv} className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /> {t("descriptiveStats.copyTable")}</button>
+            <button type="button" onClick={copyDescriptiveTsv} className="rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /> {t("descriptiveStats.copyTable")}</button>
           )}
           {aiContextDescriptive ? (
             <AIAssistPanel
@@ -172,12 +173,12 @@ export function DescriptiveStatsView({
             <div className="flex flex-wrap gap-4 items-end">
               <div>
                 <label className="block text-xs font-medium mb-1">{t("descriptiveStats.numericColumnLabel")}</label>
-                <select value={bootstrapCICol} onChange={(e) => { setBootstrapCICol(e.target.value); setBootstrapCIResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
+                <select value={bootstrapCICol} onChange={(e) => { setBootstrapCICol(e.target.value); setBootstrapCIResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm">
                   <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                   {numericColsDesc.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <button type="button" onClick={() => { if (!bootstrapCICol || rows.length < 2) return; const ci = rows[0].indexOf(bootstrapCICol); if (ci === -1) return; const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v)); const res = computeBootstrapMeanCI(vals); setBootstrapCIResult(res ?? null); }} disabled={!bootstrapCICol} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">{t("descriptiveStats.calculateCIButton")}</button>
+              <button type="button" onClick={() => { if (!bootstrapCICol || rows.length < 2) return; const ci = rows[0].indexOf(bootstrapCICol); if (ci === -1) return; const vals = rows.slice(1).map((r) => numCell(r[ci])).filter((v) => !Number.isNaN(v)); const res = computeBootstrapMeanCI(vals); setBootstrapCIResult(res ?? null); }} disabled={!bootstrapCICol} className="rounded-md bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">{t("descriptiveStats.calculateCIButton")}</button>
             </div>
             {bootstrapCIResult && (
               <div className="mt-2">
@@ -207,7 +208,7 @@ export function DescriptiveStatsView({
           <div className="mt-6 space-y-4">
             <div>
               <h3 className="font-medium mb-2">{t("descriptiveStats.freqTableTitle")}</h3>
-              <select value={freqCol} onChange={(e) => setFreqCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm mb-2">
+              <select value={freqCol} onChange={(e) => setFreqCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm mb-2">
                 <option value="">{t("descriptiveStats.selectColumnPlaceholder")}</option>
                 {stats.filter((s) => s.freq && s.freq.length > 0).map((s) => <option key={s.column} value={s.column}>{s.column}</option>)}
               </select>
@@ -238,14 +239,14 @@ export function DescriptiveStatsView({
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.rowLabel")}</label>
-                  <select value={crosstabCol1} onChange={(e) => setCrosstabCol1(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={crosstabCol1} onChange={(e) => setCrosstabCol1(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.columnLabel")}</label>
-                  <select value={crosstabCol2} onChange={(e) => setCrosstabCol2(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={crosstabCol2} onChange={(e) => setCrosstabCol2(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -287,7 +288,7 @@ export function DescriptiveStatsView({
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.textColumnLabel")}</label>
-                  <select value={textStatsCol} onChange={(e) => { setTextStatsCol(e.target.value); setTextStatsResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={textStatsCol} onChange={(e) => { setTextStatsCol(e.target.value); setTextStatsResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -310,7 +311,7 @@ export function DescriptiveStatsView({
                     const res = computeTextStats(rows, textStatsCol);
                     setTextStatsResult(res ?? null);
                   }}
-                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                  className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {exploreLoading === "textstats" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.analyzeButton")}
                 </button>
@@ -337,14 +338,14 @@ export function DescriptiveStatsView({
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.textColumnLabel")}</label>
-                  <select value={keywordCountsCol} onChange={(e) => { setKeywordCountsCol(e.target.value); setKeywordCountsResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={keywordCountsCol} onChange={(e) => { setKeywordCountsCol(e.target.value); setKeywordCountsResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div className="flex-1 min-w-[200px]">
                   <label className="block text-sm mb-1">{t("descriptiveStats.keywordInputLabel")}</label>
-                  <textarea value={keywordCountsInput} onChange={(e) => { setKeywordCountsInput(e.target.value); setKeywordCountsResult(null); }} placeholder={t("descriptiveStats.keywordInputPlaceholder")} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-h-[80px]" rows={3} />
+                  <textarea value={keywordCountsInput} onChange={(e) => { setKeywordCountsInput(e.target.value); setKeywordCountsResult(null); }} placeholder={t("descriptiveStats.keywordInputPlaceholder")} className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-h-[80px]" rows={3} />
                 </div>
                 <button
                   type="button"
@@ -366,7 +367,7 @@ export function DescriptiveStatsView({
                     const res = computeKeywordCounts(rows, keywordCountsCol, raw);
                     setKeywordCountsResult(res ?? null);
                   }}
-                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                  className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {exploreLoading === "keyword" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.countButton")}
                 </button>
@@ -391,14 +392,14 @@ export function DescriptiveStatsView({
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.textColumnLabel")}</label>
-                  <select value={ngramCol} onChange={(e) => { setNgramCol(e.target.value); setNgramResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={ngramCol} onChange={(e) => { setNgramCol(e.target.value); setNgramResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.ngramNLabel")}</label>
-                  <select value={ngramN} onChange={(e) => { setNgramN(Number(e.target.value)); setNgramResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={ngramN} onChange={(e) => { setNgramN(Number(e.target.value)); setNgramResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value={2}>{t("descriptiveStats.ngramBigramOption")}</option>
                     <option value={3}>{t("descriptiveStats.ngramTrigramOption")}</option>
                   </select>
@@ -420,7 +421,7 @@ export function DescriptiveStatsView({
                     }
                     setNgramResult(computeNgramFreq(rows, ngramCol, ngramN, 50) ?? null);
                   }}
-                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                  className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {exploreLoading === "ngram" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.analyzeButton")}
                 </button>
@@ -445,14 +446,14 @@ export function DescriptiveStatsView({
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.coder1Label")}</label>
-                  <select value={kappaCol1} onChange={(e) => { setKappaCol1(e.target.value); setKappaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={kappaCol1} onChange={(e) => { setKappaCol1(e.target.value); setKappaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.coder2Label")}</label>
-                  <select value={kappaCol2} onChange={(e) => { setKappaCol2(e.target.value); setKappaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={kappaCol2} onChange={(e) => { setKappaCol2(e.target.value); setKappaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {cols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -474,7 +475,7 @@ export function DescriptiveStatsView({
                     }
                     setKappaResult(computeCohensKappa(rows, kappaCol1, kappaCol2) ?? null);
                   }}
-                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                  className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {exploreLoading === "kappa" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.calculateKappaButton")}
                 </button>
@@ -496,7 +497,7 @@ export function DescriptiveStatsView({
               <div className="flex flex-wrap gap-4 items-end mb-2">
                 <div>
                   <label className="block text-sm mb-1">{t("descriptiveStats.numericColumnLabel")}</label>
-                  <select value={outlierCol} onChange={(e) => { setOutlierCol(e.target.value); setOutlierResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={outlierCol} onChange={(e) => { setOutlierCol(e.target.value); setOutlierResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("descriptiveStats.selectPlaceholder")}</option>
                     {stats.filter((s) => s.type === "numeric").map((s) => (
                       <option key={s.column} value={s.column}>{s.column}</option>
@@ -510,7 +511,7 @@ export function DescriptiveStatsView({
                     if (!outlierCol) return;
                     const ci = cols.indexOf(outlierCol);
                     if (ci === -1) return;
-                    const values = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
+                    const values = rows.slice(1).map((r) => numCell(r[ci])).filter((v) => !Number.isNaN(v));
                     if (analysisBackendAvailable) {
                       setExploreLoading("outlier");
                       try {
@@ -523,7 +524,7 @@ export function DescriptiveStatsView({
                     }
                     setOutlierResult(computeOutlierIqr(values));
                   }}
-                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                  className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {exploreLoading === "outlier" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("descriptiveStats.processingLabel")}</> : t("descriptiveStats.checkButton")}
                 </button>

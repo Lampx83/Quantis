@@ -194,13 +194,24 @@ export function parseFileContent(text: string, filename: string): { rows: string
 }
 
 function isNumeric(val: string): boolean {
-  if (val === "" || val === null || val === undefined) return false;
+  if (val === "" || val === null || val === undefined || String(val).trim() === "") return false;
   const n = Number(val);
   return !Number.isNaN(n) && Number.isFinite(n);
 }
 
-function toNum(val: string): number {
-  return Number(val);
+/**
+ * Chuyển ô dữ liệu thành số. Ô trống / chỉ có khoảng trắng / null → NaN (thiếu), KHÔNG phải 0
+ * (Number("") === 0 khiến giá trị thiếu bị tính như 0 và làm lệch mọi thống kê).
+ */
+export function numCell(val: unknown): number {
+  return toNum(val);
+}
+
+function toNum(val: unknown): number {
+  if (val === null || val === undefined) return NaN;
+  const s = typeof val === "string" ? val.trim() : String(val);
+  if (s === "") return NaN;
+  return Number(s);
 }
 
 /** Compute data profile for each column. */
@@ -227,13 +238,16 @@ export function computeProfile(rows: string[][]): DataProfile[] {
       const n = nums.length;
       const sum = nums.reduce((a, b) => a + b, 0);
       const mean = sum / n;
-      const variance = nums.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+      const ss = nums.reduce((a, b) => a + (b - mean) ** 2, 0);
+      const variance = ss / n;
       profile.min = Math.min(...nums);
       profile.max = Math.max(...nums);
       profile.mean = mean;
-      profile.std = Math.sqrt(variance);
+      // Độ lệch chuẩn MẪU (n−1) như SPSS/R/pandas và như bảng "Mô tả"; skewness G1 hiệu chỉnh theo n.
+      profile.std = n > 1 ? Math.sqrt(ss / (n - 1)) : 0;
       const m3 = nums.reduce((a, b) => a + (b - mean) ** 3, 0) / n;
-      profile.skew = profile.std && profile.std > 0 ? m3 / profile.std ** 3 : undefined;
+      const g1 = variance > 0 ? m3 / variance ** 1.5 : undefined;
+      profile.skew = g1 !== undefined && n > 2 ? g1 * Math.sqrt(n * (n - 1)) / (n - 2) : g1;
     }
     return profile;
   });
@@ -272,20 +286,31 @@ export function computeDescriptive(rows: string[][]): DescriptiveRow[] {
     if (type === "numeric" && nums.length > 0) {
       const sorted = [...nums].sort((a, b) => a - b);
       const n = sorted.length;
+      // Phân vị nội suy tuyến tính (như numpy/pandas/SPSS "HAVERAGE" gần đúng); median của n chẵn = trung bình hai giá trị giữa.
+      const quantile = (pr: number): number => {
+        if (n === 1) return sorted[0];
+        const pos = (n - 1) * pr;
+        const lo = Math.floor(pos);
+        const hi = Math.ceil(pos);
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+      };
       row.mean = nums.reduce((a, b) => a + b, 0) / n;
-      row.median = sorted[Math.floor(n / 2)];
+      row.median = quantile(0.5);
       const mean = row.mean;
-      const variance = nums.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
-      row.std = Math.sqrt(variance);
-      row.min = Math.min(...nums);
-      row.max = Math.max(...nums);
-      row.q25 = sorted[Math.floor(n * 0.25)];
-      row.q75 = sorted[Math.floor(n * 0.75)];
-      row.q10 = sorted[Math.floor(n * 0.1)];
-      row.q90 = sorted[Math.floor(n * 0.9)];
+      const ss = nums.reduce((a, b) => a + (b - mean) ** 2, 0);
+      row.std = n > 1 ? Math.sqrt(ss / (n - 1)) : 0; // độ lệch chuẩn mẫu (n−1)
+      row.min = sorted[0];
+      row.max = sorted[n - 1];
+      row.q25 = quantile(0.25);
+      row.q75 = quantile(0.75);
+      row.q10 = quantile(0.1);
+      row.q90 = quantile(0.9);
+      const variance = ss / n;
       if (n >= 4 && variance > 0) {
-        const m4 = nums.reduce((s, v) => s + (v - mean) ** 4, 0) / n;
-        row.kurtosis = m4 / (variance ** 2) - 3;
+        // Kurtosis dư (excess) hiệu chỉnh G2 (SPSS/pandas): ((n−1)/((n−2)(n−3)))·((n+1)·g2 + 6)
+        const m4 = nums.reduce((acc, v) => acc + (v - mean) ** 4, 0) / n;
+        const g2 = m4 / (variance ** 2) - 3;
+        row.kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * g2 + 6);
       }
     } else {
       const counts: Record<string, number> = {};
@@ -374,8 +399,8 @@ export function computePairedTTest(rows: string[][], col1: string, col2: string)
   const data = rows.slice(1);
   const pairs: [number, number][] = [];
   data.forEach((r) => {
-    const a = Number(r[i1]);
-    const b = Number(r[i2]);
+    const a = toNum(r[i1]);
+    const b = toNum(r[i2]);
     if (!Number.isNaN(a) && !Number.isNaN(b)) pairs.push([a, b]);
   });
   if (pairs.length < 2) return null;
@@ -412,8 +437,8 @@ export function computeWilcoxonSignedRank(rows: string[][], col1: string, col2: 
   const data = rows.slice(1);
   const diffs: number[] = [];
   data.forEach((r) => {
-    const a = Number(r[i1]);
-    const b = Number(r[i2]);
+    const a = toNum(r[i1]);
+    const b = toNum(r[i2]);
     if (!Number.isNaN(a) && !Number.isNaN(b)) diffs.push(a - b);
   });
   const nonZero = diffs.filter((d) => d !== 0);
@@ -423,11 +448,14 @@ export function computeWilcoxonSignedRank(rows: string[][], col1: string, col2: 
   const sorted = absD.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
   const ranks: number[] = new Array(n);
   let r = 0;
+  let tieSum = 0; // Σ(t³ − t) trên các nhóm trùng hạng (hiệu chỉnh phương sai như scipy/SPSS)
   while (r < sorted.length) {
     let end = r;
     while (end < sorted.length && sorted[end].v === sorted[r].v) end++;
     const avgRank = (r + 1 + end) / 2;
     for (let t = r; t < end; t++) ranks[sorted[t].i] = avgRank;
+    const tieLen = end - r;
+    tieSum += tieLen * tieLen * tieLen - tieLen;
     r = end;
   }
   let wPlus = 0;
@@ -435,7 +463,7 @@ export function computeWilcoxonSignedRank(rows: string[][], col1: string, col2: 
   const wMinus = (n * (n + 1)) / 2 - wPlus;
   const w = Math.min(wPlus, wMinus);
   const meanW = (n * (n + 1)) / 4;
-  const stdW = Math.sqrt((n * (n + 1) * (2 * n + 1)) / 24);
+  const stdW = Math.sqrt(Math.max(0, (n * (n + 1) * (2 * n + 1)) / 24 - tieSum / 48));
   const z = stdW > 0 ? (w - meanW) / stdW : 0;
   const pValue = 2 * (1 - normalCDF(Math.abs(z)));
   const sortedD = [...nonZero].sort((a, b) => a - b);
@@ -443,12 +471,48 @@ export function computeWilcoxonSignedRank(rows: string[][], col1: string, col2: 
   return { w, z, pValue, n, medianDiff };
 }
 
+/** erfc(x) chính xác (chuỗi Taylor cho |x| < 3, liên phân số cho phần đuôi) — sai số tương đối ~1e-13. */
+function erfcAccurate(x: number): number {
+  if (Number.isNaN(x)) return NaN;
+  const ax = Math.abs(x);
+  let v: number;
+  if (ax < 3) {
+    // erf(x) = 2/sqrt(pi) * sum_{n>=0} (-1)^n x^(2n+1) / (n! (2n+1))
+    let term = ax;
+    let sum = ax;
+    const x2 = ax * ax;
+    for (let n = 1; n < 200; n++) {
+      term *= -x2 / n;
+      const add = term / (2 * n + 1);
+      sum += add;
+      if (Math.abs(add) < 1e-17 * Math.abs(sum)) break;
+    }
+    v = 1 - (2 / Math.sqrt(Math.PI)) * sum;
+  } else {
+    // erfc(x) = exp(-x^2)/(x sqrt(pi)) * 1/(1+ 1/(2x^2)/(1+ 2/(2x^2)/(1+ ...))) — liên phân số Lentz
+    const tiny = 1e-300;
+    let f = ax;
+    let C = ax;
+    let D = 0;
+    for (let k = 1; k < 500; k++) {
+      const a = k / 2;
+      D = ax + a * D;
+      if (D === 0) D = tiny;
+      C = ax + a / C;
+      if (C === 0) C = tiny;
+      D = 1 / D;
+      const delta = C * D;
+      f *= delta;
+      if (Math.abs(delta - 1) < 1e-15) break;
+    }
+    v = Math.exp(-ax * ax) / (f * Math.sqrt(Math.PI));
+  }
+  return x >= 0 ? v : 2 - v;
+}
+
+/** Hàm phân phối chuẩn tắc Φ(z) = ½·erfc(−z/√2) (trước đây dùng công thức erf nhầm đối số nên p-value lệch). */
 function normalCDF(z: number): number {
-  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429;
-  const p = 0.3275911;
-  const t = 1 / (1 + p * z);
-  const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-z * z / 2);
-  return z >= 0 ? y : 1 - y;
+  return 0.5 * erfcAccurate(-z / Math.SQRT2);
 }
 
 function regularizedIncompleteBeta(x: number, a: number, b: number): number {
@@ -783,8 +847,8 @@ export function computeSignTest(rows: string[][], col1: string, col2: string): S
   const data = rows.slice(1);
   let pos = 0, neg = 0;
   data.forEach((r) => {
-    const a = Number(r[i1]);
-    const b = Number(r[i2]);
+    const a = toNum(r[i1]);
+    const b = toNum(r[i2]);
     if (Number.isNaN(a) || Number.isNaN(b)) return;
     const d = a - b;
     if (d > 0) pos++;
@@ -799,11 +863,16 @@ export function computeSignTest(rows: string[][], col1: string, col2: string): S
 
 /** McNemar test (paired binary: cùng đối tượng, 2 thời điểm). Hai cột nhị phân (2 giá trị). */
 export interface McNemarResult {
+  /** χ² có hiệu chỉnh liên tục (Edwards): (|b − c| − 1)² / (b + c), df = 1 — giống R mcnemar.test(correct = TRUE). */
   chi2: number;
   pValue: number;
   nDiscordant: number;
   b: number;
   c: number;
+  /** χ² không hiệu chỉnh (b − c)² / (b + c), để đối chiếu. */
+  chi2Uncorrected: number;
+  /** p chính xác (nhị thức hai phía, p0 = 0,5) — nên dùng khi b + c < 25. */
+  exactPValue: number | null;
 }
 
 export function computeMcNemar(rows: string[][], col1: string, col2: string): McNemarResult | null {
@@ -825,9 +894,12 @@ export function computeMcNemar(rows: string[][], col1: string, col2: string): Mc
   });
   const nDiscordant = b + c;
   if (nDiscordant === 0) return null;
-  const chi2 = (b - c) ** 2 / nDiscordant;
-  const pValue = 1 - chiSquareCDF(chi2, 1);
-  return { chi2, pValue, nDiscordant, b, c };
+  const chi2Uncorrected = (b - c) ** 2 / nDiscordant;
+  // Hiệu chỉnh liên tục (Edwards, 1948): trừ 1 khỏi |b − c| (mặc định của R/statsmodels; SPSS dùng nhị thức chính xác khi b + c ≤ 25).
+  const chi2 = (Math.abs(b - c) - 1) ** 2 / nDiscordant;
+  const pValue = chiSquareSurvival(chi2, 1);
+  const exactPValue = computeBinomialTest(Math.min(b, c), nDiscordant, 0.5)?.pValueTwoTailed ?? null;
+  return { chi2, pValue, nDiscordant, b, c, chi2Uncorrected, exactPValue };
 }
 
 /** Kết quả Mann-Whitney U (hai mẫu độc lập, không giả định phân phối chuẩn). */
@@ -863,6 +935,7 @@ export function computeMannWhitneyU(
   const all = g1.map((v) => ({ v, g: 1 })).concat(g2.map((v) => ({ v, g: 2 })));
   all.sort((a, b) => a.v - b.v);
   const ranks: number[] = [];
+  let tieTerm = 0; // Σ(t³ − t) để hiệu chỉnh phương sai khi có trùng hạng
   let i = 0;
   while (i < all.length) {
     let j = i;
@@ -870,6 +943,7 @@ export function computeMannWhitneyU(
     const tieCount = j - i;
     const avgRank = (2 * (i + 1) + tieCount - 1) / 2;
     for (let k = i; k < j; k++) ranks[k] = avgRank;
+    tieTerm += tieCount * tieCount * tieCount - tieCount;
     i = j;
   }
   let rankSum1 = 0;
@@ -878,8 +952,8 @@ export function computeMannWhitneyU(
   const u2 = n1 * n2 - u1;
   const u = Math.min(u1, u2);
   const meanU = (n1 * n2) / 2;
-  const tieFactor = 1;
-  const stdU = Math.sqrt((n1 * n2 * (n1 + n2 + 1)) / 12) * tieFactor;
+  const nTot = n1 + n2;
+  const stdU = Math.sqrt(Math.max(0, (n1 * n2 / 12) * ((nTot + 1) - (nTot > 1 ? tieTerm / (nTot * (nTot - 1)) : 0))));
   const z = stdU > 0 ? (u - meanU) / stdU : 0;
   const pValue = 2 * (1 - normalCDF(Math.abs(z)));
   const med = (arr: number[]) => {
@@ -986,8 +1060,8 @@ export function computeCorrelationMatrix(rows: string[][], method: "pearson" | "
       const cj = numericIndices[j];
       const pairs: [number, number][] = [];
       data.forEach((r) => {
-        const a = Number(r[ci]);
-        const b = Number(r[cj]);
+        const a = toNum(r[ci]);
+        const b = toNum(r[cj]);
         if (!Number.isNaN(a) && !Number.isNaN(b)) pairs.push([a, b]);
       });
       if (pairs.length < 2) continue;
@@ -1028,15 +1102,15 @@ export function computePartialCorrelation(rows: string[][], col1: string, col2: 
   if (i1 === -1 || i2 === -1) return null;
   const controlIndices = controlCols.map((c) => headers.indexOf(c)).filter((i) => i >= 0);
   const validRows = data.filter((r) => {
-    const v1 = Number(r[i1]);
-    const v2 = Number(r[i2]);
+    const v1 = toNum(r[i1]);
+    const v2 = toNum(r[i2]);
     if (Number.isNaN(v1) || Number.isNaN(v2)) return false;
-    return controlIndices.every((ci) => r[ci] !== "" && !Number.isNaN(Number(r[ci])));
+    return controlIndices.every((ci) => r[ci] !== "" && !Number.isNaN(toNum(r[ci])));
   });
   if (validRows.length < 3) return null;
   if (controlCols.length === 0) {
-    const x = validRows.map((r) => Number(r[i1]));
-    const y = validRows.map((r) => Number(r[i2]));
+    const x = validRows.map((r) => toNum(r[i1]));
+    const y = validRows.map((r) => toNum(r[i2]));
     const n = x.length;
     const mx = x.reduce((a, b) => a + b, 0) / n;
     const my = y.reduce((a, b) => a + b, 0) / n;
@@ -1047,9 +1121,9 @@ export function computePartialCorrelation(rows: string[][], col1: string, col2: 
   }
   if (controlIndices.length === 1) {
     const ic = controlIndices[0];
-    const x = validRows.map((r) => Number(r[i1]));
-    const y = validRows.map((r) => Number(r[i2]));
-    const z = validRows.map((r) => Number(r[ic]));
+    const x = validRows.map((r) => toNum(r[i1]));
+    const y = validRows.map((r) => toNum(r[i2]));
+    const z = validRows.map((r) => toNum(r[ic]));
     const n = x.length;
     const corr = (a: number[], b: number[]) => {
       const ma = a.reduce((s, v) => s + v, 0) / n;
@@ -1074,8 +1148,8 @@ export function computePartialCorrelation(rows: string[][], col1: string, col2: 
     if (yIdx === -1 || xIdxs.length !== xCols.length) return null;
     return validRows.map((r) => {
       let pred = res.intercept;
-      xCols.forEach((c, i) => { pred += (res.coefficients[c] ?? 0) * Number(r[xIdxs[i]]); });
-      return Number(r[yIdx]) - pred;
+      xCols.forEach((c, i) => { pred += (res.coefficients[c] ?? 0) * toNum(r[xIdxs[i]]); });
+      return toNum(r[yIdx]) - pred;
     });
   };
   const res1 = olsResiduals(col1, controlCols);
@@ -1135,7 +1209,7 @@ export function computeOneWayANOVA(rows: string[][], factorCol: string, valueCol
   const groups: Record<string, number[]> = {};
   data.forEach((r) => {
     const g = String(r[fi] ?? "").trim();
-    const v = Number(r[vi]);
+    const v = toNum(r[vi]);
     if (g === "" || Number.isNaN(v)) return;
     if (!groups[g]) groups[g] = [];
     groups[g].push(v);
@@ -1218,7 +1292,7 @@ export function computeKruskalWallis(rows: string[][], factorCol: string, valueC
   const groups: Record<string, number[]> = {};
   data.forEach((r) => {
     const g = String(r[fi] ?? "").trim();
-    const v = Number(r[vi]);
+    const v = toNum(r[vi]);
     if (g === "" || Number.isNaN(v)) return;
     if (!groups[g]) groups[g] = [];
     groups[g].push(v);
@@ -1284,7 +1358,7 @@ export function computeLeveneTest(rows: string[][], groupCol: string, valueCol: 
   const groups: Record<string, number[]> = {};
   data.forEach((r) => {
     const g = String(r[gi]).trim();
-    const v = Number(r[vi]);
+    const v = toNum(r[vi]);
     if (g === "" || Number.isNaN(v)) return;
     if (!groups[g]) groups[g] = [];
     groups[g].push(v);
@@ -1337,14 +1411,15 @@ export function computeFriedmanTest(rows: string[][], valueColumns: string[]): F
   const headers = rows[0] || [];
   const indices = valueColumns.map((c) => headers.indexOf(c)).filter((i) => i >= 0);
   if (indices.length !== valueColumns.length) return null;
-  const data = rows.slice(1);
+  // Chỉ dùng các khối (dòng) đầy đủ ở mọi điều kiện (listwise) — ô trống không được tính là 0 hay bỏ dở.
+  const data = rows.slice(1).filter((r) => indices.every((ci) => !Number.isNaN(toNum(r[ci]))));
   const nBlocks = data.length;
   const k = indices.length;
+  if (nBlocks < 2) return null;
+  let tieSum = 0; // Σ(t³ − t) trên mọi khối (hiệu chỉnh trùng hạng như SPSS/scipy)
   const rankInRow = (row: string[]): number[] => {
-    const vals = indices.map((ci, pos) => ({ v: Number(row[ci]), pos }));
-    const valid = vals.filter((x) => !Number.isNaN(x.v));
-    if (valid.length < 2) return indices.map(() => NaN);
-    const sorted = [...valid].sort((a, b) => a.v - b.v);
+    const vals = indices.map((ci, pos) => ({ v: toNum(row[ci]), pos }));
+    const sorted = [...vals].sort((a, b) => a.v - b.v);
     const out: number[] = new Array(indices.length).fill(NaN);
     let r = 0;
     while (r < sorted.length) {
@@ -1352,21 +1427,18 @@ export function computeFriedmanTest(rows: string[][], valueColumns: string[]): F
       while (end < sorted.length && sorted[end].v === sorted[r].v) end++;
       const avgRank = (r + 1 + end) / 2;
       for (let t = r; t < end; t++) out[sorted[t].pos] = avgRank;
+      const tl = end - r;
+      tieSum += tl * tl * tl - tl;
       r = end;
     }
     return out;
   };
   const rankMatrix: number[][] = data.map((r) => rankInRow(r));
-  const sumRanks = indices.map((_, j) => {
-    let s = 0;
-    let count = 0;
-    rankMatrix.forEach((row) => { if (!Number.isNaN(row[j])) { s += row[j]; count++; } });
-    return { sum: s, count };
-  });
-  const N = sumRanks.reduce((a, x) => a + x.count, 0) / k;
-  const Rj = sumRanks.map((x) => x.sum);
+  const Rj = indices.map((_, j) => rankMatrix.reduce((s, row) => s + row[j], 0));
   const sumRjSq = Rj.reduce((s, r) => s + r * r, 0);
-  const chi2 = (12 / (nBlocks * k * (k + 1))) * sumRjSq - 3 * nBlocks * (k + 1);
+  let chi2 = (12 / (nBlocks * k * (k + 1))) * sumRjSq - 3 * nBlocks * (k + 1);
+  const tieDen = 1 - tieSum / (nBlocks * k * (k * k - 1));
+  if (tieDen > 0) chi2 = chi2 / tieDen;
   const df = k - 1;
   const pValue = chi2 <= 0 ? 1 : 1 - chiSquareCDF(chi2, df);
   const meanRanks = valueColumns.map((name, j) => ({
@@ -1389,19 +1461,21 @@ export function computeCronbachAlpha(rows: string[][], columnNames: string[]): n
   const headers = rows[0] || [];
   const indices = columnNames.map((c) => headers.indexOf(c)).filter((i) => i >= 0);
   if (indices.length < 2) return null;
-  const data = rows.slice(1);
+  // Listwise: chỉ dùng các dòng có đủ giá trị số ở mọi biến (ô trống KHÔNG được tính là 0).
+  const data = rows.slice(1).filter((r) => indices.every((ci) => !Number.isNaN(toNum(r[ci]))));
   const itemVars: number[] = [];
   let totalVar = 0;
   const n = data.length;
+  if (n < 3) return null;
   const itemSums = data.map((r) => {
     let s = 0;
-    indices.forEach((ci) => { s += Number(r[ci]) || 0; });
+    indices.forEach((ci) => { s += toNum(r[ci]); });
     return s;
   });
   const totalMean = itemSums.reduce((a, b) => a + b, 0) / n;
   totalVar = itemSums.reduce((s, v) => s + (v - totalMean) ** 2, 0) / n;
   indices.forEach((ci) => {
-    const vals = data.map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
+    const vals = data.map((r) => toNum(r[ci])).filter((v) => !Number.isNaN(v));
     if (vals.length < 2) return;
     const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
     const v = vals.reduce((s, x) => s + (x - mean) ** 2, 0) / vals.length;
@@ -1584,12 +1658,12 @@ export function computeOLS(rows: string[][], yCol: string, xCols: string[]): OLS
   const y: number[] = [];
   for (let i = 0; i < data.length; i++) {
     const r = data[i];
-    const yv = Number(r[yi]);
+    const yv = toNum(r[yi]);
     if (Number.isNaN(yv)) continue;
     let ok = true;
     const row = [1];
     for (const xi of xIndices) {
-      const v = Number(r[xi]);
+      const v = toNum(r[xi]);
       if (Number.isNaN(v)) { ok = false; break; }
       row.push(v);
     }
@@ -1663,9 +1737,20 @@ export function computeBetaPosterior(
   const sum = postAlpha + postBeta;
   const mean = postAlpha / sum;
   const variance = (postAlpha * postBeta) / (sum * sum * (sum + 1));
-  const std = Math.sqrt(variance);
-  const ci95Lower = Math.max(0, mean - 1.96 * std);
-  const ci95Upper = Math.min(1, mean + 1.96 * std);
+  // Khoảng tin cậy (credible interval) 95% chính xác theo phân vị 2,5% và 97,5% của Beta(α, β)
+  // (không dùng xấp xỉ chuẩn mean ± 1,96·SD vì sai khi n nhỏ hoặc tỉ lệ gần 0/1).
+  const betaQuantile = (pr: number): number => {
+    let lo = 0;
+    let hi = 1;
+    for (let it = 0; it < 80; it++) {
+      const mid = (lo + hi) / 2;
+      if (regularizedIncompleteBeta(mid, postAlpha, postBeta) < pr) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const ci95Lower = betaQuantile(0.025);
+  const ci95Upper = betaQuantile(0.975);
   return { postAlpha, postBeta, mean, variance, ci95Lower, ci95Upper };
 }
 
@@ -1688,7 +1773,7 @@ export function computeKMeans(
   if (indices.length === 0 || K < 2) return null;
   const data: number[][] = [];
   for (let i = 1; i < rows.length; i++) {
-    const row = indices.map((ci) => Number(rows[i][ci]));
+    const row = indices.map((ci) => toNum(rows[i][ci]));
     if (row.every((v) => !Number.isNaN(v))) data.push(row);
   }
   const n = data.length;
@@ -1796,7 +1881,7 @@ export function getBoxStatsByGroup(rows: string[][], groupCol: string, valueCol:
   const groups: Record<string, number[]> = {};
   data.forEach((r) => {
     const g = String(r[gi] ?? "").trim();
-    const v = Number(r[vi]);
+    const v = toNum(r[vi]);
     if (g === "" || Number.isNaN(v)) return;
     if (!groups[g]) groups[g] = [];
     groups[g].push(v);
@@ -1920,12 +2005,12 @@ export function computeLogisticRegression(rows: string[][], yCol: string, xCols:
   const y: number[] = [];
   for (let i = 0; i < data.length; i++) {
     const r = data[i];
-    const yv = Number(r[yi]);
+    const yv = toNum(r[yi]);
     if (yv !== 0 && yv !== 1) continue;
     let ok = true;
     const row = [1];
     for (const xi of xIndices) {
-      const v = Number(r[xi]);
+      const v = toNum(r[xi]);
       if (Number.isNaN(v)) { ok = false; break; }
       row.push(v);
     }
@@ -2027,7 +2112,7 @@ export function computeEFA(rows: string[][], columnNames: string[], nFactors?: n
   const headers = rows[0] || [];
   const indices = columnNames.map((c) => headers.indexOf(c)).filter((i) => i >= 0);
   if (indices.length < 2) return null;
-  const data = rows.slice(1).map((r) => indices.map((ci) => Number(r[ci]))).filter((row) => row.every((v) => !Number.isNaN(v)));
+  const data = rows.slice(1).map((r) => indices.map((ci) => toNum(r[ci]))).filter((row) => row.every((v) => !Number.isNaN(v)));
   const n = data.length;
   if (n < 10) return null;
   const p = indices.length;
@@ -2039,6 +2124,12 @@ export function computeEFA(rows: string[][], columnNames: string[], nFactors?: n
     let s = 0;
     for (let k = 0; k < n; k++) s += centered[k][i] * centered[k][j];
     cov[i][j] = s / (n - 1);
+  }
+  // EFA/PCA theo MA TRẬN TƯƠNG QUAN (chuẩn hoá từng biến) như SPSS/R, để biến khác thang đo không lấn át nhau.
+  const sdv = cov.map((row, i) => Math.sqrt(row[i]));
+  for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) {
+    const d = sdv[i] * sdv[j];
+    cov[i][j] = d > 0 ? cov[i][j] / d : (i === j ? 1 : 0);
   }
   const { eigenvalues, eigenvectors } = eigenDecomposition(cov);
   const K = nFactors ?? Math.min(p, eigenvalues.filter((e) => e > 1).length || 1);
@@ -2335,9 +2426,9 @@ export function computeModeration(rows: string[][], yCol: string, xCol: string, 
   const newData: string[][] = [];
   for (let i = 0; i < data.length; i++) {
     const r = data[i];
-    const xv = Number(r[xi]);
-    const mv = Number(r[mi]);
-    const yv = Number(r[yi]);
+    const xv = toNum(r[xi]);
+    const mv = toNum(r[mi]);
+    const yv = toNum(r[yi]);
     if (Number.isNaN(xv) || Number.isNaN(mv) || Number.isNaN(yv)) continue;
     newData.push([...r, String(xv * mv)]);
   }
@@ -2585,7 +2676,7 @@ function predictMulticlassOneVsRest(rows: string[][], models: LogisticResult[], 
   const predicted: string[] = [];
   for (let i = 0; i < data.length; i++) {
     const r = data[i];
-    const xVec = xIndices.map((ci) => Number(r[ci]));
+    const xVec = xIndices.map((ci) => toNum(r[ci]));
     if (xVec.some((v) => Number.isNaN(v))) {
       predicted.push(classes[0]);
       continue;

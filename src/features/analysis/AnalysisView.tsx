@@ -162,7 +162,7 @@ export function AnalysisView({
             type="button"
             disabled={correlationLoading}
             onClick={() => setCorrelationMethod("pearson")}
-            className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-60 ${
+            className={`rounded-md px-3 py-1.5 text-sm disabled:opacity-60 ${
               correlationMethod === "pearson"
                 ? "bg-brand text-white"
                 : "border border-neutral-300 dark:border-neutral-600"
@@ -174,7 +174,7 @@ export function AnalysisView({
             type="button"
             disabled={correlationLoading}
             onClick={() => setCorrelationMethod("spearman")}
-            className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-60 ${
+            className={`rounded-md px-3 py-1.5 text-sm disabled:opacity-60 ${
               correlationMethod === "spearman"
                 ? "bg-brand text-white"
                 : "border border-neutral-300 dark:border-neutral-600"
@@ -186,7 +186,7 @@ export function AnalysisView({
             type="button"
             disabled={correlationLoading}
             onClick={() => setCorrelationMethod("kendall")}
-            className={`rounded-lg px-3 py-1.5 text-sm disabled:opacity-60 ${
+            className={`rounded-md px-3 py-1.5 text-sm disabled:opacity-60 ${
               correlationMethod === "kendall"
                 ? "bg-brand text-white"
                 : "border border-neutral-300 dark:border-neutral-600"
@@ -284,7 +284,7 @@ export function AnalysisView({
                   setCovarianceMethod(e.target.value as "population" | "sample");
                   setCovarianceResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm"
               >
                 <option value="sample">{t("analysisView.covarianceSample")}</option>
                 <option value="population">{t("analysisView.covariancePopulation")}</option>
@@ -306,7 +306,7 @@ export function AnalysisView({
                   setCovarianceLoading(false);
                 }
               }}
-              className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50 inline-flex items-center gap-2"
             >
               {covarianceLoading ? (
                 <>
@@ -391,7 +391,7 @@ export function AnalysisView({
                   setPartialCol1(e.target.value);
                   setPartialResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm"
               >
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {corr.columnNames.map((c) => (
@@ -411,7 +411,7 @@ export function AnalysisView({
                   setPartialCol2(e.target.value);
                   setPartialResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm"
               >
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {corr.columnNames.map((c) => (
@@ -455,7 +455,7 @@ export function AnalysisView({
                 setPartialResult(res ?? null);
               }}
               disabled={!partialCol1 || !partialCol2}
-              className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50"
+              className="rounded-md bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50"
             >
               {t("analysisView.computePartialRButton")}
             </button>

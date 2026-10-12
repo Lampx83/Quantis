@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   getDataRows,
   getUniqueValues,
   computeTTest,
@@ -186,7 +187,7 @@ export function HypothesisTab({
     if (wilcoxonPairedResult) return `Wilcoxon cặp: W = ${wilcoxonPairedResult.w.toFixed(0)}, z = ${wilcoxonPairedResult.z.toFixed(2)}, p = ${wilcoxonPairedResult.pValue < 0.001 ? "<.001" : wilcoxonPairedResult.pValue.toFixed(3)}, n = ${wilcoxonPairedResult.n}.`;
     if (friedmanResult) return `Friedman: χ² = ${friedmanResult.chi2.toFixed(2)}, df = ${friedmanResult.df}, p = ${friedmanResult.pValue < 0.001 ? "<.001" : friedmanResult.pValue.toFixed(3)}.`;
     if (leveneResult) return `Levene (Đồng phương sai): W = ${leveneResult.w.toFixed(4)}, p = ${leveneResult.pValue < 0.001 ? "<.001" : leveneResult.pValue.toFixed(3)}.`;
-    if (mcnemarResult) return `McNemar (cặp nhị phân): χ² = ${mcnemarResult.chi2.toFixed(2)}, p = ${mcnemarResult.pValue < 0.001 ? "<.001" : mcnemarResult.pValue.toFixed(3)}.`;
+    if (mcnemarResult) return `McNemar (cặp nhị phân, hiệu chỉnh liên tục): χ² = ${mcnemarResult.chi2.toFixed(2)}, p = ${mcnemarResult.pValue < 0.001 ? "<.001" : mcnemarResult.pValue.toFixed(3)}.`;
     if (shapiroResult) return `Shapiro-Wilk (chuẩn): W = ${shapiroResult.w.toFixed(4)}, p = ${shapiroResult.pValue < 0.001 ? "<.001" : shapiroResult.pValue.toFixed(3)}. p < 0.05 → bác bỏ chuẩn.`;
     if (powerResult) return `Phân tích lực mẫu: cần n = ${powerResult.nRequired} để đạt power = ${(powerResult.power * 100).toFixed(0)}%, effect size d = ${powerResult.effectSize}, α = ${powerResult.alpha}.`;
     return "";
@@ -228,7 +229,20 @@ export function HypothesisTab({
     if (analysisBackendAvailable) {
       setHypothesisLoading("chi2");
       try {
-        const res = await quantisApi.analyzeChiSquare(rows, chiCol1, chiCol2);
+        const raw = await quantisApi.analyzeChiSquare(rows, chiCol1, chiCol2);
+        // Backend Python không trả Cramér's V / phi → bổ sung từ χ², n và kích thước bảng; lỗi backend → tính cục bộ.
+        let res: ChiSquareResult | null = null;
+        if (raw) {
+          const nTot = raw.table.reduce((a, c) => a + c.count, 0);
+          const minDim = Math.min(raw.rowLabels.length, raw.colLabels.length) - 1;
+          res = {
+            ...(raw as ChiSquareResult),
+            cramersV: nTot > 0 && minDim > 0 ? Math.sqrt(raw.chi2 / (nTot * minDim)) : undefined,
+            phi: nTot > 0 && raw.rowLabels.length === 2 && raw.colLabels.length === 2 ? Math.sqrt(raw.chi2 / nTot) : undefined,
+          };
+        } else {
+          res = computeChiSquare(rows, chiCol1, chiCol2);
+        }
         setChiResult(res ?? null);
         setTResult(null);
         setAnovaResult(null);
@@ -362,7 +376,7 @@ export function HypothesisTab({
   const runShapiroWilk = async () => {
     if (!normalityCol || !numericCols.includes(normalityCol)) return;
     const ci = rows[0].indexOf(normalityCol);
-    const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
+    const vals = rows.slice(1).map((r) => numCell(r[ci])).filter((v) => !Number.isNaN(v));
     if (analysisBackendAvailable) {
       setHypothesisLoading("shapiro");
       try {
@@ -481,7 +495,7 @@ export function HypothesisTab({
           <select
             value={testKind}
             onChange={(e) => { setTestKind(e.target.value as typeof testKind); clearResults(); }}
-            className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-w-[200px]"
+            className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm min-w-[200px]"
           >
             <optgroup label={t("hypothesisTab.optgroup.compareMeans")}>
               <option value="ttest">{t("hypothesisTab.option.ttestIndependent")}</option>
@@ -521,28 +535,28 @@ export function HypothesisTab({
       <div className="flex flex-wrap gap-4 items-end mb-4">
         <div>
           <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-          <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+          <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
             <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {cols.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
-          <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+          <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
             <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
-          <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+          <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
             <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-          <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setTResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+          <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
             <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
             {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -551,7 +565,7 @@ export function HypothesisTab({
           <input type="checkbox" checked={ttestEqualVar} onChange={(e) => { setTtestEqualVar(e.target.checked); setTResult(null); }} className="rounded border-neutral-300" />
           <span className="text-sm">{t("hypothesisTab.ttest.equalVarianceLabel")}</span>
         </label>
-        <button type="button" onClick={runTTest} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+        <button type="button" onClick={runTTest} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
           {hypothesisLoading === "ttest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ttest.runButton")}
         </button>
       </div>
@@ -573,19 +587,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorVariable")}</label>
-              <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setAnovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setAnovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.dependentVariable")}</label>
-              <select value={anovaValueCol} onChange={(e) => { setAnovaValueCol(e.target.value); setAnovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={anovaValueCol} onChange={(e) => { setAnovaValueCol(e.target.value); setAnovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runANOVA} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runANOVA} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "anova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.anova.runButton")}
             </button>
           </div>
@@ -633,28 +647,28 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorGroup")}</label>
-              <select value={ancovaFactorCol} onChange={(e) => { setAncovaFactorCol(e.target.value); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={ancovaFactorCol} onChange={(e) => { setAncovaFactorCol(e.target.value); setAncovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.dependentVariableDV")}</label>
-              <select value={ancovaValueCol} onChange={(e) => { setAncovaValueCol(e.target.value); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={ancovaValueCol} onChange={(e) => { setAncovaValueCol(e.target.value); setAncovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.ancova.covariatesMultiLabel")}</label>
-              <select multiple value={ancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setAncovaCovariateCols(sel); setAncovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+              <select multiple value={ancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setAncovaCovariateCols(sel); setAncovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.filter((c) => c !== ancovaValueCol).map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
               <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.common.multiSelectHint")}</p>
             </div>
-            <button type="button" onClick={runAncova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runAncova} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "ancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ancova.runButton")}
             </button>
           </div>
@@ -679,21 +693,21 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorGroup")}</label>
-              <select value={manovaFactorCol} onChange={(e) => { setManovaFactorCol(e.target.value); setManovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={manovaFactorCol} onChange={(e) => { setManovaFactorCol(e.target.value); setManovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.manova.dvMultiLabel")}</label>
-              <select multiple value={manovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setManovaValueCols(sel); setManovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+              <select multiple value={manovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setManovaValueCols(sel); setManovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
               <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.manova.multiSelectHintMin2")}</p>
             </div>
-            <button type="button" onClick={runManova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runManova} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "manova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.manova.runButton")}
             </button>
           </div>
@@ -714,14 +728,14 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorGroup")}</label>
-              <select value={mancovaFactorCol} onChange={(e) => { setMancovaFactorCol(e.target.value); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={mancovaFactorCol} onChange={(e) => { setMancovaFactorCol(e.target.value); setMancovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.manova.dvMultiLabel")}</label>
-              <select multiple value={mancovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaValueCols(sel); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+              <select multiple value={mancovaValueCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaValueCols(sel); setMancovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
@@ -730,14 +744,14 @@ export function HypothesisTab({
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mancova.covariatesAtLeast1Label")}</label>
-              <select multiple value={mancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaCovariateCols(sel); setMancovaResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
+              <select multiple value={mancovaCovariateCols} onChange={(e) => { const sel = Array.from(e.target.selectedOptions, (o) => o.value); setMancovaCovariateCols(sel); setMancovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 min-h-[80px]">
                 {numericCols.filter((c) => !mancovaValueCols.includes(c)).map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
               <p className="text-xs text-neutral-500 mt-0.5">{t("hypothesisTab.common.multiSelectHint")}</p>
             </div>
-            <button type="button" onClick={runMancova} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runMancova} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "mancova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.mancova.runButton")}
             </button>
           </div>
@@ -757,19 +771,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.kruskal.factorLabel")}</label>
-              <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setKruskalResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setKruskalResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.kruskal.numericLabel")}</label>
-              <select value={anovaValueCol} onChange={(e) => { setAnovaValueCol(e.target.value); setKruskalResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={anovaValueCol} onChange={(e) => { setAnovaValueCol(e.target.value); setKruskalResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runKruskalWallis} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runKruskalWallis} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "kruskal" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.kruskal.runButton")}
             </button>
           </div>
@@ -792,19 +806,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.chisquare.col1Label")}</label>
-              <select value={chiCol1} onChange={(e) => { setChiCol1(e.target.value); setChiResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={chiCol1} onChange={(e) => { setChiCol1(e.target.value); setChiResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.chisquare.col2Label")}</label>
-              <select value={chiCol2} onChange={(e) => { setChiCol2(e.target.value); setChiResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={chiCol2} onChange={(e) => { setChiCol2(e.target.value); setChiResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runChiSquare} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runChiSquare} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "chi2" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.chisquare.runButton")}
             </button>
           </div>
@@ -826,33 +840,33 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setMannWhitneyResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
-              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setMannWhitneyResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
-              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setMannWhitneyResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setMannWhitneyResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setMannWhitneyResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runMannWhitney} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runMannWhitney} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "mannwhitney" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.mannwhitney.runButton")}
             </button>
           </div>
@@ -871,14 +885,14 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.paired.col1Label")}</label>
-              <select value={pairedCol1} onChange={(e) => { setPairedCol1(e.target.value); setPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={pairedCol1} onChange={(e) => { setPairedCol1(e.target.value); setPairedResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.paired.col2Label")}</label>
-              <select value={pairedCol2} onChange={(e) => { setPairedCol2(e.target.value); setPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={pairedCol2} onChange={(e) => { setPairedCol2(e.target.value); setPairedResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -901,7 +915,7 @@ export function HypothesisTab({
                 const res = computePairedTTest(rows, pairedCol1, pairedCol2);
                 setPairedResult(res ?? null);
               }}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {hypothesisLoading === "paired" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.paired.runButton")}
             </button>
@@ -922,19 +936,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col1Label")}</label>
-              <select value={pairedCol1} onChange={(e) => { setPairedCol1(e.target.value); setWilcoxonPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={pairedCol1} onChange={(e) => { setPairedCol1(e.target.value); setWilcoxonPairedResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col2Label")}</label>
-              <select value={pairedCol2} onChange={(e) => { setPairedCol2(e.target.value); setWilcoxonPairedResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={pairedCol2} onChange={(e) => { setPairedCol2(e.target.value); setWilcoxonPairedResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeWilcoxonSignedRank(rows, pairedCol1, pairedCol2); setWilcoxonPairedResult(res ?? null); }} disabled={!pairedCol1 || !pairedCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.wilcoxon.runButton")}</button>
+            <button type="button" onClick={() => { const res = computeWilcoxonSignedRank(rows, pairedCol1, pairedCol2); setWilcoxonPairedResult(res ?? null); }} disabled={!pairedCol1 || !pairedCol2} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.wilcoxon.runButton")}</button>
           </div>
           {wilcoxonPairedResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -960,7 +974,7 @@ export function HypothesisTab({
                 ))}
               </div>
             </div>
-            <button type="button" onClick={() => { const res = friedmanCols.length >= 3 ? computeFriedmanTest(rows, friedmanCols) : null; setFriedmanResult(res ?? null); }} disabled={friedmanCols.length < 3} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.friedman.runButton")}</button>
+            <button type="button" onClick={() => { const res = friedmanCols.length >= 3 ? computeFriedmanTest(rows, friedmanCols) : null; setFriedmanResult(res ?? null); }} disabled={friedmanCols.length < 3} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.friedman.runButton")}</button>
           </div>
           {friedmanResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-2">
@@ -983,19 +997,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-              <select value={leveneGroupCol} onChange={(e) => { setLeveneGroupCol(e.target.value); setLeveneResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={leveneGroupCol} onChange={(e) => { setLeveneGroupCol(e.target.value); setLeveneResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-              <select value={leveneValueCol} onChange={(e) => { setLeveneValueCol(e.target.value); setLeveneResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={leveneValueCol} onChange={(e) => { setLeveneValueCol(e.target.value); setLeveneResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeLeveneTest(rows, leveneGroupCol, leveneValueCol); setLeveneResult(res ?? null); }} disabled={!leveneGroupCol || !leveneValueCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.levene.runButton")}</button>
+            <button type="button" onClick={() => { const res = computeLeveneTest(rows, leveneGroupCol, leveneValueCol); setLeveneResult(res ?? null); }} disabled={!leveneGroupCol || !leveneValueCol} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.levene.runButton")}</button>
           </div>
           {leveneResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -1012,24 +1026,27 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mcnemar.col1Label")}</label>
-              <select value={mcnemarCol1} onChange={(e) => { setMcNemarCol1(e.target.value); setMcNemarResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={mcnemarCol1} onChange={(e) => { setMcNemarCol1(e.target.value); setMcNemarResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mcnemar.col2Label")}</label>
-              <select value={mcnemarCol2} onChange={(e) => { setMcNemarCol2(e.target.value); setMcNemarResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={mcnemarCol2} onChange={(e) => { setMcNemarCol2(e.target.value); setMcNemarResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeMcNemar(rows, mcnemarCol1, mcnemarCol2); setMcNemarResult(res ?? null); }} disabled={!mcnemarCol1 || !mcnemarCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.mcnemar.runButton")}</button>
+            <button type="button" onClick={() => { const res = computeMcNemar(rows, mcnemarCol1, mcnemarCol2); setMcNemarResult(res ?? null); }} disabled={!mcnemarCol1 || !mcnemarCol2} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.mcnemar.runButton")}</button>
           </div>
           {mcnemarResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
               <p className="font-medium mb-2">{t("hypothesisTab.mcnemar.resultTitle")}</p>
-              <p>χ² = {mcnemarResult.chi2.toFixed(4)}, p-value = {mcnemarResult.pValue < 0.001 ? "< 0.001" : mcnemarResult.pValue.toFixed(4)}</p>
+              <p>{t("hypothesisTab.mcnemar.chi2Label")} = {mcnemarResult.chi2.toFixed(4)}, df = 1, p-value = {mcnemarResult.pValue < 0.001 ? "< 0.001" : mcnemarResult.pValue.toFixed(4)}</p>
+              {mcnemarResult.exactPValue != null && (
+                <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.mcnemar.exactLabel")} {mcnemarResult.exactPValue < 0.001 ? "< 0.001" : mcnemarResult.exactPValue.toFixed(4)}</p>
+              )}
               <p>{t("hypothesisTab.mcnemar.discordantPairsLabel")} b = {mcnemarResult.b}, c = {mcnemarResult.c}, n_discordant = {mcnemarResult.nDiscordant}</p>
             </div>
           )}
@@ -1041,19 +1058,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.fisher.rowVarLabel")}</label>
-              <select value={fisherCol1} onChange={(e) => { setFisherCol1(e.target.value); setFisherResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={fisherCol1} onChange={(e) => { setFisherCol1(e.target.value); setFisherResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.fisher.colVarLabel")}</label>
-              <select value={fisherCol2} onChange={(e) => { setFisherCol2(e.target.value); setFisherResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={fisherCol2} onChange={(e) => { setFisherCol2(e.target.value); setFisherResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const chi = computeChiSquare(rows, fisherCol1, fisherCol2); if (chi && chi.rowLabels.length === 2 && chi.colLabels.length === 2) { const a = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[0])?.count ?? 0; const b = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[1])?.count ?? 0; const c = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[0])?.count ?? 0; const d = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[1])?.count ?? 0; setFisherResult(computeFisherExact(a, b, c, d) ?? null); } else setFisherResult(null); }} disabled={!fisherCol1 || !fisherCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.fisher.runButton")}</button>
+            <button type="button" onClick={() => { const chi = computeChiSquare(rows, fisherCol1, fisherCol2); if (chi && chi.rowLabels.length === 2 && chi.colLabels.length === 2) { const a = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[0])?.count ?? 0; const b = chi.table.find(t => t.row === chi.rowLabels[0] && t.col === chi.colLabels[1])?.count ?? 0; const c = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[0])?.count ?? 0; const d = chi.table.find(t => t.row === chi.rowLabels[1] && t.col === chi.colLabels[1])?.count ?? 0; setFisherResult(computeFisherExact(a, b, c, d) ?? null); } else setFisherResult(null); }} disabled={!fisherCol1 || !fisherCol2} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.fisher.runButton")}</button>
           </div>
           {fisherResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -1071,16 +1088,16 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-              <select value={onesampleCol} onChange={(e) => { setOnesampleCol(e.target.value); setOnesampleResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={onesampleCol} onChange={(e) => { setOnesampleCol(e.target.value); setOnesampleResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.onesample.mu0Label")}</label>
-              <input type="number" step="any" value={onesampleMu0} onChange={(e) => { setOnesampleMu0(e.target.value); setOnesampleResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28" placeholder="0" />
+              <input type="number" step="any" value={onesampleMu0} onChange={(e) => { setOnesampleMu0(e.target.value); setOnesampleResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28" placeholder="0" />
             </div>
-            <button type="button" onClick={() => { if (!onesampleCol || onesampleMu0 === "") return; const h = rows[0] || []; const idx = h.indexOf(onesampleCol); if (idx === -1) return; const vals = rows.slice(1).map(r => Number(r[idx])).filter(n => !Number.isNaN(n)); const res = computeOneSampleTTest(vals, parseFloat(onesampleMu0) || 0); setOnesampleResult(res ?? null); }} disabled={!onesampleCol || onesampleMu0 === ""} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.onesample.runButton")}</button>
+            <button type="button" onClick={() => { if (!onesampleCol || onesampleMu0 === "") return; const h = rows[0] || []; const idx = h.indexOf(onesampleCol); if (idx === -1) return; const vals = rows.slice(1).map(r => numCell(r[idx])).filter(n => !Number.isNaN(n)); const res = computeOneSampleTTest(vals, parseFloat(onesampleMu0) || 0); setOnesampleResult(res ?? null); }} disabled={!onesampleCol || onesampleMu0 === ""} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.onesample.runButton")}</button>
           </div>
           {onesampleResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -1097,16 +1114,16 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.binaryVarLabel")}</label>
-              <select value={binomialCol} onChange={(e) => { setBinomialCol(e.target.value); setBinomialResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={binomialCol} onChange={(e) => { setBinomialCol(e.target.value); setBinomialResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.p0Label")}</label>
-              <input type="number" step="0.01" min="0.01" max="0.99" value={binomialP0} onChange={(e) => { setBinomialP0(e.target.value); setBinomialResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+              <input type="number" step="0.01" min="0.01" max="0.99" value={binomialP0} onChange={(e) => { setBinomialP0(e.target.value); setBinomialResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
             </div>
-            <button type="button" onClick={() => { if (!binomialCol) return; const h = rows[0] || []; const idx = h.indexOf(binomialCol); if (idx === -1) return; const raw = rows.slice(1).map(r => String(r[idx] ?? "").trim()).filter(Boolean); const uniq = [...new Set(raw)].sort(); if (uniq.length !== 2) return; const successVal = uniq[0]; const successes = raw.filter(v => v === successVal).length; const n = raw.length; const p0 = Math.max(0.01, Math.min(0.99, parseFloat(binomialP0) || 0.5)); const res = computeBinomialTest(successes, n, p0); setBinomialResult(res ?? null); }} disabled={!binomialCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.binomial.runButton")}</button>
+            <button type="button" onClick={() => { if (!binomialCol) return; const h = rows[0] || []; const idx = h.indexOf(binomialCol); if (idx === -1) return; const raw = rows.slice(1).map(r => String(r[idx] ?? "").trim()).filter(Boolean); const uniq = [...new Set(raw)].sort(); if (uniq.length !== 2) return; const successVal = uniq[0]; const successes = raw.filter(v => v === successVal).length; const n = raw.length; const p0 = Math.max(0.01, Math.min(0.99, parseFloat(binomialP0) || 0.5)); const res = computeBinomialTest(successes, n, p0); setBinomialResult(res ?? null); }} disabled={!binomialCol} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.binomial.runButton")}</button>
           </div>
           {binomialResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -1124,33 +1141,33 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-              <select value={twopropGroupCol} onChange={(e) => { setTwopropGroupCol(e.target.value); setTwopropGroupVal1(""); setTwopropGroupVal2(""); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={twopropGroupCol} onChange={(e) => { setTwopropGroupCol(e.target.value); setTwopropGroupVal1(""); setTwopropGroupVal2(""); setTwopropResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
-              <select value={twopropGroupVal1} onChange={(e) => { setTwopropGroupVal1(e.target.value); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={twopropGroupVal1} onChange={(e) => { setTwopropGroupVal1(e.target.value); setTwopropResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {(twopropGroupCol ? getUniqueValues(rows, twopropGroupCol) : []).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
-              <select value={twopropGroupVal2} onChange={(e) => { setTwopropGroupVal2(e.target.value); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={twopropGroupVal2} onChange={(e) => { setTwopropGroupVal2(e.target.value); setTwopropResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {(twopropGroupCol ? getUniqueValues(rows, twopropGroupCol) : []).map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.twoprop.outcomeVarLabel")}</label>
-              <select value={twopropOutcomeCol} onChange={(e) => { setTwopropOutcomeCol(e.target.value); setTwopropResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={twopropOutcomeCol} onChange={(e) => { setTwopropOutcomeCol(e.target.value); setTwopropResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { if (!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol) return; const h = rows[0] || []; const gIdx = h.indexOf(twopropGroupCol); const oIdx = h.indexOf(twopropOutcomeCol); if (gIdx === -1 || oIdx === -1) return; const outVals = [...new Set(rows.slice(1).map(r => String(r[oIdx] ?? "").trim()).filter(Boolean))].sort(); if (outVals.length !== 2) return; const successVal = outVals[0]; const data = rows.slice(1); const g1 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal1); const g2 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal2); const success1 = g1.filter(r => String(r[oIdx]).trim() === successVal).length; const success2 = g2.filter(r => String(r[oIdx]).trim() === successVal).length; const res = computeTwoProportionZTest(success1, g1.length, success2, g2.length); setTwopropResult(res ?? null); }} disabled={!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.twoprop.runButton")}</button>
+            <button type="button" onClick={() => { if (!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol) return; const h = rows[0] || []; const gIdx = h.indexOf(twopropGroupCol); const oIdx = h.indexOf(twopropOutcomeCol); if (gIdx === -1 || oIdx === -1) return; const outVals = [...new Set(rows.slice(1).map(r => String(r[oIdx] ?? "").trim()).filter(Boolean))].sort(); if (outVals.length !== 2) return; const successVal = outVals[0]; const data = rows.slice(1); const g1 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal1); const g2 = data.filter(r => String(r[gIdx]).trim() === twopropGroupVal2); const success1 = g1.filter(r => String(r[oIdx]).trim() === successVal).length; const success2 = g2.filter(r => String(r[oIdx]).trim() === successVal).length; const res = computeTwoProportionZTest(success1, g1.length, success2, g2.length); setTwopropResult(res ?? null); }} disabled={!twopropGroupCol || !twopropGroupVal1 || !twopropGroupVal2 || !twopropOutcomeCol} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.twoprop.runButton")}</button>
           </div>
           {twopropResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -1168,19 +1185,19 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col1Label")}</label>
-              <select value={signTestCol1} onChange={(e) => { setSignTestCol1(e.target.value); setSignTestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={signTestCol1} onChange={(e) => { setSignTestCol1(e.target.value); setSignTestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.wilcoxon.col2Label")}</label>
-              <select value={signTestCol2} onChange={(e) => { setSignTestCol2(e.target.value); setSignTestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={signTestCol2} onChange={(e) => { setSignTestCol2(e.target.value); setSignTestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeSignTest(rows, signTestCol1, signTestCol2); setSignTestResult(res ?? null); }} disabled={!signTestCol1 || !signTestCol2} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.signtest.runButton")}</button>
+            <button type="button" onClick={() => { const res = computeSignTest(rows, signTestCol1, signTestCol2); setSignTestResult(res ?? null); }} disabled={!signTestCol1 || !signTestCol2} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.signtest.runButton")}</button>
           </div>
           {signTestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
@@ -1197,28 +1214,28 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
-              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
-              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setFtestResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -1240,7 +1257,7 @@ export function HypothesisTab({
                   setHypothesisLoading(null);
                 }
               }}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {hypothesisLoading === "ftest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ftest.runButton")}
             </button>
@@ -1260,39 +1277,39 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setZtestMeansResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
-              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setZtestMeansResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
-              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setZtestMeansResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setZtestMeansResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setZtestMeansResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.ztestMeans.knownVar1Label")}</label>
-              <input type="number" step="any" min="0" value={ztestKnownVar1} onChange={(e) => { setZtestKnownVar1(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 4" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+              <input type="number" step="any" min="0" value={ztestKnownVar1} onChange={(e) => { setZtestKnownVar1(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 4" className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.ztestMeans.knownVar2Label")}</label>
-              <input type="number" step="any" min="0" value={ztestKnownVar2} onChange={(e) => { setZtestKnownVar2(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 9" className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+              <input type="number" step="any" min="0" value={ztestKnownVar2} onChange={(e) => { setZtestKnownVar2(e.target.value); setZtestMeansResult(null); }} placeholder="VD: 9" className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
             </div>
             <button
               type="button"
@@ -1311,7 +1328,7 @@ export function HypothesisTab({
                   setHypothesisLoading(null);
                 }
               }}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {hypothesisLoading === "ztest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ztestMeans.runButton")}
             </button>
@@ -1331,12 +1348,12 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.normality.numericVarLabel")}</label>
-              <select value={normalityCol} onChange={(e) => { setNormalityCol(e.target.value); setShapiroResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={normalityCol} onChange={(e) => { setNormalityCol(e.target.value); setShapiroResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={runShapiroWilk} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runShapiroWilk} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "shapiro" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.normality.runButton")}
             </button>
           </div>
@@ -1352,28 +1369,28 @@ export function HypothesisTab({
       {testKind === "power" && (
         <>
           <div className="flex flex-wrap gap-2 mb-4">
-            <button type="button" onClick={() => { setSampleSizeKind("ttest"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "ttest" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabTtest")}</button>
-            <button type="button" onClick={() => { setSampleSizeKind("proportion"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "proportion" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabProportion")}</button>
-            <button type="button" onClick={() => { setSampleSizeKind("chisquare"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "chisquare" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabChisquare")}</button>
-            <button type="button" onClick={() => { setSampleSizeKind("anova"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "anova" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabAnova")}</button>
-            <button type="button" onClick={() => { setSampleSizeKind("regression"); clearResults(); }} className={`rounded-lg px-3 py-1.5 text-sm ${sampleSizeKind === "regression" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabRegression")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("ttest"); clearResults(); }} className={`rounded-md px-3 py-1.5 text-sm ${sampleSizeKind === "ttest" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabTtest")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("proportion"); clearResults(); }} className={`rounded-md px-3 py-1.5 text-sm ${sampleSizeKind === "proportion" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabProportion")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("chisquare"); clearResults(); }} className={`rounded-md px-3 py-1.5 text-sm ${sampleSizeKind === "chisquare" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabChisquare")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("anova"); clearResults(); }} className={`rounded-md px-3 py-1.5 text-sm ${sampleSizeKind === "anova" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabAnova")}</button>
+            <button type="button" onClick={() => { setSampleSizeKind("regression"); clearResults(); }} className={`rounded-md px-3 py-1.5 text-sm ${sampleSizeKind === "regression" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>{t("hypothesisTab.power.tabRegression")}</button>
           </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             {sampleSizeKind === "ttest" && (
               <div>
                 <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.effectSizeDLabel")}</label>
-                <input type="number" step={0.05} min={0.1} max={2} value={effectSizeD} onChange={(e) => { setEffectSizeD(Math.max(0.1, Math.min(2, parseFloat(e.target.value) || 0.5))); setPowerResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+                <input type="number" step={0.05} min={0.1} max={2} value={effectSizeD} onChange={(e) => { setEffectSizeD(Math.max(0.1, Math.min(2, parseFloat(e.target.value) || 0.5))); setPowerResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
               </div>
             )}
             {sampleSizeKind === "proportion" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.p0Label")}</label>
-                  <input type="number" step={0.05} min={0.01} max={0.99} value={proportionP0} onChange={(e) => { setProportionP0(Math.max(0.01, Math.min(0.99, parseFloat(e.target.value) || 0.5))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+                  <input type="number" step={0.05} min={0.01} max={0.99} value={proportionP0} onChange={(e) => { setProportionP0(Math.max(0.01, Math.min(0.99, parseFloat(e.target.value) || 0.5))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.binomial.p0Label")}</label>
-                  <input type="number" step={0.05} min={0.01} max={0.99} value={proportionP1} onChange={(e) => { setProportionP1(Math.max(0.01, Math.min(0.99, parseFloat(e.target.value) || 0.65))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+                  <input type="number" step={0.05} min={0.01} max={0.99} value={proportionP1} onChange={(e) => { setProportionP1(Math.max(0.01, Math.min(0.99, parseFloat(e.target.value) || 0.65))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
               </>
             )}
@@ -1381,11 +1398,11 @@ export function HypothesisTab({
               <>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.effectSizeWLabel")}</label>
-                  <input type="number" step={0.05} min={0.1} max={1} value={chiEffectW} onChange={(e) => { setChiEffectW(Math.max(0.1, Math.min(1, parseFloat(e.target.value) || 0.3))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+                  <input type="number" step={0.05} min={0.1} max={1} value={chiEffectW} onChange={(e) => { setChiEffectW(Math.max(0.1, Math.min(1, parseFloat(e.target.value) || 0.3))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.dfEqualLabel")}</label>
-                  <input type="number" min={1} max={20} value={chiDf} onChange={(e) => { setChiDf(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-16" />
+                  <input type="number" min={1} max={20} value={chiDf} onChange={(e) => { setChiDf(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-16" />
                 </div>
               </>
             )}
@@ -1393,11 +1410,11 @@ export function HypothesisTab({
               <>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.groupCountKLabel")}</label>
-                  <input type="number" min={2} max={20} value={anovaK} onChange={(e) => { setAnovaK(Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 3))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-16" />
+                  <input type="number" min={2} max={20} value={anovaK} onChange={(e) => { setAnovaK(Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 3))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-16" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.effectSizeFLabel")}</label>
-                  <input type="number" step={0.05} min={0.1} max={1} value={anovaF} onChange={(e) => { setAnovaF(Math.max(0.1, Math.min(1, parseFloat(e.target.value) || 0.25))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+                  <input type="number" step={0.05} min={0.1} max={1} value={anovaF} onChange={(e) => { setAnovaF(Math.max(0.1, Math.min(1, parseFloat(e.target.value) || 0.25))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
               </>
             )}
@@ -1405,18 +1422,18 @@ export function HypothesisTab({
               <>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.predictorCountLabel")}</label>
-                  <input type="number" min={1} max={50} value={regressionP} onChange={(e) => { setRegressionP(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 5))); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+                  <input type="number" min={1} max={50} value={regressionP} onChange={(e) => { setRegressionP(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 5))); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">{t("hypothesisTab.power.ruleLabel")}</label>
-                  <select value={regressionRule} onChange={(e) => { setRegressionRule(e.target.value as "10" | "20"); setSampleSizeExtra(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <select value={regressionRule} onChange={(e) => { setRegressionRule(e.target.value as "10" | "20"); setSampleSizeExtra(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                     <option value="10">{t("hypothesisTab.power.rule10Option")}</option>
                     <option value="20">{t("hypothesisTab.power.rule20Option")}</option>
                   </select>
                 </div>
               </>
             )}
-            <button type="button" onClick={runPowerAnalysis} disabled={hypothesisLoading !== null} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+            <button type="button" onClick={runPowerAnalysis} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "power" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.power.runButton")}
             </button>
           </div>

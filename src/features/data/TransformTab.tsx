@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { X } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows, computeDescriptive, getColumnMode } from "@/utils/stats";
+import { numCell, getDataRows, computeDescriptive, getColumnMode } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -58,7 +58,7 @@ export function TransformTab({
       const op = filterOp;
       newRows = [header, ...dataRows.slice(1).filter((r) => {
         const cell = (r[ci] ?? "").toString().trim();
-        const num = Number(cell);
+        const num = numCell(cell);
         const vNum = Number(val);
         if (op === "==") return cell === val;
         if (op === "!=") return cell !== val;
@@ -146,7 +146,7 @@ export function TransformTab({
           const out = [...r];
           for (const col of columnsToApply) {
             const ci = header.indexOf(col);
-            const numVals = numericRows.map((row) => Number(row[ci])).filter((v) => !Number.isNaN(v));
+            const numVals = numericRows.map((row) => numCell(row[ci])).filter((v) => !Number.isNaN(v));
             const fill = transformAction === "fill_median"
               ? (numVals.length ? (() => { const s = [...numVals].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; })() : 0)
               : (numVals.length ? numVals.reduce((a, b) => a + b, 0) / numVals.length : 0);
@@ -194,7 +194,7 @@ export function TransformTab({
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("transformTab.description")}</p>
       <div>
         <label className="block text-sm font-medium mb-1">{t("transformTab.actionLabel")}</label>
-        <select value={transformAction} onChange={(e) => setTransformAction(e.target.value as typeof transformAction)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 mb-3">
+        <select value={transformAction} onChange={(e) => setTransformAction(e.target.value as typeof transformAction)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 mb-3">
           <option value="drop_missing">{t("transformTab.actionDropMissing")}</option>
           <option value="fill_mean">{t("transformTab.actionFillMean")}</option>
           <option value="fill_median">{t("transformTab.actionFillMedian")}</option>
@@ -226,14 +226,14 @@ export function TransformTab({
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.columnLabel")}</label>
-            <select value={filterCol} onChange={(e) => setFilterCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={filterCol} onChange={(e) => setFilterCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.conditionLabel")}</label>
-            <select value={filterOp} onChange={(e) => setFilterOp(e.target.value as typeof filterOp)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={filterOp} onChange={(e) => setFilterOp(e.target.value as typeof filterOp)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="==">{t("transformTab.opEquals")}</option>
               <option value="!=">{t("transformTab.opNotEquals")}</option>
               <option value=">">&gt;</option>
@@ -245,7 +245,7 @@ export function TransformTab({
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.valueLabel")}</label>
-            <input type="text" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={t("transformTab.valuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
+            <input type="text" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={t("transformTab.valuePlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
           </div>
         </div>
       )}
@@ -253,14 +253,14 @@ export function TransformTab({
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.sortByColumnLabel")}</label>
-            <select value={sortCol} onChange={(e) => setSortCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={sortCol} onChange={(e) => setSortCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.orderLabel")}</label>
-            <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="asc">{t("transformTab.orderAsc")}</option>
               <option value="desc">{t("transformTab.orderDesc")}</option>
             </select>
@@ -271,7 +271,7 @@ export function TransformTab({
         <div className="mb-3">
           <div className="mb-2">
             <label className="block text-sm font-medium mb-1">{t("transformTab.recodeColumnLabel")}</label>
-            <select value={recodeCol} onChange={(e) => setRecodeCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={recodeCol} onChange={(e) => setRecodeCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -279,34 +279,34 @@ export function TransformTab({
           <p className="text-sm text-neutral-500 mb-2">{t("transformTab.recodeRuleHint")}</p>
           {recodeRules.map((r, i) => (
             <div key={i} className="flex gap-2 items-center mb-2">
-              <input type="text" value={r.from} onChange={(e) => setRecodeRule(i, "from", e.target.value)} placeholder={t("transformTab.oldValuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
+              <input type="text" value={r.from} onChange={(e) => setRecodeRule(i, "from", e.target.value)} placeholder={t("transformTab.oldValuePlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
               <span className="text-neutral-500" aria-hidden="true">→</span>
-              <input type="text" value={r.to} onChange={(e) => setRecodeRule(i, "to", e.target.value)} placeholder={t("transformTab.newValuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
+              <input type="text" value={r.to} onChange={(e) => setRecodeRule(i, "to", e.target.value)} placeholder={t("transformTab.newValuePlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
             </div>
           ))}
           <button type="button" onClick={addRecodeRule} className="text-sm text-brand hover:underline">{t("transformTab.addRuleButton")}</button>
         </div>
       )}
-      <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("transformTab.applyButton")}</button>
+      <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("transformTab.applyButton")}</button>
       {showTransformChoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowTransformChoiceModal(false)}>
-          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
               <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t("transformTab.modalTitle")}</h3>
-              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("transformTab.closeAriaLabel")}>
+              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("transformTab.closeAriaLabel")}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <p className="text-neutral-600 dark:text-neutral-400">{t("transformTab.modalQuestion")}</p>
               <div className="flex flex-col gap-2">
-                <button type="button" onClick={() => applyTransform(true)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
+                <button type="button" onClick={() => applyTransform(true)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
                   {t("transformTab.overwriteOriginalButton")}
                 </button>
-                <button type="button" onClick={() => applyTransform(false)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
+                <button type="button" onClick={() => applyTransform(false)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
                   {t("transformTab.createNewButton")}
                 </button>
-                <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
+                <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-md px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                   {t("transformTab.cancelButton")}
                 </button>
               </div>
@@ -315,7 +315,7 @@ export function TransformTab({
         </div>
       )}
       {lastTransformResult && (
-        <div className="mt-6 space-y-4 rounded-xl border border-neutral-200 dark:border-neutral-600 bg-neutral-50/50 dark:bg-neutral-800/50 p-4">
+        <div className="mt-6 space-y-4 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50/50 dark:bg-neutral-800/50 p-4">
           <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("transformTab.transformResultTitle")} {lastTransformResult.actionLabel}</h3>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {t("transformTab.beforeLabel")} <strong>{lastTransformResult.before.length - 1}</strong> {t("transformTab.rowsUnit")} × <strong>{lastTransformResult.before[0]?.length ?? 0}</strong> {t("transformTab.columnsUnit")}

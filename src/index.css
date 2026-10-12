@@ -1,10 +1,17 @@
 @import "tailwindcss";
+@import "./neu-embed.css";
+@import "./neu-palette-gray.css";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* Bảng xám: neutral-* / slate-* → gray v3 (neu-palette-gray.css). Bo góc theo Portal: control rounded-md 6px, thẻ/modal rounded-lg 8px (neu-embed.css). */
 
-/* Màu thương hiệu đồng bộ với AI-Portal (--brand: #0061bb) */
-@theme {
-  --color-brand: #0061bb;
+/*
+ * Nền tối theo Portal (_shared/DESIGN_GUIDE.md): nền trang gray-950 #030712, thẻ gray-900 #111827, viền/hover gray-800 #1f2937.
+ * Dịch mỗi bậc neutral-900/800/700 xuống một nấc để không phải sửa từng class dark:bg-neutral-*.
+ */
+.dark {
+  --color-neutral-900: #030712;
+  --color-neutral-800: #111827;
+  --color-neutral-700: #1f2937;
 }
 
 html {
@@ -15,7 +22,6 @@ html {
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -49,4 +55,43 @@ input:focus-visible,
 textarea:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
+}
+
+/* Biểu đồ recharts: lưới/trục/chú giải theo gray v3 (SVG attribute mặc định #ccc/#666 bị ghi đè bằng CSS). */
+.recharts-cartesian-grid line,
+.recharts-polar-grid-concentric-polygon,
+.recharts-polar-grid-angle line {
+  stroke: #e5e7eb;
+}
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line {
+  stroke: #d1d5db;
+}
+.recharts-cartesian-axis-tick-value,
+.recharts-polar-angle-axis-tick-value,
+.recharts-polar-radius-axis-tick-value {
+  fill: #6b7280;
+}
+.dark .recharts-cartesian-grid line,
+.dark .recharts-polar-grid-concentric-polygon,
+.dark .recharts-polar-grid-angle line {
+  stroke: #374151;
+}
+.dark .recharts-cartesian-axis-line,
+.dark .recharts-cartesian-axis-tick-line {
+  stroke: #4b5563;
+}
+.dark .recharts-cartesian-axis-tick-value,
+.dark .recharts-polar-angle-axis-tick-value,
+.dark .recharts-polar-radius-axis-tick-value {
+  fill: #9ca3af;
+}
+/* Tooltip mặc định của recharts dùng style nội tuyến (nền trắng) nên phải !important để theo nền tối. */
+.dark .recharts-default-tooltip {
+  background-color: #111827 !important;
+  border-color: #374151 !important;
+  color: #e5e7eb;
+}
+.dark .recharts-legend-item-text {
+  color: #d1d5db !important;
 }

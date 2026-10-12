@@ -108,7 +108,7 @@ export function FactorTab({
                   setResult(null);
                   setKmoResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
                 placeholder="Auto"
               />
             </div>
@@ -116,7 +116,7 @@ export function FactorTab({
               type="button"
               onClick={runEFA}
               disabled={efaLoading}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {efaLoading ? (
                 <>

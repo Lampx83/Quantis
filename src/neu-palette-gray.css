@@ -1,0 +1,62 @@
+/*
+ * Quy ước: mọi họ màu xám trong công cụ nhúng dùng bảng GRAY của Tailwind v3 — đúng bảng AI Portal đang dùng
+ * (nền tối bg-gray-950, thẻ gray-900, viền gray-800). Import sau neu-embed.css.
+ * Nhờ biến CSS của Tailwind v4, các class slate-/gray-/neutral-/stone-/zinc-* tự đổi mà không phải sửa mã.
+ */
+@theme {
+  --color-slate-50: #f9fafb;
+  --color-slate-100: #f3f4f6;
+  --color-slate-200: #e5e7eb;
+  --color-slate-300: #d1d5db;
+  --color-slate-400: #9ca3af;
+  --color-slate-500: #6b7280;
+  --color-slate-600: #4b5563;
+  --color-slate-700: #374151;
+  --color-slate-800: #1f2937;
+  --color-slate-900: #111827;
+  --color-slate-950: #030712;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-gray-950: #030712;
+  --color-neutral-50: #f9fafb;
+  --color-neutral-100: #f3f4f6;
+  --color-neutral-200: #e5e7eb;
+  --color-neutral-300: #d1d5db;
+  --color-neutral-400: #9ca3af;
+  --color-neutral-500: #6b7280;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #374151;
+  --color-neutral-800: #1f2937;
+  --color-neutral-900: #111827;
+  --color-neutral-950: #030712;
+  --color-stone-50: #f9fafb;
+  --color-stone-100: #f3f4f6;
+  --color-stone-200: #e5e7eb;
+  --color-stone-300: #d1d5db;
+  --color-stone-400: #9ca3af;
+  --color-stone-500: #6b7280;
+  --color-stone-600: #4b5563;
+  --color-stone-700: #374151;
+  --color-stone-800: #1f2937;
+  --color-stone-900: #111827;
+  --color-stone-950: #030712;
+  --color-zinc-50: #f9fafb;
+  --color-zinc-100: #f3f4f6;
+  --color-zinc-200: #e5e7eb;
+  --color-zinc-300: #d1d5db;
+  --color-zinc-400: #9ca3af;
+  --color-zinc-500: #6b7280;
+  --color-zinc-600: #4b5563;
+  --color-zinc-700: #374151;
+  --color-zinc-800: #1f2937;
+  --color-zinc-900: #111827;
+  --color-zinc-950: #030712;
+}

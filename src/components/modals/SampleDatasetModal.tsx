@@ -101,7 +101,7 @@ export function SampleDatasetModal() {
       onClick={() => setShowSampleModal(false)}
     >
       <div
-        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
@@ -116,7 +116,7 @@ export function SampleDatasetModal() {
                   setShowSampleModal(false);
                   setShowSampleAdminModal(true);
                 }}
-                className="px-2 py-1 rounded-lg text-xs font-medium text-brand border border-brand/40 hover:bg-brand/10"
+                className="px-2 py-1 rounded-md text-xs font-medium text-brand border border-brand/40 hover:bg-brand/10"
               >
                 {t("app.manageSampleDatasets")}
               </button>
@@ -124,7 +124,7 @@ export function SampleDatasetModal() {
             <button
               type="button"
               onClick={() => setShowSampleModal(false)}
-              className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+              className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
             >
               <X className="w-5 h-5" />
             </button>
@@ -136,7 +136,7 @@ export function SampleDatasetModal() {
             value={sampleDatasetSearch}
             onChange={(e) => setSampleDatasetSearch(e.target.value)}
             placeholder={t("app.searchByNameDomainDesc")}
-            className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
+            className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm placeholder-neutral-400 focus:ring-2 focus:ring-brand/50 focus:border-brand"
           />
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -151,7 +151,7 @@ export function SampleDatasetModal() {
                 key={def.id}
                 type="button"
                 onClick={() => handleSelectSample(def)}
-                className="w-full text-left p-3 rounded-lg border border-neutral-200 dark:border-neutral-600 hover:border-brand/50 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors"
+                className="w-full text-left p-3 rounded-md border border-neutral-200 dark:border-neutral-600 hover:border-brand/50 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors"
               >
                 <p className="font-medium text-neutral-800 dark:text-neutral-200">{def.name}</p>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{def.description}</p>

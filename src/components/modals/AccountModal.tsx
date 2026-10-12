@@ -16,7 +16,7 @@ export function AccountModal() {
       onClick={() => setShowAccountDialog(false)}
     >
       <div
-        className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 w-full max-w-md shadow-xl overflow-hidden"
+        className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 w-full max-w-md shadow-xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
@@ -29,7 +29,7 @@ export function AccountModal() {
           <button
             type="button"
             onClick={() => setShowAccountDialog(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
             aria-label={t("app.close")}
           >
             <X className="h-5 w-5" />
@@ -51,7 +51,7 @@ export function AccountModal() {
                 setShowAccountDialog(false);
                 setShowSettings(true);
               }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-lg"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded-md"
             >
               <Settings className="h-4 w-4 shrink-0" />
               {t("app.connectionSettingsBackendOllama")}
@@ -66,7 +66,7 @@ export function AccountModal() {
                 void useWorkflowStore.persist.rehydrate();
                 showToast(t("app.toastLoggedOut"));
               }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md"
             >
               <LogOut className="h-4 w-4" />
               {t("app.logout")}

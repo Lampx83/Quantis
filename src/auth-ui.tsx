@@ -69,7 +69,7 @@ export function QuantAuthGate({
     <div className="min-h-dvh bg-neutral-100 dark:bg-neutral-900 flex items-center justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
       <div className="w-full max-w-md min-w-0">
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand/15 text-brand">
+          <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand/15 text-brand">
             <Sigma className="h-7 w-7" />
           </span>
           <div>
@@ -80,7 +80,7 @@ export function QuantAuthGate({
             )}
           </div>
         </div>
-        <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 sm:p-6 shadow-lg">
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 sm:p-6 shadow-lg">
           <div className="flex rounded-lg border border-neutral-200 dark:border-neutral-600 p-0.5 mb-4">
             <button
               type="button"
@@ -140,7 +140,7 @@ export function QuantAuthGate({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                className="w-full py-2.5 rounded-md bg-brand text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
                 {loading ? t("auth.processing") : t("auth.login")}
               </button>
@@ -169,7 +169,7 @@ export function QuantAuthGate({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+                className="w-full py-2.5 rounded-md bg-brand text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
                 {loading ? t("auth.processing") : t("auth.register")}
               </button>
@@ -249,13 +249,13 @@ export function QuantLoginModal({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 max-w-md w-full max-h-[min(90dvh,100vh)] overflow-y-auto overscroll-contain shadow-xl p-4 sm:p-6 min-w-0" onClick={(e) => e.stopPropagation()}>
+      <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 max-w-md w-full max-h-[min(90dvh,100vh)] overflow-y-auto overscroll-contain shadow-xl p-4 sm:p-6 min-w-0" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
             <User className="h-5 w-5" />
             {t("auth.loginRegister")}
           </h2>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("auth.close")}>
+          <button type="button" onClick={onClose} className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("auth.close")}>
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -312,7 +312,7 @@ export function QuantLoginModal({
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className={inputClass} placeholder="••••••••" />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-md bg-brand text-white text-sm font-medium disabled:opacity-50">
               {loading ? t("auth.processing") : t("auth.login")}
             </button>
           </form>
@@ -337,7 +337,7 @@ export function QuantLoginModal({
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className={inputClass} placeholder="••••••••" />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-md bg-brand text-white text-sm font-medium disabled:opacity-50">
               {loading ? t("auth.processing") : t("auth.register")}
             </button>
           </form>

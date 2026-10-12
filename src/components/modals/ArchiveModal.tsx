@@ -37,7 +37,7 @@ export function ArchiveModal() {
       onClick={() => setArchiveModalOpen(false)}
     >
       <div
-        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col"
+        className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
@@ -47,7 +47,7 @@ export function ArchiveModal() {
           <button
             type="button"
             onClick={() => setArchiveModalOpen(false)}
-            className="p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700"
+            className="p-2 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -84,7 +84,7 @@ export function ArchiveModal() {
                             setArchiveSearchError(e instanceof Error ? e.message : t("app.errCannotLoadFile"));
                           });
                       }}
-                      className="w-full text-left p-3 rounded-lg border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
+                      className="w-full text-left p-3 rounded-md border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
                     >
                       <span className="font-medium block">{item.title}</span>
                       {item.description && <span className="text-sm text-neutral-500 line-clamp-2">{item.description}</span>}
