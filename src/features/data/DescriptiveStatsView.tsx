@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   type DescriptiveRow,
   getDataRows,
   computeDescriptive,
@@ -177,7 +178,7 @@ export function DescriptiveStatsView({
                   {numericColsDesc.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <button type="button" onClick={() => { if (!bootstrapCICol || rows.length < 2) return; const ci = rows[0].indexOf(bootstrapCICol); if (ci === -1) return; const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v)); const res = computeBootstrapMeanCI(vals); setBootstrapCIResult(res ?? null); }} disabled={!bootstrapCICol} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">{t("descriptiveStats.calculateCIButton")}</button>
+              <button type="button" onClick={() => { if (!bootstrapCICol || rows.length < 2) return; const ci = rows[0].indexOf(bootstrapCICol); if (ci === -1) return; const vals = rows.slice(1).map((r) => numCell(r[ci])).filter((v) => !Number.isNaN(v)); const res = computeBootstrapMeanCI(vals); setBootstrapCIResult(res ?? null); }} disabled={!bootstrapCICol} className="rounded-lg bg-brand text-white px-3 py-1.5 text-sm disabled:opacity-50">{t("descriptiveStats.calculateCIButton")}</button>
             </div>
             {bootstrapCIResult && (
               <div className="mt-2">
@@ -510,7 +511,7 @@ export function DescriptiveStatsView({
                     if (!outlierCol) return;
                     const ci = cols.indexOf(outlierCol);
                     if (ci === -1) return;
-                    const values = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
+                    const values = rows.slice(1).map((r) => numCell(r[ci])).filter((v) => !Number.isNaN(v));
                     if (analysisBackendAvailable) {
                       setExploreLoading("outlier");
                       try {

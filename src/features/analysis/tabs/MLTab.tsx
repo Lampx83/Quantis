@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   getDataRows,
   getUniqueValues,
   computeKMeans,
@@ -144,7 +145,7 @@ export function MLTab({
     if (indices.length < 2) return null;
     const data: number[][] = [];
     for (let i = 1; i < rows.length; i++) {
-      const row = indices.map((ci) => Number(rows[i][ci]));
+      const row = indices.map((ci) => numCell(rows[i][ci]));
       if (row.every((v) => !Number.isNaN(v))) data.push(row);
     }
     if (data.length !== kmeansResult.assignments.length) return null;

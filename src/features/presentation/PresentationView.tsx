@@ -36,6 +36,7 @@ import type {
   MannWhitneyResult,
 } from "@/utils/stats";
 import {
+  numCell,
   getDataRows,
   getBoxStatsByGroup,
   getHistogramBins,
@@ -113,7 +114,7 @@ export function PresentationView({
     const rows = getDataRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
     const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histColIdx >= 0 ? rows.slice(1).map((r) => Number(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
+    const histValues = histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
     if (histValues.length === 0) { setHistBinsBackendResult(null); return; }
     quantisApi.analyzeHistogramBins(histValues).then(setHistBinsBackendResult);
   }, [tab, selectedDataset?.id, chartType, histogramCol, analysisBackendAvailable]);
@@ -130,7 +131,7 @@ export function PresentationView({
     const yIdx = cols.indexOf(yCol);
     const isScatter = xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol);
     const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: isScatter ? Number(r[xIdx]) : r[xIdx], y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
+      ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
       : [];
     const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
     /** Biểu đồ cột: dùng X làm danh mục; nếu có Y (số) thì chiều cao = tổng Y theo nhóm, không thì = tần số */
@@ -140,7 +141,7 @@ export function PresentationView({
               const sums: Record<string, number> = {};
               rows.slice(1).forEach((r) => {
                 const name = String(r[xIdx] ?? "").trim();
-                const val = Number(r[yIdx]);
+                const val = numCell(r[yIdx]);
                 if (name === "" || Number.isNaN(val)) return;
                 sums[name] = (sums[name] || 0) + val;
               });
@@ -159,7 +160,7 @@ export function PresentationView({
       const groups: Record<string, number[]> = {};
       rows.slice(1).forEach((r) => {
         const g = String(r[densityGroupIdx] ?? "").trim();
-        const v = Number(r[densityValueIdx]);
+        const v = numCell(r[densityValueIdx]);
         if (g === "" || Number.isNaN(v)) return;
         if (!groups[g]) groups[g] = [];
         groups[g].push(v);
@@ -178,7 +179,7 @@ export function PresentationView({
       return series;
     })() : [];
     const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => Number(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
+    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
     const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
     const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
     const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
@@ -203,7 +204,7 @@ export function PresentationView({
       ? (pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol)
           ? (() => {
               const idx = cols.indexOf(pieNumericCol);
-              const vals = rows.slice(1).map((r) => Number(r[idx])).filter((v) => !Number.isNaN(v));
+              const vals = rows.slice(1).map((r) => numCell(r[idx])).filter((v) => !Number.isNaN(v));
               const binned = binNumericForPie(vals, pieBinCount);
               return binned.map((b) => ({ name: b.label, value: b.count })).filter((d) => d.value > 0);
             })()
@@ -222,7 +223,7 @@ export function PresentationView({
               : []))
       : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
     const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
+      ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
     const areaData = lineData;
     const stackByIdx = stackByCol ? cols.indexOf(stackByCol) : -1;
@@ -234,7 +235,7 @@ export function PresentationView({
       rows.slice(1).forEach((r) => {
         const x = r[xIdx] ??"";
         const s = r[stackByIdx] ??"";
-        const y = Number(r[yIdx]);
+        const y = numCell(r[yIdx]);
         if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
       });
       return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
@@ -248,7 +249,7 @@ export function PresentationView({
         const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
         radarGroups.forEach((g) => {
           const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
-          const vals = subset.map((r) => Number(r[colIdx])).filter((v) => !Number.isNaN(v));
+          const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
           entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
         return entry;
@@ -266,7 +267,7 @@ export function PresentationView({
         const point: Record<string, string | number> = { x: r[multiLineXIdx] ??"" };
         multiLineYCols.forEach((col) => {
           const idx = cols.indexOf(col);
-          if (idx >= 0) { const v = Number(r[idx]); point[col] = Number.isNaN(v) ? "" : v; }
+          if (idx >= 0) { const v = numCell(r[idx]); point[col] = Number.isNaN(v) ? "" : v; }
         });
         return point;
       }).filter((d) => multiLineYCols.some((c) => d[c] !== "" && d[c] !== undefined));
