@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type { AuthConfig, AuthUser, SampleDatasetListItem } from "@/api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
 import * as quantisApi from "@/api";
-import { SAMPLE_DATASETS } from "@/sampleDatasets";
 
 export interface SyncState {
   // Connection
@@ -101,33 +100,9 @@ export const useSyncStore = create<SyncState>((set) => ({
   refreshSampleDatasets: async () => {
     set({ sampleDatasetsLoading: true });
     try {
+      // Danh sách mẫu do admin quản lý trên server; rỗng nghĩa là admin chưa có/đã xoá mẫu — không rơi về bundle tĩnh.
       const list = await quantisApi.fetchSampleDatasetsList();
-      if (list && list.length > 0) {
-        set({ sampleDatasetsList: list });
-      } else {
-        // Fallback về SAMPLE_DATASETS tĩnh cục bộ nếu API trả về rỗng
-        const fallbackList: SampleDatasetListItem[] = SAMPLE_DATASETS.map((d) => ({
-          id: d.id,
-          name: d.name,
-          domain: d.domain,
-          description: d.description,
-          tags: d.tags,
-          rows: d.rows,
-          columns: d.columns,
-        }));
-        set({ sampleDatasetsList: fallbackList });
-      }
-    } catch {
-      const fallbackList: SampleDatasetListItem[] = SAMPLE_DATASETS.map((d) => ({
-        id: d.id,
-        name: d.name,
-        domain: d.domain,
-        description: d.description,
-        tags: d.tags,
-        rows: d.rows,
-        columns: d.columns,
-      }));
-      set({ sampleDatasetsList: fallbackList });
+      set({ sampleDatasetsList: list });
     } finally {
       set({ sampleDatasetsLoading: false });
     }

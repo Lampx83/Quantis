@@ -3,7 +3,6 @@ import { X } from "lucide-react";
 import { useUIStore, useDataStore, useWorkflowStore, useSyncStore } from "@/stores";
 import type { SampleDatasetListItem } from "@/api";
 import * as quantisApi from "@/api";
-import { SAMPLE_DATASETS } from "@/sampleDatasets";
 import { generateId } from "@/utils/helpers";
 import { t } from "@/i18n";
 
@@ -29,34 +28,18 @@ export function SampleDatasetModal() {
 
   const handleSelectSample = useCallback(
     async (def: SampleDatasetListItem) => {
-      let full = await quantisApi.fetchSampleDatasetFull(def.id);
-      let header: string[];
-      let dataRows: string[][];
-      let fullData: string[][];
-      let name = def.name;
-
-      if (full) {
-        header = full.header ?? full.data?.[0] ?? [];
-        dataRows = full.rows_data ?? (full.data ?? []).slice(1);
-        fullData = full.data ?? [header, ...dataRows];
-        name = full.name;
-        if (!header.length || !Array.isArray(dataRows)) {
-          showToast(t("app.errCannotLoadFile"));
-          return;
-        }
-      } else {
-        // Fallback về SAMPLE_DATASETS tĩnh cục bộ
-        const localDef = SAMPLE_DATASETS.find((d) => d.id === def.id);
-        if (localDef) {
-          const raw = localDef.getData();
-          header = raw[0];
-          dataRows = raw.slice(1);
-          fullData = raw;
-          name = localDef.name;
-        } else {
-          showToast(t("app.errCannotLoadFile"));
-          return;
-        }
+      const full = await quantisApi.fetchSampleDatasetFull(def.id);
+      if (!full) {
+        showToast(t("app.errCannotLoadFile"));
+        return;
+      }
+      const header: string[] = full.header ?? full.data?.[0] ?? [];
+      const dataRows: string[][] = full.rows_data ?? (full.data ?? []).slice(1);
+      const fullData: string[][] = full.data ?? [header, ...dataRows];
+      const name = full.name;
+      if (!header.length || !Array.isArray(dataRows)) {
+        showToast(t("app.errCannotLoadFile"));
+        return;
       }
 
       const sourceKey = `sample:${def.id}:${generateId()}`;
