@@ -17,8 +17,7 @@ import {
   Pie,
   Cell,
   ComposedChart,
-  ReferenceArea,
-  ReferenceLine,
+  ErrorBar,
   AreaChart,
   Area,
   RadarChart,
@@ -153,7 +152,15 @@ export function PresentationView({
     const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
       ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
       : [];
-    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n }));
+    // Hộp xếp chồng: phần đệm trong suốt (0→Q1) + hộp Q1→Median + hộp Median→Q3; râu = ErrorBar (Q1→Min, Q3→Max).
+    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
+    const boxYDomain: [number, number] = (() => {
+      if (boxStats.length === 0) return [0, 1];
+      const lo = Math.min(...boxStats.map((b) => b.min));
+      const hi = Math.max(...boxStats.map((b) => b.max));
+      const pad = (hi - lo) * 0.05 || 1;
+      return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+    })();
     const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
     const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
     const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
@@ -643,8 +650,8 @@ export function PresentationView({
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid />
-                  <XAxis dataKey="x" name={xCol} />
-                  <YAxis dataKey="y" name={yCol} />
+                  <XAxis dataKey="x" name={xCol} type="number" domain={["auto", "auto"]} label={{ value: xCol, position: "insideBottom", offset: -10 }} />
+                  <YAxis dataKey="y" name={yCol} type="number" domain={["auto", "auto"]} label={{ value: yCol, angle: -90, position: "insideLeft", offset: 0 }} />
                   <Tooltip cursor={{ strokeDasharray: "3 3" }} />
                   <Scatter data={chartData} fill="#0061bb" name={t("presentationView.scatterPointName")} />
                 </ScatterChart>
@@ -775,7 +782,7 @@ export function PresentationView({
                 <ComposedChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis domain={["auto", "auto"]} allowDataOverflow />
+                  <YAxis domain={boxYDomain} allowDataOverflow />
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length || !payload[0].payload) return null;
                     const b = payload[0].payload as { name: string; min: number; q1: number; median: number; q3: number; max: number; n: number };
@@ -786,14 +793,13 @@ export function PresentationView({
                       </div>
                     );
                   }} />
-                  {boxStats.map((b) => (
-                    <React.Fragment key={b.group}>
-                      <ReferenceArea x1={b.group} x2={b.group} y1={b.q1} y2={b.q3} fill="#0061bb" fillOpacity={0.5} stroke="#0061bb" strokeWidth={1} />
-                      <ReferenceLine x={b.group} y={b.median} stroke="#111" strokeWidth={2} />
-                      <ReferenceLine segment={[{ x: b.group, y: b.q3 }, { x: b.group, y: b.max }]} stroke="#333" strokeWidth={1} />
-                      <ReferenceLine segment={[{ x: b.group, y: b.q1 }, { x: b.group, y: b.min }]} stroke="#333" strokeWidth={1} />
-                    </React.Fragment>
-                  ))}
+                  <Bar dataKey="q1" stackId="box" fill="transparent" stroke="none" isAnimationActive={false} legendType="none">
+                    <ErrorBar dataKey="whiskerLow" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
+                  </Bar>
+                  <Bar dataKey="boxLower" stackId="box" fill="#0061bb" fillOpacity={0.55} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none" />
+                  <Bar dataKey="boxUpper" stackId="box" fill="#0061bb" fillOpacity={0.85} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none">
+                    <ErrorBar dataKey="whiskerHigh" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
+                  </Bar>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

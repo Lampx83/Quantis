@@ -59,6 +59,40 @@ export function parseDelimited(text: string, delimiter: "," | ";"): string[][] {
   return lines;
 }
 
+/**
+ * CSV kiểu Việt/châu Âu (phân tách `;`) viết số thập phân bằng dấu phẩy ("6,84", "1.234,5").
+ * Đổi cả cột sang dạng "6.84" CHỈ KHI mọi ô không trống của cột đều là số (nguyên, thập phân dấu phẩy, hoặc có chấm hàng nghìn
+ * kèm dấu phẩy thập phân) và có ít nhất một ô dùng dấu phẩy — cột văn bản/ngày/hỗn hợp giữ nguyên.
+ */
+export function normalizeDecimalCommaColumns(rows: string[][]): string[][] {
+  if (rows.length < 2) return rows;
+  const nCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
+  const out = rows.map((r) => r.slice());
+  const reInt = /^[+-]?\d+$/;
+  const reDec = /^[+-]?\d+,\d+$/;
+  const reThousandsDec = /^[+-]?\d{1,3}(\.\d{3})+,\d+$/;
+  for (let c = 0; c < nCols; c++) {
+    let hasComma = false;
+    let ok = true;
+    let count = 0;
+    for (let r = 1; r < rows.length; r++) {
+      const v = (rows[r][c] ?? "").trim();
+      if (v === "") continue;
+      count++;
+      if (reInt.test(v)) continue;
+      if (reDec.test(v) || reThousandsDec.test(v)) { hasComma = true; continue; }
+      ok = false;
+      break;
+    }
+    if (!ok || !hasComma || count === 0) continue;
+    for (let r = 1; r < out.length; r++) {
+      const v = (out[r][c] ?? "").trim();
+      if (v !== "") out[r][c] = v.replace(/\./g, "").replace(",", ".");
+    }
+  }
+  return out;
+}
+
 /** Parse CSV text (dấu phẩy). Với file có thể là `;`, dùng `parseFileContent` hoặc `parseDelimited(text, detectCsvDelimiter(text))`. */
 export function parseCSV(text: string): string[][] {
   return parseDelimited(text, ",");
@@ -181,7 +215,7 @@ export function parseFileContent(text: string, filename: string): { rows: string
       rows = parseTSV(text);
       format = "tsv";
     } else if (semiCount > commaCount) {
-      rows = parseDelimited(text, ";");
+      rows = normalizeDecimalCommaColumns(parseDelimited(text, ";"));
       format = "csv";
     } else {
       rows = parseDelimited(text, ",");
@@ -189,8 +223,9 @@ export function parseFileContent(text: string, filename: string): { rows: string
     }
     return { rows, format };
   }
-  const rows = parseDelimited(text, detectCsvDelimiter(text));
-  return { rows, format: "csv" };
+  const delimiter = detectCsvDelimiter(text);
+  const parsed = parseDelimited(text, delimiter);
+  return { rows: delimiter === ";" ? normalizeDecimalCommaColumns(parsed) : parsed, format: "csv" };
 }
 
 function isNumeric(val: string): boolean {
@@ -334,13 +369,14 @@ export interface TTestResult {
   std2: number;
 }
 
-/** Independent samples t-test (Welch). */
+/** Independent samples t-test (Welch mặc định; equalVar = true → Student, phương sai gộp). */
 export function computeTTest(
   rows: string[][],
   groupCol: string,
   groupVal1: string,
   groupVal2: string,
-  numCol: string
+  numCol: string,
+  equalVar: boolean = false
 ): TTestResult | null {
   const headers = rows[0];
   const gi = headers.indexOf(groupCol);
@@ -358,13 +394,13 @@ export function computeTTest(
   const var2 = g2.reduce((a, b) => a + (b - mean2) ** 2, 0) / (n2 - 1) || 0;
   const std1 = Math.sqrt(var1);
   const std2 = Math.sqrt(var2);
-  const se = Math.sqrt(var1 / n1 + var2 / n2);
+  const pooledStd = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2));
+  const se = equalVar ? pooledStd * Math.sqrt(1 / n1 + 1 / n2) : Math.sqrt(var1 / n1 + var2 / n2);
   if (se === 0) return null;
   const t = (mean1 - mean2) / se;
   const denom = var1 / n1 + var2 / n2;
-  const df = denom > 0 ? (denom ** 2) / ((var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)) : 0;
+  const df = equalVar ? n1 + n2 - 2 : denom > 0 ? (denom ** 2) / ((var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)) : 0;
   const pValue = twoTailedPValue(t, df);
-  const pooledStd = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2));
   const cohenD = pooledStd > 0 ? (mean1 - mean2) / pooledStd : 0;
   return { t, df, pValue, cohenD, mean1, mean2, n1, n2, std1, std2 };
 }
@@ -373,7 +409,7 @@ export function computeTTest(
 function twoTailedPValue(t: number, df: number): number {
   const absT = Math.abs(t);
   if (df <= 0) return 1;
-  if (df >= 100) return 2 * (1 - normalCDF(absT));
+  // Phân phối t chính xác cho mọi df (trước đây df ≥ 100 dùng xấp xỉ chuẩn nên p lệch ở chữ số thứ 3, có thể đảo kết luận quanh α = 0,05).
   const x = df / (df + absT * absT);
   return regularizedIncompleteBeta(x, df / 2, 0.5);
 }
@@ -1028,29 +1064,55 @@ export function computeCorrelationMatrix(rows: string[][], method: "pearson" | "
     return out;
   };
 
+  // Kendall τ-b theo Knight (O(n log n)): sắp theo (x, y), đếm nghịch thế của y bằng merge sort — kết quả trùng scipy.stats.kendalltau.
   const kendallTau = (x: number[], y: number[]): number => {
     const nn = x.length;
-    const tx: Record<number, number> = {};
-    const ty: Record<number, number> = {};
-    for (let i = 0; i < nn; i++) {
-      tx[x[i]] = (tx[x[i]] || 0) + 1;
-      ty[y[i]] = (ty[y[i]] || 0) + 1;
-    }
-    let n1 = 0, n2 = 0;
-    Object.values(tx).forEach((t) => { n1 += (t * (t - 1)) / 2; });
-    Object.values(ty).forEach((t) => { n2 += (t * (t - 1)) / 2; });
-    const n0 = (nn * (nn - 1)) / 2;
-    let C = 0, D = 0;
-    for (let i = 0; i < nn; i++) {
-      for (let j = i + 1; j < nn; j++) {
-        const prod = (x[i] - x[j]) * (y[i] - y[j]);
-        if (prod > 0) C++;
-        else if (prod < 0) D++;
+    if (nn < 2) return 0;
+    const idx = Array.from({ length: nn }, (_, i) => i).sort((a, b) => x[a] - x[b] || y[a] - y[b]);
+    const xs = idx.map((i) => x[i]);
+    const ys = idx.map((i) => y[i]);
+    const tieCount = (arr: number[]): number => {
+      let total = 0;
+      let run = 1;
+      for (let i = 1; i <= arr.length; i++) {
+        if (i < arr.length && arr[i] === arr[i - 1]) run++;
+        else { total += (run * (run - 1)) / 2; run = 1; }
+      }
+      return total;
+    };
+    const xtie = tieCount(xs);
+    // cặp trùng cả x lẫn y (đã sắp theo (x, y) nên các cặp này liền nhau)
+    let ntie = 0;
+    {
+      let run = 1;
+      for (let i = 1; i <= nn; i++) {
+        if (i < nn && xs[i] === xs[i - 1] && ys[i] === ys[i - 1]) run++;
+        else { ntie += (run * (run - 1)) / 2; run = 1; }
       }
     }
-    const denom = Math.sqrt((n0 - n1) * (n0 - n2));
+    // số nghịch thế (i < j, ys[i] > ys[j]) bằng merge sort
+    const buf = new Array<number>(nn);
+    const countInversions = (a: number[], lo: number, hi: number): number => {
+      if (hi - lo < 2) return 0;
+      const mid = (lo + hi) >> 1;
+      let inv = countInversions(a, lo, mid) + countInversions(a, mid, hi);
+      let i = lo, j = mid, k = lo;
+      while (i < mid && j < hi) {
+        if (a[i] <= a[j]) buf[k++] = a[i++];
+        else { buf[k++] = a[j++]; inv += mid - i; }
+      }
+      while (i < mid) buf[k++] = a[i++];
+      while (j < hi) buf[k++] = a[j++];
+      for (let m = lo; m < hi; m++) a[m] = buf[m];
+      return inv;
+    };
+    const dis = countInversions(ys.slice(), 0, nn);
+    const ysSorted = [...ys].sort((a, b) => a - b);
+    const ytie = tieCount(ysSorted);
+    const tot = (nn * (nn - 1)) / 2;
+    const denom = Math.sqrt((tot - xtie) * (tot - ytie));
     if (denom <= 0) return 0;
-    return (C - D) / denom;
+    return (tot - xtie - ytie + ntie - 2 * dis) / denom;
   };
 
   for (let i = 0; i < numericIndices.length; i++) {
@@ -1372,7 +1434,8 @@ export function computeLeveneTest(rows: string[][], groupCol: string, valueCol: 
     const med = (() => { const s = [...vals].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; })();
     absDevs[name] = vals.map((v) => Math.abs(v - med));
   });
-  const n = data.length;
+  // Tổng số quan sát HỢP LỆ (bỏ ô trống / nhóm trống) — không dùng data.length (kể cả dòng thiếu) làm df2 và mẫu số.
+  const n = groupNames.reduce((s, name) => s + absDevs[name].length, 0);
   const grandMean = groupNames.reduce((s, name) => s + absDevs[name].reduce((a, b) => a + b, 0), 0) / n;
   let ssBetween = 0;
   let ssWithin = 0;
@@ -2036,11 +2099,12 @@ export function computeLogisticRegression(rows: string[][], yCol: string, xCols:
     }
     const inv = matInverse(XtWX);
     if (!inv) break;
-    const delta = inv.map((row) => row.reduce((s, v, k) => s + v * XtWz[k], 0));
+    // IRLS: (XᵀWX)⁻¹XᵀWz CHÍNH LÀ β mới (không phải số gia) — trước đây cộng dồn vào β cũ làm hội tụ sai.
+    const newBeta = inv.map((row) => row.reduce((s, v, k) => s + v * XtWz[k], 0));
     let maxD = 0;
     for (let j = 0; j < p; j++) {
-      beta[j] += delta[j];
-      maxD = Math.max(maxD, Math.abs(delta[j]));
+      maxD = Math.max(maxD, Math.abs(newBeta[j] - beta[j]));
+      beta[j] = newBeta[j];
     }
     if (maxD < 1e-8) break;
   }
@@ -2304,27 +2368,45 @@ function varimax(loadings: number[][]): number[][] {
   const nRows = loadings.length;
   const nCols = loadings[0]?.length ?? 0;
   if (nCols < 2) return loadings;
-  let L = loadings.map((r) => r.map((x) => x));
-  for (let iter = 0; iter < 20; iter++) {
-    for (let j = 0; j < nCols; j++) {
+  const L = loadings.map((r) => r.map((x) => x));
+  // Xoay varimax thô (Kaiser 1958), từng cặp cột: tan 4θ = (D − 2AB/p) / (C − (A² − B²)/p),
+  // với u = x² − y², v = 2xy, A = Σu, B = Σv, C = Σ(u² − v²), D = 2Σuv.
+  for (let iter = 0; iter < 100; iter++) {
+    let maxAngle = 0;
+    for (let j = 0; j < nCols - 1; j++) {
       for (let k = j + 1; k < nCols; k++) {
-        let a = 0, b = 0, c = 0, d = 0;
+        let A = 0, B = 0, C = 0, D = 0;
         for (let i = 0; i < nRows; i++) {
-          const u = L[i][j]; const v = L[i][k];
-          a += u * u - v * v; b += 2 * u * v; c += u * u + v * v; d += u * v * (u * u - v * v);
+          const x = L[i][j]; const y = L[i][k];
+          const u = x * x - y * y; const v = 2 * x * y;
+          A += u; B += v; C += u * u - v * v; D += 2 * u * v;
         }
-        const denom = c * c - b * b;
-        if (Math.abs(denom) < 1e-12) continue;
-        const theta = 0.25 * Math.atan2(2 * (nRows * d - a * b), nRows * (a - c) + a * c - b * b);
+        const num = D - (2 * A * B) / nRows;
+        const den = C - (A * A - B * B) / nRows;
+        const theta = 0.25 * Math.atan2(num, den);
+        if (Math.abs(theta) < 1e-10) continue;
+        maxAngle = Math.max(maxAngle, Math.abs(theta));
         const cos = Math.cos(theta); const sin = Math.sin(theta);
         for (let i = 0; i < nRows; i++) {
-          const u = L[i][j]; const v = L[i][k];
-          L[i][j] = u * cos - v * sin; L[i][k] = u * sin + v * cos;
+          const x = L[i][j]; const y = L[i][k];
+          L[i][j] = x * cos + y * sin; L[i][k] = -x * sin + y * cos;
         }
       }
     }
+    if (maxAngle < 1e-8) break;
   }
-  return L;
+  // Quy ước trình bày: dấu cột sao cho tổng loading dương; sắp xếp nhân tố theo tổng bình phương loading giảm dần (như SPSS).
+  for (let j = 0; j < nCols; j++) {
+    let sum = 0;
+    for (let i = 0; i < nRows; i++) sum += L[i][j];
+    if (sum < 0) for (let i = 0; i < nRows; i++) L[i][j] = -L[i][j];
+  }
+  const order = Array.from({ length: nCols }, (_, j) => j).sort((a, b) => {
+    let sa = 0, sb = 0;
+    for (let i = 0; i < nRows; i++) { sa += L[i][a] * L[i][a]; sb += L[i][b] * L[i][b]; }
+    return sb - sa;
+  });
+  return L.map((row) => order.map((j) => row[j]));
 }
 
 // --- Mediation (Baron-Kenny; nhiều M = trung gian song song) ---
@@ -2442,26 +2524,79 @@ export interface ShapiroWilkResult { w: number; pValue: number; n: number; }
 
 /** Shapiro-Wilk test for normality (approximation for n <= 5000). */
 export function computeShapiroWilk(values: number[]): ShapiroWilkResult | null {
-  const n = values.length;
+  const clean = values.filter((v) => typeof v === "number" && Number.isFinite(v));
+  const n = clean.length;
   if (n < 3 || n > 5000) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mean = sorted.reduce((a, b) => a + b, 0) / n;
-  const sumSq = sorted.reduce((s, v) => s + (v - mean) ** 2, 0);
-  if (sumSq === 0) return { w: 1, pValue: 1, n };
-  const m = sorted.map((_, i) => {
-    const u = (i + 1 - 0.375) / (n + 0.25);
-    return normalQuantile(u);
-  });
-  const m2 = m.reduce((s, v) => s + v * v, 0);
+  const x = [...clean].sort((a, b) => a - b);
+  const mean = x.reduce((a, b) => a + b, 0) / n;
+  const sumSq = x.reduce((s, v) => s + (v - mean) ** 2, 0);
+  if (x[n - 1] - x[0] === 0 || sumSq === 0) return { w: 1, pValue: 1, n };
+  // Royston (1995), thuật toán AS R94 — cùng thuật toán với R shapiro.test / scipy.stats.shapiro.
+  const poly = (cc: number[], v: number): number => {
+    let r = 0;
+    for (let k = cc.length - 1; k >= 0; k--) r = r * v + cc[k];
+    return r;
+  };
+  const nn2 = Math.floor(n / 2);
+  const a: number[] = new Array(nn2).fill(0);
+  if (n === 3) {
+    a[0] = Math.SQRT1_2;
+  } else {
+    const an25 = n + 0.25;
+    const m: number[] = [];
+    let summ2 = 0;
+    for (let i = 1; i <= nn2; i++) {
+      const mi = normalQuantile((i - 0.375) / an25);
+      m.push(mi);
+      summ2 += mi * mi;
+    }
+    summ2 *= 2;
+    const ssumm2 = Math.sqrt(summ2);
+    const rsn = 1 / Math.sqrt(n);
+    const c1 = [0, 0.221157, -0.147981, -2.07119, 4.434685, -2.706056];
+    const c2 = [0, 0.042981, -0.293762, -1.752461, 5.682633, -3.582633];
+    const a1 = poly(c1, rsn) - m[0] / ssumm2;
+    let i1: number;
+    let fac: number;
+    if (n > 5) {
+      i1 = 2;
+      const a2 = -m[1] / ssumm2 + poly(c2, rsn);
+      fac = Math.sqrt((summ2 - 2 * m[0] * m[0] - 2 * m[1] * m[1]) / (1 - 2 * a1 * a1 - 2 * a2 * a2));
+      a[1] = a2;
+    } else {
+      i1 = 1;
+      fac = Math.sqrt((summ2 - 2 * m[0] * m[0]) / (1 - 2 * a1 * a1));
+    }
+    a[0] = a1;
+    for (let i = i1; i < nn2; i++) a[i] = -m[i] / fac;
+  }
   let b = 0;
-  for (let i = 0; i < Math.floor(n / 2); i++) b += m[i] * (sorted[n - 1 - i] - sorted[i]);
-  const a = 1 / Math.sqrt(m2);
-  const w = (b * a) ** 2 / sumSq;
-  const lnN = Math.log(n);
-  const mu = -1.2725 + 1.0521 * (lnN - 3);
-  const sigma = 1.0308 - 0.26758 * (lnN - 3);
-  const z = (Math.log(1 - w) - mu) / sigma;
-  const pValue = 2 * (1 - normalCDF(Math.abs(z)));
+  for (let i = 0; i < nn2; i++) b += a[i] * (x[n - 1 - i] - x[i]);
+  const w = Math.min(1, (b * b) / sumSq);
+  let pValue: number;
+  if (n === 3) {
+    pValue = Math.max(0, (6 / Math.PI) * (Math.asin(Math.sqrt(w)) - Math.PI / 3));
+  } else {
+    const y = Math.log(1 - w);
+    const xx = Math.log(n);
+    let mu: number;
+    let sigma: number;
+    let yy = y;
+    if (n <= 11) {
+      const gamma = -2.273 + 0.459 * n;
+      if (y >= gamma) {
+        return { w, pValue: 1e-99, n };
+      }
+      yy = -Math.log(gamma - y);
+      mu = poly([0.544, -0.39978, 0.025054, -6.714e-4], n);
+      sigma = Math.exp(poly([1.3822, -0.77857, 0.062767, -0.0020322], n));
+    } else {
+      mu = poly([-1.5861, -0.31082, -0.083751, 0.0038915], xx);
+      sigma = Math.exp(poly([-0.4803, -0.082676, 0.0030302], xx));
+    }
+    const z = (yy - mu) / sigma;
+    pValue = 0.5 * erfcAccurate(z / Math.SQRT2);
+  }
   return { w, pValue: Math.min(1, Math.max(0, pValue)), n };
 }
 

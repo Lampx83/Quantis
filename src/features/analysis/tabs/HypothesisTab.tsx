@@ -218,7 +218,7 @@ export function HypothesisTab({
       }
       return;
     }
-    const res = computeTTest(rows, groupCol, groupVal1, groupVal2, numCol);
+    const res = computeTTest(rows, groupCol, groupVal1, groupVal2, numCol, ttestEqualVar);
     setTResult(res ?? null);
     setChiResult(null);
     setAnovaResult(null);

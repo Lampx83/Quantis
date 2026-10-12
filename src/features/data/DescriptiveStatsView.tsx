@@ -82,7 +82,7 @@ export function DescriptiveStatsView({
     const tsvRows = stats.map((s) => [
       s.column,
       s.type,
-      String(s.n),
+      String(s.n - s.missing), // N hợp lệ (không gồm ô thiếu) — cột Missing là số ô thiếu; N + Missing = tổng số dòng
       String(s.missing),
       s.mean != null ? s.mean.toFixed(4) : na,
       s.median != null ? s.median.toFixed(4) : na,
@@ -100,7 +100,7 @@ export function DescriptiveStatsView({
   }, [stats]);
 
   const aiContextDescriptive = stats.length > 0
-    ? stats.map((s) => `Cột ${s.column}: N=${s.n}, missing=${s.missing}, mean=${s.mean != null ? s.mean.toFixed(2) : "—"}, median=${s.median != null ? s.median.toFixed(2) : "—"}, std=${s.std != null ? s.std.toFixed(2) : "—"}, min=${s.min != null ? s.min.toFixed(2) : "—"}, max=${s.max != null ? s.max.toFixed(2) : "—"}`).join("\n")
+    ? stats.map((s) => `Cột ${s.column}: N=${s.n - s.missing}, missing=${s.missing}, mean=${s.mean != null ? s.mean.toFixed(2) : "—"}, median=${s.median != null ? s.median.toFixed(2) : "—"}, std=${s.std != null ? s.std.toFixed(2) : "—"}, min=${s.min != null ? s.min.toFixed(2) : "—"}, max=${s.max != null ? s.max.toFixed(2) : "—"}`).join("\n")
     : "";
 
   return (
@@ -150,7 +150,7 @@ export function DescriptiveStatsView({
                   <tr key={s.column} className="border-b border-neutral-100 dark:border-neutral-700/50">
                     <td className="p-2 font-medium">{s.column}</td>
                     <td className="p-2">{s.type}</td>
-                    <td className="p-2 text-right">{s.n}</td>
+                    <td className="p-2 text-right">{s.n - s.missing}</td>
                     <td className="p-2 text-right">{s.missing}</td>
                     <td className="p-2 text-right">{s.mean != null ? s.mean.toFixed(2) : "—"}</td>
                     <td className="p-2 text-right">{s.median != null ? s.median.toFixed(2) : "—"}</td>
