@@ -1158,18 +1158,27 @@ def run_kmeans(rows: list, column_names: list[str], k: int, max_iter: int = 100)
 
 
 # ---------- EFA (PCA extraction + varimax rotation) ----------
-def _varimax(loadings: np.ndarray, tol: float = 1e-8, max_iter: int = 100) -> np.ndarray:
+def _varimax(loadings: np.ndarray, tol: float = 1e-10, max_iter: int = 1000) -> np.ndarray:
+    """Varimax thô (không chuẩn hoá Kaiser). Gradient đúng: Λᵀ(Λ³ − Λ·diag(mean(Λ²))) — thuật toán SVD chuẩn.
+    Sau xoay: đổi dấu để tổng loading mỗi cột dương và sắp xếp nhân tố theo tổng bình phương loading giảm dần."""
     p, k = loadings.shape
     L = loadings.copy()
+    if k < 2:
+        return L
+    d_old = 0.0
     for _ in range(max_iter):
-        L_old = L.copy()
-        Lambda = L
-        u, s, vh = np.linalg.svd(Lambda.T @ (Lambda**2 - (Lambda**2).mean(axis=0)))
+        G = L**3 - L @ np.diag((L**2).sum(axis=0)) / p
+        u, s, vh = np.linalg.svd(loadings.T @ G)
         R = u @ vh
-        L = Lambda @ R
-        if np.abs(L - L_old).max() < tol:
+        L = loadings @ R
+        d = float(s.sum())
+        if d_old != 0.0 and d < d_old * (1 + tol):
             break
-    return L
+        d_old = d
+    signs = np.where(L.sum(axis=0) < 0, -1.0, 1.0)
+    L = L * signs
+    order = np.argsort(-(L**2).sum(axis=0), kind="stable")
+    return L[:, order]
 
 
 def run_efa(rows: list, column_names: list[str], n_factors: int = None):
@@ -1717,8 +1726,8 @@ def run_ttest_paired(rows: list, col1: str, col2: str) -> dict | None:
     n = len(diff)
     mean_diff = float(np.mean(diff))
     std_diff = float(np.std(diff, ddof=1)) if n > 1 else 0.0
-    pooled_std = float(np.std(np.concatenate([a, b]), ddof=1)) if len(a) + len(b) > 2 else 0.0
-    cohen_d = (mean_diff / pooled_std) if pooled_std > 0 else 0.0
+    # Cohen's d cho mẫu cặp = d_z = trung bình hiệu / SD hiệu (như SPSS/JASP/G*Power; khớp bản tính phía trình duyệt).
+    cohen_d = (mean_diff / std_diff) if std_diff > 0 else 0.0
     return {
         "t": float(t_stat),
         "df": n - 1,
