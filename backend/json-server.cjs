@@ -618,6 +618,10 @@ app.use("/api/quantis/analyze", async (req, res) => {
   const headers = { ...req.headers, host: new URL(ANALYZE_PYTHON_URL).host };
   delete headers["origin"];
   delete headers["referer"];
+  // Body được express.json() parse rồi JSON.stringify lại → độ dài khác bản gốc (vd 79.0 → 79); giữ content-length cũ
+  // làm fetch (undici) lỗi "fetch failed" → 502. Để fetch tự tính.
+  delete headers["content-length"];
+  delete headers["transfer-encoding"];
   try {
     const opt = { method: req.method, headers, redirect: "follow" };
     if (req.method !== "GET" && req.method !== "HEAD") {
