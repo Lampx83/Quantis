@@ -90,6 +90,7 @@ export function HypothesisTab({
   const [mcnemarCol1, setMcNemarCol1] = useState("");
   const [mcnemarCol2, setMcNemarCol2] = useState("");
   const [mcnemarResult, setMcNemarResult] = useState<McNemarResult | null>(null);
+  const [mcnemarRan, setMcNemarRan] = useState(false);
   const [fisherCol1, setFisherCol1] = useState("");
   const [fisherCol2, setFisherCol2] = useState("");
   const [fisherResult, setFisherResult] = useState<FisherExactResult | null>(null);
@@ -1026,20 +1027,23 @@ export function HypothesisTab({
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mcnemar.col1Label")}</label>
-              <select value={mcnemarCol1} onChange={(e) => { setMcNemarCol1(e.target.value); setMcNemarResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={mcnemarCol1} onChange={(e) => { setMcNemarCol1(e.target.value); setMcNemarResult(null); setMcNemarRan(false); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mcnemar.col2Label")}</label>
-              <select value={mcnemarCol2} onChange={(e) => { setMcNemarCol2(e.target.value); setMcNemarResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={mcnemarCol2} onChange={(e) => { setMcNemarCol2(e.target.value); setMcNemarResult(null); setMcNemarRan(false); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button type="button" onClick={() => { const res = computeMcNemar(rows, mcnemarCol1, mcnemarCol2); setMcNemarResult(res ?? null); }} disabled={!mcnemarCol1 || !mcnemarCol2} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.mcnemar.runButton")}</button>
+            <button type="button" onClick={() => { const res = computeMcNemar(rows, mcnemarCol1, mcnemarCol2); setMcNemarResult(res ?? null); setMcNemarRan(true); }} disabled={!mcnemarCol1 || !mcnemarCol2} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.mcnemar.runButton")}</button>
           </div>
+          {mcnemarRan && !mcnemarResult && (
+            <p className="text-sm text-amber-700 dark:text-amber-400">{t("hypothesisTab.mcnemar.noResult")}</p>
+          )}
           {mcnemarResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
               <p className="font-medium mb-2">{t("hypothesisTab.mcnemar.resultTitle")}</p>
