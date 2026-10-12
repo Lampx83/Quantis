@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   getDataRows,
   getUniqueValues,
   computeTTest,
@@ -186,7 +187,7 @@ export function HypothesisTab({
     if (wilcoxonPairedResult) return `Wilcoxon cặp: W = ${wilcoxonPairedResult.w.toFixed(0)}, z = ${wilcoxonPairedResult.z.toFixed(2)}, p = ${wilcoxonPairedResult.pValue < 0.001 ? "<.001" : wilcoxonPairedResult.pValue.toFixed(3)}, n = ${wilcoxonPairedResult.n}.`;
     if (friedmanResult) return `Friedman: χ² = ${friedmanResult.chi2.toFixed(2)}, df = ${friedmanResult.df}, p = ${friedmanResult.pValue < 0.001 ? "<.001" : friedmanResult.pValue.toFixed(3)}.`;
     if (leveneResult) return `Levene (Đồng phương sai): W = ${leveneResult.w.toFixed(4)}, p = ${leveneResult.pValue < 0.001 ? "<.001" : leveneResult.pValue.toFixed(3)}.`;
-    if (mcnemarResult) return `McNemar (cặp nhị phân): χ² = ${mcnemarResult.chi2.toFixed(2)}, p = ${mcnemarResult.pValue < 0.001 ? "<.001" : mcnemarResult.pValue.toFixed(3)}.`;
+    if (mcnemarResult) return `McNemar (cặp nhị phân, hiệu chỉnh liên tục): χ² = ${mcnemarResult.chi2.toFixed(2)}, p = ${mcnemarResult.pValue < 0.001 ? "<.001" : mcnemarResult.pValue.toFixed(3)}.`;
     if (shapiroResult) return `Shapiro-Wilk (chuẩn): W = ${shapiroResult.w.toFixed(4)}, p = ${shapiroResult.pValue < 0.001 ? "<.001" : shapiroResult.pValue.toFixed(3)}. p < 0.05 → bác bỏ chuẩn.`;
     if (powerResult) return `Phân tích lực mẫu: cần n = ${powerResult.nRequired} để đạt power = ${(powerResult.power * 100).toFixed(0)}%, effect size d = ${powerResult.effectSize}, α = ${powerResult.alpha}.`;
     return "";
@@ -228,7 +229,20 @@ export function HypothesisTab({
     if (analysisBackendAvailable) {
       setHypothesisLoading("chi2");
       try {
-        const res = await quantisApi.analyzeChiSquare(rows, chiCol1, chiCol2);
+        const raw = await quantisApi.analyzeChiSquare(rows, chiCol1, chiCol2);
+        // Backend Python không trả Cramér's V / phi → bổ sung từ χ², n và kích thước bảng; lỗi backend → tính cục bộ.
+        let res: ChiSquareResult | null = null;
+        if (raw) {
+          const nTot = raw.table.reduce((a, c) => a + c.count, 0);
+          const minDim = Math.min(raw.rowLabels.length, raw.colLabels.length) - 1;
+          res = {
+            ...(raw as ChiSquareResult),
+            cramersV: nTot > 0 && minDim > 0 ? Math.sqrt(raw.chi2 / (nTot * minDim)) : undefined,
+            phi: nTot > 0 && raw.rowLabels.length === 2 && raw.colLabels.length === 2 ? Math.sqrt(raw.chi2 / nTot) : undefined,
+          };
+        } else {
+          res = computeChiSquare(rows, chiCol1, chiCol2);
+        }
         setChiResult(res ?? null);
         setTResult(null);
         setAnovaResult(null);
@@ -362,7 +376,7 @@ export function HypothesisTab({
   const runShapiroWilk = async () => {
     if (!normalityCol || !numericCols.includes(normalityCol)) return;
     const ci = rows[0].indexOf(normalityCol);
-    const vals = rows.slice(1).map((r) => Number(r[ci])).filter((v) => !Number.isNaN(v));
+    const vals = rows.slice(1).map((r) => numCell(r[ci])).filter((v) => !Number.isNaN(v));
     if (analysisBackendAvailable) {
       setHypothesisLoading("shapiro");
       try {
@@ -1029,7 +1043,10 @@ export function HypothesisTab({
           {mcnemarResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
               <p className="font-medium mb-2">{t("hypothesisTab.mcnemar.resultTitle")}</p>
-              <p>χ² = {mcnemarResult.chi2.toFixed(4)}, p-value = {mcnemarResult.pValue < 0.001 ? "< 0.001" : mcnemarResult.pValue.toFixed(4)}</p>
+              <p>{t("hypothesisTab.mcnemar.chi2Label")} = {mcnemarResult.chi2.toFixed(4)}, df = 1, p-value = {mcnemarResult.pValue < 0.001 ? "< 0.001" : mcnemarResult.pValue.toFixed(4)}</p>
+              {mcnemarResult.exactPValue != null && (
+                <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.mcnemar.exactLabel")} {mcnemarResult.exactPValue < 0.001 ? "< 0.001" : mcnemarResult.exactPValue.toFixed(4)}</p>
+              )}
               <p>{t("hypothesisTab.mcnemar.discordantPairsLabel")} b = {mcnemarResult.b}, c = {mcnemarResult.c}, n_discordant = {mcnemarResult.nDiscordant}</p>
             </div>
           )}
@@ -1080,7 +1097,7 @@ export function HypothesisTab({
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.onesample.mu0Label")}</label>
               <input type="number" step="any" value={onesampleMu0} onChange={(e) => { setOnesampleMu0(e.target.value); setOnesampleResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28" placeholder="0" />
             </div>
-            <button type="button" onClick={() => { if (!onesampleCol || onesampleMu0 === "") return; const h = rows[0] || []; const idx = h.indexOf(onesampleCol); if (idx === -1) return; const vals = rows.slice(1).map(r => Number(r[idx])).filter(n => !Number.isNaN(n)); const res = computeOneSampleTTest(vals, parseFloat(onesampleMu0) || 0); setOnesampleResult(res ?? null); }} disabled={!onesampleCol || onesampleMu0 === ""} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.onesample.runButton")}</button>
+            <button type="button" onClick={() => { if (!onesampleCol || onesampleMu0 === "") return; const h = rows[0] || []; const idx = h.indexOf(onesampleCol); if (idx === -1) return; const vals = rows.slice(1).map(r => numCell(r[idx])).filter(n => !Number.isNaN(n)); const res = computeOneSampleTTest(vals, parseFloat(onesampleMu0) || 0); setOnesampleResult(res ?? null); }} disabled={!onesampleCol || onesampleMu0 === ""} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("hypothesisTab.onesample.runButton")}</button>
           </div>
           {onesampleResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">

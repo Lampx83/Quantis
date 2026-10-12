@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   getDataRows,
   computeOLS,
   computeLogisticRegression,
@@ -40,7 +41,7 @@ export function RegressionTab({
     if (ci === -1) return false;
     const vals = rows
       .slice(1)
-      .map((r) => Number(r[ci]))
+      .map((r) => numCell(r[ci]))
       .filter((v) => !Number.isNaN(v));
     const uniq = [...new Set(vals)];
     return uniq.length === 2 && uniq.every((v) => v === 0 || v === 1);

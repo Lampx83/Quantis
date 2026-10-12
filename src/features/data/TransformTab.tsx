@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { X } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows, computeDescriptive, getColumnMode } from "@/utils/stats";
+import { numCell, getDataRows, computeDescriptive, getColumnMode } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -58,7 +58,7 @@ export function TransformTab({
       const op = filterOp;
       newRows = [header, ...dataRows.slice(1).filter((r) => {
         const cell = (r[ci] ?? "").toString().trim();
-        const num = Number(cell);
+        const num = numCell(cell);
         const vNum = Number(val);
         if (op === "==") return cell === val;
         if (op === "!=") return cell !== val;
@@ -146,7 +146,7 @@ export function TransformTab({
           const out = [...r];
           for (const col of columnsToApply) {
             const ci = header.indexOf(col);
-            const numVals = numericRows.map((row) => Number(row[ci])).filter((v) => !Number.isNaN(v));
+            const numVals = numericRows.map((row) => numCell(row[ci])).filter((v) => !Number.isNaN(v));
             const fill = transformAction === "fill_median"
               ? (numVals.length ? (() => { const s = [...numVals].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; })() : 0)
               : (numVals.length ? numVals.reduce((a, b) => a + b, 0) / numVals.length : 0);
