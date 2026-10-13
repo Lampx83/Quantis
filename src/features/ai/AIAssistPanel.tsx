@@ -310,7 +310,7 @@ export function AIAssistPanel({
             <div className="mt-2 p-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
               <p className="text-xs font-medium text-red-800 dark:text-red-200 mb-0.5">{t("api.aiConnectionError")}</p>
               <p className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap">{error}</p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t("aiAssistPanel.errorHintPrefix")} <strong>{t("app.connectionSettings")}</strong> {t("aiAssistPanel.errorHintMid1")} <strong>{t("aiAssistPanel.errorHintOllamaUpstream")}</strong> {t("aiAssistPanel.errorHintMid2")} <code className="text-[10px]">OLLAMA_URL</code>{t("aiAssistPanel.errorHintMid3")} <strong>{t("aiAssistPanel.errorHintCheckOllama")}</strong>{t("aiAssistPanel.errorHintMid4")} <code className="text-[10px]">ollama serve</code> {t("aiAssistPanel.errorHintSuffix")}</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t("aiAssistPanel.errorHintPrefix")} <strong>{t("app.connectionSettings")}</strong> {t("aiAssistPanel.errorHintMid1")} <strong>{t("aiAssistPanel.errorHintOllamaUpstream")}</strong> {t("aiAssistPanel.errorHintMid2")} <code className="text-[10px]">OLLAMA_URL</code>{t("aiAssistPanel.errorHintMid3")} <strong>{t("aiAssistPanel.errorHintCheckOllama")}</strong>{t("aiAssistPanel.errorHintMid4")} {t("aiAssistPanel.errorHintSuffix")}</p>
             </div>
           )}
           {result !== null && (

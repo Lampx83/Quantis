@@ -51,7 +51,8 @@ async function ensureUserExistsBeforeTransaction(userId: string, req: Request): 
 /** Khách Portal (email "guest@local", id ngẫu nhiên mỗi request) không được lưu workspace lên DB. */
 function isGuestRequest(req: Request): boolean {
   const email = ((req.headers["x-user-email"] as string) ?? "").trim().toLowerCase()
-  return !email || email.endsWith("@local")
+  // Portal gửi khách là "guest@portal.local" (không chỉ "guest@local") → nhận cả tiền tố "guest@".
+  return !email || email.endsWith("@local") || email.startsWith("guest@")
 }
 
 function mustHaveUserForEmbedded(userId: string | null, res: Response): userId is string {

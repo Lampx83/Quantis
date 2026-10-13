@@ -55,8 +55,14 @@ export function AppSidebar() {
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedWorkflow = selectedWorkflowId ? workflows.find((w) => w.id === selectedWorkflowId) : null;
+  // Dataset thuộc workflow đang chọn + dataset chưa gắn với workflow nào (import khi chưa chọn workflow, dữ liệu cũ)
+  // — tránh bộ dữ liệu đã có trong tài khoản bị "biến mất" khỏi danh sách chỉ vì datasetIds của workflow rỗng.
   const workflowDatasets = selectedWorkflow
-    ? datasets.filter((d) => (selectedWorkflow.datasetIds ?? []).includes(d.id))
+    ? (() => {
+        const linkedHere = new Set(selectedWorkflow.datasetIds ?? []);
+        const linkedAnywhere = new Set(workflows.flatMap((w) => w.datasetIds ?? []));
+        return datasets.filter((d) => linkedHere.has(d.id) || !linkedAnywhere.has(d.id));
+      })()
     : [];
 
   const handleSidebarCsvImport = useCallback(

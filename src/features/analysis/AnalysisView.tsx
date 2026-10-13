@@ -582,7 +582,7 @@ export function AnalysisView({
       <h2 className="text-xl font-semibold mb-2">{title}</h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{desc}</p>
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm text-neutral-500">
-        {t("analysisView.featureComingSoon")}
+        {selectedDataset ? t("analysisView.featureComingSoon") : t("analysisView.needDataset")}
       </div>
     </div>
   );

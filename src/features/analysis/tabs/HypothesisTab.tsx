@@ -6,6 +6,13 @@ import {
   getDataRows,
   getUniqueValues,
   computeTTest,
+  computeTTestFromColumns,
+  buildTTestExcelTable,
+  buildAnovaTable,
+  wideToLongRows,
+  computeFTestFromColumns,
+  computeFTestFromGroups,
+  type FTestTwoSampleResult,
   computeChiSquare,
   computeOneWayANOVA,
   computeKruskalWallis,
@@ -51,6 +58,7 @@ import {
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { ExcelStyleTable, fmtStat, fmtPValue } from "./ExcelStyleTable";
 
 export interface HypothesisTabProps {
   selectedDataset: Dataset;
@@ -77,6 +85,9 @@ export function HypothesisTab({
   const [groupVal2, setGroupVal2] = useState("");
   const [numCol, setNumCol] = useState("");
   const [ttestEqualVar, setTtestEqualVar] = useState(false);
+  const [ttestMode, setTtestMode] = useState<"groups" | "columns">("groups");
+  const [ttestCol1, setTtestCol1] = useState("");
+  const [ttestCol2, setTtestCol2] = useState("");
   const [tResult, setTResult] = useState<TTestResult | null>(null);
   const [pairedCol1, setPairedCol1] = useState("");
   const [pairedCol2, setPairedCol2] = useState("");
@@ -108,7 +119,10 @@ export function HypothesisTab({
   const [signTestCol1, setSignTestCol1] = useState("");
   const [signTestCol2, setSignTestCol2] = useState("");
   const [signTestResult, setSignTestResult] = useState<SignTestResult | null>(null);
-  const [ftestResult, setFtestResult] = useState<{ f: number; pValue: number; df1: number; df2: number; var1: number; var2: number; n1: number; n2: number } | null>(null);
+  const [ftestResult, setFtestResult] = useState<FTestTwoSampleResult | null>(null);
+  const [ftestMode, setFtestMode] = useState<"columns" | "groups">("columns");
+  const [ftestCol1, setFtestCol1] = useState("");
+  const [ftestCol2, setFtestCol2] = useState("");
   const [ztestMeansResult, setZtestMeansResult] = useState<{ z: number; pValue: number; mean1: number; mean2: number; n1: number; n2: number; knownVar1: number; knownVar2: number } | null>(null);
   const [ztestKnownVar1, setZtestKnownVar1] = useState("");
   const [ztestKnownVar2, setZtestKnownVar2] = useState("");
@@ -117,6 +131,8 @@ export function HypothesisTab({
   const [chiResult, setChiResult] = useState<ChiSquareResult | null>(null);
   const [anovaFactorCol, setAnovaFactorCol] = useState("");
   const [anovaValueCol, setAnovaValueCol] = useState("");
+  const [anovaMode, setAnovaMode] = useState<"groups" | "columns">("groups");
+  const [anovaWideCols, setAnovaWideCols] = useState<string[]>([]);
   const [anovaResult, setAnovaResult] = useState<ANOVAResult | null>(null);
   const [ancovaFactorCol, setAncovaFactorCol] = useState("");
   const [ancovaValueCol, setAncovaValueCol] = useState("");
@@ -203,6 +219,19 @@ export function HypothesisTab({
   }, [analysisBackendAvailable, anovaResult]);
 
   const runTTest = async () => {
+    if (ttestMode === "columns") {
+      if (!ttestCol1 || !ttestCol2 || ttestCol1 === ttestCol2) {
+        showToast(t("hypothesisTab.toast.pickTwoColumns"));
+        return;
+      }
+      const resCols = computeTTestFromColumns(rows, ttestCol1, ttestCol2, ttestEqualVar);
+      setTResult(resCols ?? null);
+      setChiResult(null);
+      setAnovaResult(null);
+      if (resCols) onHypothesisResult?.({ type: "ttest", payload: resCols, meta: { groupCol: "(2 cột)", groupVal1: ttestCol1, groupVal2: ttestCol2, numCol: "" } });
+      else onHypothesisResult?.(null);
+      return;
+    }
     if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
     if (analysisBackendAvailable) {
       setHypothesisLoading("ttest");
@@ -218,7 +247,7 @@ export function HypothesisTab({
       }
       return;
     }
-    const res = computeTTest(rows, groupCol, groupVal1, groupVal2, numCol);
+    const res = computeTTest(rows, groupCol, groupVal1, groupVal2, numCol, ttestEqualVar);
     setTResult(res ?? null);
     setChiResult(null);
     setAnovaResult(null);
@@ -262,6 +291,21 @@ export function HypothesisTab({
     else onHypothesisResult?.(null);
   };
   const runANOVA = async () => {
+    if (anovaMode === "columns") {
+      if (anovaWideCols.length < 2) {
+        showToast(t("hypothesisTab.toast.pickTwoOrMoreColumns"));
+        return;
+      }
+      const resWide = computeOneWayANOVA(wideToLongRows(rows, anovaWideCols), "__group", "__value");
+      if (resWide) resWide.groupMeans.sort((a, b) => anovaWideCols.indexOf(a.group) - anovaWideCols.indexOf(b.group));
+      setAnovaResult(resWide ?? null);
+      setKruskalResult(null);
+      setTResult(null);
+      setChiResult(null);
+      if (resWide) onHypothesisResult?.({ type: "anova", payload: resWide, meta: { factorCol: "(nhiều cột)", valueCol: anovaWideCols.join(", ") } });
+      else onHypothesisResult?.(null);
+      return;
+    }
     if (!anovaFactorCol || !anovaValueCol) return;
     if (analysisBackendAvailable) {
       setHypothesisLoading("anova");
@@ -533,7 +577,16 @@ export function HypothesisTab({
       </div>
       {testKind === "ttest" && (
       <>
+      <div className="mb-3">
+        <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.label")}</label>
+        <select value={ttestMode} onChange={(e) => { setTtestMode(e.target.value as "groups" | "columns"); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+          <option value="groups">{t("hypothesisTab.mode.groups")}</option>
+          <option value="columns">{t("hypothesisTab.mode.columnsTwo")}</option>
+        </select>
+      </div>
       <div className="flex flex-wrap gap-4 items-end mb-4">
+      {ttestMode === "groups" ? (
+      <>
         <div>
           <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
           <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
@@ -562,6 +615,25 @@ export function HypothesisTab({
             {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
+      </>
+      ) : (
+      <>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.column1")}</label>
+          <select value={ttestCol1} onChange={(e) => { setTtestCol1(e.target.value); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+            {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.column2")}</label>
+          <select value={ttestCol2} onChange={(e) => { setTtestCol2(e.target.value); setTResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+            {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </>
+      )}
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={ttestEqualVar} onChange={(e) => { setTtestEqualVar(e.target.checked); setTResult(null); }} className="rounded border-neutral-300" />
           <span className="text-sm">{t("hypothesisTab.ttest.equalVarianceLabel")}</span>
@@ -576,16 +648,57 @@ export function HypothesisTab({
             <p className="font-medium">{t("hypothesisTab.common.resultLabel")} ({ttestEqualVar ? "Two-sample t-test (Equal variance)" : "Welch two-sample t-test"})</p>
             <button type="button" onClick={() => navigator.clipboard.writeText(`t = ${tResult.t.toFixed(4)}, df = ${tResult.df.toFixed(1)}, p = ${tResult.pValue < 0.001 ? "< .001" : tResult.pValue.toFixed(4)}, Cohen's d = ${tResult.cohenD.toFixed(4)}\nMean nhóm 1 = ${tResult.mean1.toFixed(2)} (n = ${tResult.n1}), Mean nhóm 2 = ${tResult.mean2.toFixed(2)} (n = ${tResult.n2})`)} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
           </div>
-          <p>t = {tResult.t.toFixed(4)}, df = {tResult.df.toFixed(1)}, p-value = {tResult.pValue < 0.001 ? "< 0.001" : tResult.pValue.toFixed(4)}</p>
+          <p>t = {tResult.t.toFixed(4)}, df = {tResult.df.toFixed(1)}, p-value {tResult.pValue < 0.001 ? "< 0.001" : `= ${tResult.pValue.toFixed(4)}`}</p>
           <p>Cohen's d = {tResult.cohenD.toFixed(4)}</p>
           <p>{t("hypothesisTab.ttest.meanGroup1")} = {tResult.mean1.toFixed(2)} (n = {tResult.n1}), {t("hypothesisTab.ttest.meanGroup2")} = {tResult.mean2.toFixed(2)} (n = {tResult.n2})</p>
+          {(() => {
+            const tx = buildTTestExcelTable(tResult, ttestEqualVar);
+            const l1 = ttestMode === "columns" ? ttestCol1 : groupVal1;
+            const l2 = ttestMode === "columns" ? ttestCol2 : groupVal2;
+            const rowsT: string[][] = [
+              ["Mean", fmtStat(tx.mean1, 8), fmtStat(tx.mean2, 8)],
+              ["Variance", fmtStat(tx.var1, 7), fmtStat(tx.var2, 7)],
+              ["Observations", String(tx.n1), String(tx.n2)],
+              ...(tx.pooledVar != null ? [["Pooled Variance", fmtStat(tx.pooledVar, 7), ""]] : []),
+              ["Hypothesized Mean Difference", String(tx.hypothesizedDiff), ""],
+              ["df", String(tx.df), ""],
+              ["t Stat", fmtStat(tx.t, 8), ""],
+              ["P(T<=t) one-tail", fmtPValue(tx.pOneTail), ""],
+              ["t Critical one-tail", fmtStat(tx.tCritOneTail, 8), ""],
+              ["P(T<=t) two-tail", fmtPValue(tx.pTwoTail), ""],
+              ["t Critical two-tail", fmtStat(tx.tCritTwoTail, 8), ""],
+            ];
+            return (
+              <>
+                <p className="mt-3 text-neutral-600 dark:text-neutral-400">H₀: μ₁ = μ₂ &nbsp;·&nbsp; H₁: μ₁ ≠ μ₂</p>
+                <ExcelStyleTable
+                  title={ttestEqualVar ? "t-Test: Two-Sample Assuming Equal Variances" : "t-Test: Two-Sample Assuming Unequal Variances"}
+                  header={["", l1, l2]}
+                  rows={rowsT}
+                />
+                {!ttestEqualVar && Math.abs(tResult.df - tx.df) > 1e-9 && (
+                  <p className="mt-1 text-xs text-neutral-500">{t("hypothesisTab.ttest.dfNote")} {tResult.df.toFixed(2)}</p>
+                )}
+                <p className="mt-2 font-medium">{tx.pTwoTail < tx.alpha ? t("hypothesisTab.ttest.concReject") : t("hypothesisTab.ttest.concKeep")}</p>
+              </>
+            );
+          })()}
         </div>
       )}
       </>
       )}
       {testKind === "anova" && (
         <>
+          <div className="mb-3">
+            <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.label")}</label>
+            <select value={anovaMode} onChange={(e) => { setAnovaMode(e.target.value as "groups" | "columns"); setAnovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <option value="groups">{t("hypothesisTab.mode.groups")}</option>
+              <option value="columns">{t("hypothesisTab.mode.columnsMany")}</option>
+            </select>
+          </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
+            {anovaMode === "groups" ? (
+            <>
             <div>
               <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.factorVariable")}</label>
               <select value={anovaFactorCol} onChange={(e) => { setAnovaFactorCol(e.target.value); setAnovaResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
@@ -600,6 +713,26 @@ export function HypothesisTab({
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+            </>
+            ) : (
+            <div>
+              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.columnsManyLabel")}</label>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 max-w-3xl">
+                {numericCols.map((c) => (
+                  <label key={c} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={anovaWideCols.includes(c)}
+                      onChange={(e) => { setAnovaWideCols((prev) => (e.target.checked ? [...prev, c] : prev.filter((x) => x !== c))); setAnovaResult(null); }}
+                      className="rounded border-neutral-300"
+                    />
+                    {c}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-neutral-500 mt-1">{t("hypothesisTab.anova.columnsHint")}</p>
+            </div>
+            )}
             <button type="button" onClick={runANOVA} disabled={hypothesisLoading !== null} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
               {hypothesisLoading === "anova" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.anova.runButton")}
             </button>
@@ -610,13 +743,39 @@ export function HypothesisTab({
                 <p className="font-medium">{t("hypothesisTab.anova.resultTitle")}</p>
                 <button type="button" onClick={() => { const lines = [`F(${anovaResult.dfBetween}, ${anovaResult.dfWithin}) = ${anovaResult.f.toFixed(4)}, p = ${anovaResult.pValue < 0.001 ? "< .001" : anovaResult.pValue.toFixed(4)}, η² = ${anovaResult.etaSq.toFixed(4)}${typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}`, "Nhóm\tM\tSD\tn", ...anovaResult.groupMeans.map((m) => `${m.group}\t${m.mean.toFixed(4)}\t${m.std.toFixed(4)}\t${m.n}`)]; const posthoc = analysisBackendAvailable && pairwisePosthocBackendResult ? pairwisePosthocBackendResult : pairwisePostHoc(anovaResult.groupMeans); if (posthoc.length) lines.push("", "Nhóm 1\tNhóm 2\tHiệu TB\tp (Bonferroni)", ...posthoc.map((r) => `${r.group1}\t${r.group2}\t${r.meanDiff.toFixed(4)}\t${r.pBonferroni < 0.001 ? "< .001" : r.pBonferroni.toFixed(4)}`)); navigator.clipboard.writeText(lines.join("\n")); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
               </div>
-              <p>F({anovaResult.dfBetween}, {anovaResult.dfWithin}) = {anovaResult.f.toFixed(4)}, p-value = {anovaResult.pValue < 0.001 ? "< 0.001" : anovaResult.pValue.toFixed(4)}, η² = {anovaResult.etaSq.toFixed(4)}{typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}</p>
-              <p className="text-neutral-600 dark:text-neutral-400">{t("hypothesisTab.common.meanByGroup")}</p>
-              <ul className="list-disc list-inside">
-                {anovaResult.groupMeans.map((m) => (
-                  <li key={m.group}>{m.group}: M = {m.mean.toFixed(2)}, SD = {m.std.toFixed(2)}, n = {m.n}</li>
-                ))}
-              </ul>
+              <p>F({anovaResult.dfBetween}, {anovaResult.dfWithin}) = {anovaResult.f.toFixed(4)}, p-value {anovaResult.pValue < 0.001 ? "< 0.001" : `= ${anovaResult.pValue.toFixed(4)}`}, η² = {anovaResult.etaSq.toFixed(4)}{typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}</p>
+              {(() => {
+                const at = buildAnovaTable(anovaResult.groupMeans);
+                if (!at) return null;
+                const k = at.groups.length;
+                const h0 = Array.from({ length: Math.min(k, 4) }, (_, i) => `μ${i + 1}`).join(" = ") + (k > 4 ? ` = … = μ${k}` : "");
+                const tooMany = anovaMode === "groups" && k > 20;
+                return (
+                  <>
+                    {tooMany && (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 text-amber-800 dark:text-amber-200 px-3 py-2 text-xs">
+                        {t("hypothesisTab.anova.tooManyPrefix")} {k} {t("hypothesisTab.anova.tooManySuffix")}
+                      </p>
+                    )}
+                    <p className="text-neutral-600 dark:text-neutral-400">H₀: {h0} &nbsp;·&nbsp; {t("hypothesisTab.anova.h1")}</p>
+                    <ExcelStyleTable
+                      title="SUMMARY"
+                      header={["Groups", "Count", "Sum", "Average", "Variance"]}
+                      rows={at.groups.map((g) => [g.group, String(g.n), fmtStat(g.sum, 6), fmtStat(g.mean, 6), fmtStat(g.variance, 6)])}
+                    />
+                    <ExcelStyleTable
+                      title="ANOVA"
+                      header={["Source of Variation", "SS", "df", "MS", "F", "P-value", "F crit"]}
+                      rows={[
+                        ["Between Groups", fmtStat(at.ssBetween, 5), String(at.dfBetween), fmtStat(at.msBetween, 5), fmtStat(at.f, 5), fmtPValue(at.pValue), fmtStat(at.fCrit, 6)],
+                        ["Within Groups", fmtStat(at.ssWithin, 5), String(at.dfWithin), fmtStat(at.msWithin, 5), "", "", ""],
+                        ["Total", fmtStat(at.ssTotal, 5), String(at.dfTotal), "", "", "", ""],
+                      ]}
+                    />
+                    <p className="font-medium mt-1">{at.pValue < at.alpha ? t("hypothesisTab.anova.concReject") : t("hypothesisTab.anova.concKeep")}</p>
+                  </>
+                );
+              })()}
               {anovaResult.groupMeans.length >= 2 && (
                 <>
                   <p className="font-medium mt-2">{t("hypothesisTab.anova.posthocTitle")}</p>
@@ -1215,62 +1374,101 @@ export function HypothesisTab({
       {testKind === "ftest" && (
         <>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-2">{t("hypothesisTab.ftest.description")}</p>
+          <div className="mb-3">
+            <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.label")}</label>
+            <select value={ftestMode} onChange={(e) => { setFtestMode(e.target.value as "columns" | "groups"); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <option value="columns">{t("hypothesisTab.mode.columnsTwo")}</option>
+              <option value="groups">{t("hypothesisTab.mode.groups")}</option>
+            </select>
+          </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
-              <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
-              <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
-                {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
-              <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
-                {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
-              <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
-                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
+            {ftestMode === "columns" ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.column1")}</label>
+                <select value={ftestCol1} onChange={(e) => { setFtestCol1(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+                  {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.mode.column2")}</label>
+                <select value={ftestCol2} onChange={(e) => { setFtestCol2(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+                  {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </>
+            ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.groupVariable")}</label>
+                <select value={groupCol} onChange={(e) => { setGroupCol(e.target.value); setGroupVal1(""); setGroupVal2(""); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+                  {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group1")}</label>
+                <select value={groupVal1} onChange={(e) => { setGroupVal1(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+                  {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.group2")}</label>
+                <select value={groupVal2} onChange={(e) => { setGroupVal2(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+                  {groupValues.map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t("hypothesisTab.common.numericVariable")}</label>
+                <select value={numCol} onChange={(e) => { setNumCol(e.target.value); setFtestResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                  <option value="">{t("hypothesisTab.common.selectPlaceholder")}</option>
+                  {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </>
+            )}
             <button
               type="button"
-              disabled={!groupCol || !groupVal1 || !groupVal2 || !numCol || hypothesisLoading !== null}
-              onClick={async () => {
-                if (!groupCol || !groupVal1 || !groupVal2 || !numCol) return;
-                if (!analysisBackendAvailable) { showToast(BACKEND_PYTHON_REQUIRED_MSG); return; }
-                setHypothesisLoading("ftest");
-                try {
-                  const res = await quantisApi.analyzeFTestTwoSample(rows, groupCol, groupVal1, groupVal2, numCol);
-                  setFtestResult(res ?? null);
-                } catch (e) {
-                  showToast(e instanceof Error ? e.message : t("hypothesisTab.toast.ftestError"));
-                  setFtestResult(null);
-                } finally {
-                  setHypothesisLoading(null);
+              onClick={() => {
+                if (ftestMode === "columns") {
+                  if (!ftestCol1 || !ftestCol2 || ftestCol1 === ftestCol2) { showToast(t("hypothesisTab.toast.pickTwoColumns")); return; }
+                } else if (!groupCol || !groupVal1 || !groupVal2 || !numCol) {
+                  return;
                 }
+                const res = ftestMode === "columns"
+                  ? computeFTestFromColumns(rows, ftestCol1, ftestCol2)
+                  : computeFTestFromGroups(rows, groupCol, groupVal1, groupVal2, numCol);
+                if (!res) showToast(t("hypothesisTab.toast.ftestError"));
+                setFtestResult(res);
               }}
               className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {hypothesisLoading === "ftest" ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("hypothesisTab.common.processing")}</> : t("hypothesisTab.ftest.runButton")}
+              {t("hypothesisTab.ftest.runButton")}
             </button>
           </div>
           {ftestResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
-              <p className="font-medium mb-2">{t("hypothesisTab.ftest.resultTitle")}</p>
-              <p>F = {ftestResult.f.toFixed(4)}, df1 = {ftestResult.df1}, df2 = {ftestResult.df2}, p-value = {ftestResult.pValue < 0.001 ? "< 0.001" : ftestResult.pValue.toFixed(4)}</p>
-              <p>{t("hypothesisTab.ftest.varianceGroup1Prefix")} {ftestResult.var1.toFixed(4)} (n = {ftestResult.n1}), {t("hypothesisTab.ftest.varianceGroup2Prefix")} {ftestResult.var2.toFixed(4)} (n = {ftestResult.n2})</p>
+              <p className="font-medium mb-1">{t("hypothesisTab.ftest.resultTitle")}</p>
+              <p className="text-neutral-600 dark:text-neutral-400">H₀: σ₁² = σ₂² &nbsp;·&nbsp; H₁: σ₁² ≠ σ₂²</p>
+              <ExcelStyleTable
+                title="F-Test Two-Sample for Variances"
+                header={["", ftestResult.label1, ftestResult.label2]}
+                rows={[
+                  ["Mean", fmtStat(ftestResult.mean1, 8), fmtStat(ftestResult.mean2, 8)],
+                  ["Variance", fmtStat(ftestResult.var1, 7), fmtStat(ftestResult.var2, 7)],
+                  ["Observations", String(ftestResult.n1), String(ftestResult.n2)],
+                  ["df", String(ftestResult.df1), String(ftestResult.df2)],
+                  ["F", fmtStat(ftestResult.f, 9), ""],
+                  ["P(F<=f) one-tail", fmtPValue(ftestResult.pOneTail), ""],
+                  ["F Critical one-tail", fmtStat(ftestResult.fCritOneTail, 9), ""],
+                  ["P(F<=f) two-tail", fmtPValue(ftestResult.pTwoTail), ""],
+                ]}
+              />
+              <p className="mt-2 font-medium">{ftestResult.pTwoTail < ftestResult.alpha ? t("hypothesisTab.ftest.concReject") : t("hypothesisTab.ftest.concKeep")}</p>
             </div>
           )}
         </>
