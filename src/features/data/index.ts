@@ -2,3 +2,8 @@ export * from "./DataView";
 export * from "./PreviewTable";
 export * from "./TransformTab";
 export * from "./DescriptiveStatsView";
+export * from "./grid/DataGrid";
+export * from "./grid/VariableViewGrid";
+export * from "./grid/GridContextMenu";
+export * from "./grid/ValueLabelsModal";
+export * from "./grid/MissingValuesModal";
