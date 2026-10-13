@@ -1,0 +1,143 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, it, expect, vi } from "vitest";
+import {
+  ValueLabelsModal,
+  QUICK_VALUE_LABEL_TEMPLATES,
+  upsertValueLabel,
+  removeValueLabel,
+  formatValueLabelsSummary,
+} from "../ValueLabelsModal";
+import {
+  MissingValuesModal,
+  parseAndValidateDiscreteMissing,
+  formatMissingValuesSummary,
+} from "../MissingValuesModal";
+
+describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
+  describe("ValueLabelsModal logic & rendering", () => {
+    it("provides standard academic quick templates (Likert 5, Gender, Binary)", () => {
+      expect(QUICK_VALUE_LABEL_TEMPLATES.likert5["1"]).toBe("Hoàn toàn không đồng ý");
+      expect(QUICK_VALUE_LABEL_TEMPLATES.likert5["5"]).toBe("Hoàn toàn đồng ý");
+      expect(QUICK_VALUE_LABEL_TEMPLATES.gender).toEqual({
+        "1": "Nam",
+        "2": "Nữ",
+        "3": "Khác",
+      });
+      expect(QUICK_VALUE_LABEL_TEMPLATES.binary).toEqual({
+        "0": "Không",
+        "1": "Có",
+      });
+    });
+
+    it("adds and updates value-label pairs immutably with validation", () => {
+      const initial = { "1": "Nam" };
+      const added = upsertValueLabel(initial, " 2 ", " Nữ ");
+      expect(added.error).toBeUndefined();
+      expect(added.next).toEqual({ "1": "Nam", "2": "Nữ" });
+      expect(initial).toEqual({ "1": "Nam" }); // immutable
+
+      const updated = upsertValueLabel(added.next, "1", "Nam giới");
+      expect(updated.next["1"]).toBe("Nam giới");
+
+      const emptyVal = upsertValueLabel(initial, "   ", "Nhãn");
+      expect(emptyVal.error).toBeDefined();
+
+      const emptyLabel = upsertValueLabel(initial, "3", "   ");
+      expect(emptyLabel.error).toBeDefined();
+    });
+
+    it("removes a value-label pair immutably", () => {
+      const initial = { "1": "Nam", "2": "Nữ" };
+      const next = removeValueLabel(initial, "1");
+      expect(next).toEqual({ "2": "Nữ" });
+      expect(initial).toEqual({ "1": "Nam", "2": "Nữ" });
+    });
+
+    it("formats value labels summary for grid display", () => {
+      expect(formatValueLabelsSummary(undefined)).toBe("None");
+      expect(formatValueLabelsSummary({})).toBe("None");
+      expect(formatValueLabelsSummary({ "1": "Nam", "2": "Nữ" })).toContain('1="Nam"');
+    });
+
+    it("renders nothing when isOpen is false and renders 2-column modal when open", () => {
+      const closedHtml = renderToStaticMarkup(
+        <ValueLabelsModal
+          isOpen={false}
+          variableName="Q1_SAT"
+          initialValueLabels={{ "1": "Kém" }}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      );
+      expect(closedHtml).toBe("");
+
+      const openHtml = renderToStaticMarkup(
+        <ValueLabelsModal
+          isOpen={true}
+          variableName="Q1_SAT"
+          initialValueLabels={{ "1": "Hoàn toàn không đồng ý", "5": "Hoàn toàn đồng ý" }}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      );
+      expect(openHtml).toContain("Q1_SAT");
+      expect(openHtml).toContain("Hoàn toàn không đồng ý");
+      expect(openHtml).toContain("Likert 5");
+    });
+  });
+
+  describe("MissingValuesModal logic & rendering", () => {
+    it("parses and validates up to 3 discrete missing values", () => {
+      const valid = parseAndValidateDiscreteMissing([" 99 ", "-1", ""]);
+      expect(valid.valid).toBe(true);
+      expect(valid.values).toEqual(["99", "-1"]);
+
+      const empty = parseAndValidateDiscreteMissing(["", "  ", ""]);
+      expect(empty.valid).toBe(true);
+      expect(empty.values).toEqual([]);
+
+      const duplicate = parseAndValidateDiscreteMissing(["99", "99", ""]);
+      expect(duplicate.valid).toBe(false);
+      expect(duplicate.error).toBeDefined();
+
+      const tooMany = parseAndValidateDiscreteMissing(["99", "999", "-1", "-9"]);
+      expect(tooMany.valid).toBe(false);
+      expect(tooMany.error).toBeDefined();
+    });
+
+    it("formats missing values summary for grid display", () => {
+      expect(formatMissingValuesSummary(undefined)).toBe("None");
+      expect(formatMissingValuesSummary([])).toBe("None");
+      expect(formatMissingValuesSummary(["99", "999"])).toBe("99, 999");
+    });
+
+    it("renders nothing when isOpen is false and renders mode options when open", () => {
+      const closedHtml = renderToStaticMarkup(
+        <MissingValuesModal
+          isOpen={false}
+          variableName="INCOME"
+          initialMissingValues={["99"]}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      );
+      expect(closedHtml).toBe("");
+
+      const openHtml = renderToStaticMarkup(
+        <MissingValuesModal
+          isOpen={true}
+          variableName="INCOME"
+          initialMissingValues={["99", "999"]}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      );
+      expect(openHtml).toContain("INCOME");
+      expect(openHtml).toContain("No missing values");
+      expect(openHtml).toContain("Discrete missing values");
+      expect(openHtml).toContain('value="99"');
+      expect(openHtml).toContain('value="999"');
+    });
+  });
+});
