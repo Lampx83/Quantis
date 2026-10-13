@@ -17,6 +17,7 @@ import { getDataRows } from "@/utils/stats";
 import {
   ensureDatasetMetadata,
   formatCellValueWithLabels,
+  isMissingValue,
   validateVariableName,
 } from "@/utils/metadata";
 import { useDataStore } from "@/stores/useDataStore";
@@ -735,9 +736,7 @@ export function DataGrid({
                           ? "text-center"
                           : "text-left";
 
-                      const isMissing =
-                        formatted.isMissingCode ||
-                        (rawValue.trim() === "" && Boolean(meta?.missingValues?.length));
+                      const isMissing = isMissingValue(rawValue, meta);
 
                       return (
                         <td
@@ -804,6 +803,8 @@ export function DataGrid({
                                   ? `Giá trị mã hóa gốc: ${rawValue}`
                                   : formatted.isMissingCode
                                   ? `Mã khuyết thiếu (${rawValue})`
+                                  : isMissing && rawValue.trim() === ""
+                                  ? "Dữ liệu khuyết thiếu"
                                   : undefined
                               }
                             >

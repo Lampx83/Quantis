@@ -202,4 +202,31 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     expect(rowMenuHtml).toContain("Chèn dòng phía trên");
     expect(rowMenuHtml).toContain("Xóa dòng");
   });
+
+  it("renders empty missing cells as (khuyết) with rose background by default even without discrete missing codes", () => {
+    const dsWithEmptyCell: Dataset = {
+      ...mockDataset,
+      preview: [
+        ["ID", "GENDER", "SCORE"],
+        ["1", "", "85.5"],
+      ],
+      data: [
+        ["ID", "GENDER", "SCORE"],
+        ["1", "", "85.5"],
+      ],
+      variables: {
+        ...mockDataset.variables,
+        GENDER: {
+          ...mockDataset.variables!.GENDER,
+          missingValues: [], // No discrete missing values configured
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <DataGrid dataset={dsWithEmptyCell} showValueLabels={false} />
+    );
+    expect(html).toContain("(khuyết)");
+    expect(html).toContain("bg-rose-50/40");
+  });
 });
