@@ -169,6 +169,7 @@ export function VariableViewGrid({
   // Track inline Name drafts, Decimals drafts, and Label drafts per variable
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
   const [decimalsDrafts, setDecimalsDrafts] = useState<Record<string, string>>({});
+  const [widthDrafts, setWidthDrafts] = useState<Record<string, string>>({});
   const [nameError, setNameError] = useState<{
     varName: string;
     message: string;
@@ -189,6 +190,7 @@ export function VariableViewGrid({
     }
     setNameDrafts(nextDrafts);
     setNameError(null);
+    setWidthDrafts({});
   }, [activeDataset?.id, activeDataset?.columnNames.join("|")]);
 
   if (!activeDataset) {
@@ -227,6 +229,31 @@ export function VariableViewGrid({
     renameVariable(originalName, trimmed, activeDataset.id);
     if (showToast) {
       showToast(`Đã đổi tên biến "${originalName}" → "${trimmed}"`);
+    }
+  };
+
+  const commitWidthChange = (
+    varName: string,
+    currentWidth?: number,
+    valueOverride?: string
+  ) => {
+    const draft = valueOverride !== undefined ? valueOverride : widthDrafts[varName];
+    if (draft !== undefined) {
+      const parsed = parseInt(draft, 10);
+      const fallback = currentWidth ?? 100;
+      const clamped = Number.isNaN(parsed)
+        ? fallback
+        : Math.max(40, Math.min(400, parsed));
+      updateVariableMetadata(
+        varName,
+        { width: clamped },
+        activeDataset.id
+      );
+      setWidthDrafts((prev) => {
+        const next = { ...prev };
+        delete next[varName];
+        return next;
+      });
     }
   };
 
@@ -473,16 +500,28 @@ export function VariableViewGrid({
                       min={40}
                       max={400}
                       step={10}
-                      value={meta.width ?? 100}
+                      value={
+                        widthDrafts[meta.name] !== undefined
+                          ? widthDrafts[meta.name]
+                          : meta.width ?? 100
+                      }
                       onChange={(e) => {
-                        const parsed = parseInt(e.target.value, 10);
-                        if (!Number.isNaN(parsed)) {
-                          const clamped = Math.max(40, Math.min(400, parsed));
-                          updateVariableMetadata(
-                            meta.name,
-                            { width: clamped },
-                            activeDataset.id
-                          );
+                        const val = e.target.value;
+                        setWidthDrafts((prev) => ({
+                          ...prev,
+                          [meta.name]: val,
+                        }));
+                      }}
+                      onBlur={(e) => commitWidthChange(meta.name, meta.width, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        } else if (e.key === "Escape") {
+                          setWidthDrafts((prev) => {
+                            const next = { ...prev };
+                            delete next[meta.name];
+                            return next;
+                          });
                         }
                       }}
                       aria-label={`Width for ${meta.name}`}

@@ -192,5 +192,41 @@ describe("Task 5: VariableViewGrid", () => {
     const updated = useDataStore.getState().datasets.find((d) => d.id === "ds_var_view");
     expect(updated?.columnNames).not.toContain("Q1_SAT");
   });
+
+  it("handles Width input draft without clamping on keystroke, clamping on blur", () => {
+    let rendered: any = null;
+    function Harness() {
+      rendered = VariableViewGrid({ dataset: sampleDataset });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+    const tableContainer = rendered.props.children[2];
+    const table = tableContainer.props.children;
+    const tbody = table.props.children[1];
+    const rows = tbody.props.children[0];
+    const firstRow = rows[0]; // Q1_SAT
+    // Cell index 3 is Width (cells: 0: #, 1: Name, 2: Type, 3: Width, ...)
+    const widthCell = firstRow.props.children[3];
+    const widthInput = widthCell.props.children;
+
+    expect(widthInput.props["aria-label"]).toBe("Width for Q1_SAT");
+    expect(widthInput.props.value).toBe(100);
+
+    // Typing '1' sets draft and does not prematurely clamp store to 40
+    widthInput.props.onChange({ target: { value: "1" } });
+    expect(useDataStore.getState().datasets[0].variables?.Q1_SAT.width).toBe(100);
+
+    // Typing '120' and blurring commits 120 without getting clamped by '1'
+    widthInput.props.onBlur({ target: { value: "120" } });
+    expect(useDataStore.getState().datasets[0].variables?.Q1_SAT.width).toBe(120);
+
+    // Blurring with a value under 40 clamps to minimum 40
+    widthInput.props.onBlur({ target: { value: "25" } });
+    expect(useDataStore.getState().datasets[0].variables?.Q1_SAT.width).toBe(40);
+
+    // Blurring with a value over 400 clamps to maximum 400
+    widthInput.props.onBlur({ target: { value: "500" } });
+    expect(useDataStore.getState().datasets[0].variables?.Q1_SAT.width).toBe(400);
+  });
 });
 
