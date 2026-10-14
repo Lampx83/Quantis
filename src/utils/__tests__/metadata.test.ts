@@ -136,6 +136,33 @@ describe("Metadata Utilities", () => {
       expect(enriched.variables?.["SCORE"]).toBeDefined();
       expect(enriched.variables?.["SCORE"].type).toBe("numeric");
     });
+
+    it("should sanitize string variables with scale measure to nominal", () => {
+      const dataset: Dataset = {
+        id: "ds_str_scale",
+        name: "String Scale Dataset",
+        rows: 1,
+        columns: 1,
+        columnNames: ["NOTES"],
+        preview: [["Some text"]],
+        variables: {
+          NOTES: {
+            name: "NOTES",
+            type: "string",
+            label: "Notes",
+            measure: "scale",
+            decimals: 0,
+            align: "left",
+          },
+        },
+        sourceFormat: "sav",
+        createdAt: "2026-10-12T00:00:00Z",
+        updatedAt: "2026-10-12T00:00:00Z",
+      };
+
+      const enriched = ensureDatasetMetadata(dataset);
+      expect(enriched.variables?.["NOTES"].measure).toBe("nominal");
+    });
   });
 
   describe("formatCellValueWithLabels", () => {

@@ -130,4 +130,31 @@ describe("Task 5: VariableViewGrid", () => {
     expect(html).toContain("Tìm theo tên hoặc nhãn...");
     expect(html).toContain("Thêm biến");
   });
+
+  it("hides Scale option in Measure dropdown for string variables but retains it for numeric", () => {
+    const html = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
+
+    // COMMENTS is string -> Measure dropdown should NOT contain Scale option
+    const commentsSelectMatch = html.match(/<select[^>]*aria-label="Measure for COMMENTS"[^>]*>([\s\S]*?)<\/select>/);
+    expect(commentsSelectMatch).not.toBeNull();
+    const commentsOptions = commentsSelectMatch![1];
+    expect(commentsOptions).not.toContain('value="scale"');
+    expect(commentsOptions).toContain('value="ordinal"');
+    expect(commentsOptions).toContain('value="nominal"');
+
+    // Q1_SAT is numeric -> Measure dropdown DOES contain Scale option
+    const q1SelectMatch = html.match(/<select[^>]*aria-label="Measure for Q1_SAT"[^>]*>([\s\S]*?)<\/select>/);
+    expect(q1SelectMatch).not.toBeNull();
+    const q1Options = q1SelectMatch![1];
+    expect(q1Options).toContain('value="scale"');
+    expect(q1Options).toContain('value="ordinal"');
+    expect(q1Options).toContain('value="nominal"');
+  });
+
+  it("safeguards updateVariableMetadata to coerce string variables with scale measure to nominal", () => {
+    const store = useDataStore.getState();
+    store.updateVariableMetadata("COMMENTS", { measure: "scale" as any }, "ds_var_view");
+    const updated = useDataStore.getState().datasets.find((d) => d.id === "ds_var_view");
+    expect(updated?.variables?.COMMENTS.measure).toBe("nominal");
+  });
 });

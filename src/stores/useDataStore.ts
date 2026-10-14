@@ -174,6 +174,12 @@ export const useDataStore = create<DataState>()(
                   ...patch,
                 };
               }
+              if (
+                currentVars[varName].type === "string" &&
+                currentVars[varName].measure === "scale"
+              ) {
+                currentVars[varName].measure = "nominal";
+              }
               return {
                 ...d,
                 variables: currentVars,

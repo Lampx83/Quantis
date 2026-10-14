@@ -400,6 +400,10 @@ export function VariableViewGrid({
               const missingSummary = formatMissingValuesSummary(
                 meta.missingValues
               );
+              const effectiveMeasure: VariableMeasure =
+                meta.type === "string" && meta.measure === "scale"
+                  ? "nominal"
+                  : meta.measure;
 
               return (
                 <tr
@@ -622,9 +626,9 @@ export function VariableViewGrid({
                   {/* 10. Measure */}
                   <td className="p-1 border-r border-neutral-200 dark:border-neutral-800">
                     <div className="flex items-center gap-1.5 px-1">
-                      <MeasureIcon measure={meta.measure} />
+                      <MeasureIcon measure={effectiveMeasure} />
                       <select
-                        value={meta.measure}
+                        value={effectiveMeasure}
                         onChange={(e) =>
                           updateVariableMetadata(
                             meta.name,
@@ -635,7 +639,7 @@ export function VariableViewGrid({
                         aria-label={`Measure for ${meta.name}`}
                         className="w-full py-1 rounded border border-transparent hover:border-neutral-300 dark:hover:border-neutral-700 focus:border-brand bg-transparent dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 focus:outline-none font-medium"
                       >
-                        <option value="scale">Scale</option>
+                        {meta.type !== "string" && <option value="scale">Scale</option>}
                         <option value="ordinal">Ordinal</option>
                         <option value="nominal">Nominal</option>
                       </select>

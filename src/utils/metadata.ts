@@ -154,6 +154,15 @@ export function ensureDatasetMetadata(dataset: Dataset): Dataset {
     }
   });
 
+  // String variables cannot have scale measure (IBM SPSS Statistics standard)
+  for (const colName of dataset.columnNames) {
+    const v = existingVariables[colName];
+    if (v && v.type === "string" && v.measure === "scale") {
+      existingVariables[colName] = { ...v, measure: "nominal" };
+      modified = true;
+    }
+  }
+
   if (!dataset.variables || modified) {
     return {
       ...dataset,
