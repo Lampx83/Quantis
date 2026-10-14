@@ -279,4 +279,47 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     expect(html).toContain("(khuyết)");
     expect(html).toContain("bg-rose-50/40");
   });
+
+  it("prompts confirmation dialog before deleting column or row from DataGrid context menu", () => {
+    useUIStore.setState({ confirmDialog: null });
+    let rendered: any = null;
+    function Harness() {
+      rendered = DataGrid({ dataset: mockDataset });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+
+    const children = Array.isArray(rendered.props.children)
+      ? rendered.props.children
+      : [rendered.props.children];
+    const contextMenu = children.find((c: any) => c && c.type === GridContextMenu);
+    expect(contextMenu).toBeDefined();
+
+    // 1. Verify column deletion requires confirmation
+    contextMenu.props.onDeleteColumn("SCORE");
+    let dialogState = useUIStore.getState().confirmDialog;
+    expect(dialogState).not.toBeNull();
+    expect(dialogState?.message).toContain("SCORE");
+
+    let currentDs = useDataStore.getState().datasets.find((d) => d.id === mockDataset.id);
+    expect(currentDs?.columnNames).toContain("SCORE");
+
+    dialogState?.onConfirm();
+    expect(useUIStore.getState().confirmDialog).toBeNull();
+    currentDs = useDataStore.getState().datasets.find((d) => d.id === mockDataset.id);
+    expect(currentDs?.columnNames).not.toContain("SCORE");
+
+    // 2. Verify row deletion requires confirmation
+    contextMenu.props.onDeleteRow(0);
+    dialogState = useUIStore.getState().confirmDialog;
+    expect(dialogState).not.toBeNull();
+    expect(dialogState?.message).toContain("#1");
+
+    expect(currentDs?.rows).toBe(3);
+
+    dialogState?.onConfirm();
+    expect(useUIStore.getState().confirmDialog).toBeNull();
+    currentDs = useDataStore.getState().datasets.find((d) => d.id === mockDataset.id);
+    expect(currentDs?.rows).toBe(2);
+  });
 });

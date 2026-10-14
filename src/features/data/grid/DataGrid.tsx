@@ -238,6 +238,7 @@ export function DataGrid({
   const {
     showValueLabels: storeShowValueLabels,
     toggleShowValueLabels,
+    setConfirmDialog,
   } = useUIStore();
 
   const effectiveShowValueLabels =
@@ -960,8 +961,19 @@ export function DataGrid({
         }
         onInsertColumn={() => handleInsertVariable()}
         onDeleteColumn={(colName) => {
-          removeVariable(colName, enrichedDataset.id);
-          if (showToast) showToast(`Đã xóa biến "${colName}"`);
+          if (setConfirmDialog) {
+            setConfirmDialog({
+              message: `Bạn có chắc chắn muốn xóa biến "${colName}" cùng toàn bộ dữ liệu cột này không?`,
+              onConfirm: () => {
+                removeVariable(colName, enrichedDataset.id);
+                if (showToast) showToast(`Đã xóa biến "${colName}"`);
+                setConfirmDialog(null);
+              },
+            });
+          } else {
+            removeVariable(colName, enrichedDataset.id);
+            if (showToast) showToast(`Đã xóa biến "${colName}"`);
+          }
         }}
         onInsertRowAbove={(rIdx) => {
           addRow(undefined, rIdx, enrichedDataset.id);
@@ -972,8 +984,19 @@ export function DataGrid({
           if (showToast) showToast(`Đã chèn dòng mới tại vị trí #${rIdx + 2}`);
         }}
         onDeleteRow={(rIdx) => {
-          removeRow(rIdx, enrichedDataset.id);
-          if (showToast) showToast(`Đã xóa dòng quan sát #${rIdx + 1}`);
+          if (setConfirmDialog) {
+            setConfirmDialog({
+              message: `Bạn có chắc chắn muốn xóa quan sát dòng #${rIdx + 1} không?`,
+              onConfirm: () => {
+                removeRow(rIdx, enrichedDataset.id);
+                if (showToast) showToast(`Đã xóa dòng quan sát #${rIdx + 1}`);
+                setConfirmDialog(null);
+              },
+            });
+          } else {
+            removeRow(rIdx, enrichedDataset.id);
+            if (showToast) showToast(`Đã xóa dòng quan sát #${rIdx + 1}`);
+          }
         }}
       />
     </div>
