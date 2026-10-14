@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, beforeEach } from "vitest";
 import { useDataStore } from "@/stores/useDataStore";
+import { useUIStore } from "@/stores/useUIStore";
 import type { Dataset } from "@/types";
 import {
   VariableViewGrid,
@@ -157,4 +158,39 @@ describe("Task 5: VariableViewGrid", () => {
     const updated = useDataStore.getState().datasets.find((d) => d.id === "ds_var_view");
     expect(updated?.variables?.COMMENTS.measure).toBe("nominal");
   });
+
+  it("triggers confirm dialog when deleting a variable and automatically closes on confirm", () => {
+    useUIStore.setState({ confirmDialog: null });
+    let rendered: any = null;
+    function Harness() {
+      rendered = VariableViewGrid({ dataset: sampleDataset });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+    // tableContainer is child index 2 of root div
+    const tableContainer = rendered.props.children[2];
+    const table = tableContainer.props.children;
+    const tbody = table.props.children[1];
+    const rows = tbody.props.children[0];
+    const firstRow = rows[0];
+    const actionsCell = firstRow.props.children[10];
+    const deleteBtn = actionsCell.props.children;
+
+    expect(deleteBtn).toBeDefined();
+    // Simulate delete button click
+    deleteBtn.props.onClick();
+
+    const dialogState = useUIStore.getState().confirmDialog;
+    expect(dialogState).not.toBeNull();
+    expect(dialogState?.message).toContain("Q1_SAT");
+
+    // Execute onConfirm
+    dialogState?.onConfirm();
+
+    // Verify variable was deleted and dialog is closed
+    expect(useUIStore.getState().confirmDialog).toBeNull();
+    const updated = useDataStore.getState().datasets.find((d) => d.id === "ds_var_view");
+    expect(updated?.columnNames).not.toContain("Q1_SAT");
+  });
 });
+

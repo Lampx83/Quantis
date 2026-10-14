@@ -270,6 +270,7 @@ export function VariableViewGrid({
           if (showToast) {
             showToast(`Đã xóa biến "${varName}"`);
           }
+          setConfirmDialog(null);
         },
       });
     } else {
