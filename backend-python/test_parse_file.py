@@ -43,6 +43,10 @@ def test_sav_metadata_extraction():
     
     assert fmt == "sav"
     assert len(rows) == 6 # header + 5 data rows
+    assert rows[1][0] == "1"
+    assert rows[5][0] == "99"
+    assert rows[1][2] == "1500.5"
+    assert rows[2][2] == "2300"
     assert "GENDER" in variables
     gender_meta = variables["GENDER"]
     assert gender_meta["label"] == "Giới tính"

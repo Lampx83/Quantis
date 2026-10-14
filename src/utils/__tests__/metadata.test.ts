@@ -178,7 +178,9 @@ describe("Metadata Utilities", () => {
       };
 
       expect(formatCellValueWithLabels("1", meta)).toBe("Nam");
+      expect(formatCellValueWithLabels("1.0", meta)).toBe("Nam");
       expect(formatCellValueWithLabels("2", meta)).toBe("Nữ");
+      expect(formatCellValueWithLabels("2.0", meta)).toBe("Nữ");
       expect(formatCellValueWithLabels("99", meta)).toBe("99");
     });
 
@@ -200,7 +202,9 @@ describe("Metadata Utilities", () => {
 
     it("should identify missing values according to metadata missing codes and empty strings", () => {
       expect(isMissingValue("99", meta)).toBe(true);
+      expect(isMissingValue("99.0", meta)).toBe(true);
       expect(isMissingValue("-1", meta)).toBe(true);
+      expect(isMissingValue("-1.0", meta)).toBe(true);
       expect(isMissingValue("", meta)).toBe(true);
       expect(isMissingValue("   ", meta)).toBe(true);
       expect(isMissingValue("5", meta)).toBe(false);
@@ -208,6 +212,7 @@ describe("Metadata Utilities", () => {
 
     it("should mask missing values to null", () => {
       expect(maskMissingValues("99", meta)).toBeNull();
+      expect(maskMissingValues("99.0", meta)).toBeNull();
       expect(maskMissingValues("-1", meta)).toBeNull();
       expect(maskMissingValues("", meta)).toBeNull();
       expect(maskMissingValues("4", meta)).toBe("4");

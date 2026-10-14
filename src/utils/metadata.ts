@@ -180,11 +180,16 @@ export function formatCellValueWithLabels(
   value: string,
   metadata?: VariableMetadata
 ): string {
-  if (
-    metadata?.valueLabels &&
-    Object.prototype.hasOwnProperty.call(metadata.valueLabels, value)
-  ) {
+  if (!metadata?.valueLabels) return value;
+  if (Object.prototype.hasOwnProperty.call(metadata.valueLabels, value)) {
     return metadata.valueLabels[value];
+  }
+  const normalized = value.endsWith(".0") ? value.slice(0, -2) : value;
+  if (Object.prototype.hasOwnProperty.call(metadata.valueLabels, normalized)) {
+    return metadata.valueLabels[normalized];
+  }
+  if (!value.includes(".") && Object.prototype.hasOwnProperty.call(metadata.valueLabels, `${value}.0`)) {
+    return metadata.valueLabels[`${value}.0`];
   }
   return value;
 }
@@ -201,7 +206,11 @@ export function isMissingValue(
   if (trimmed === "") return true;
 
   if (metadata?.missingValues && metadata.missingValues.length > 0) {
-    return metadata.missingValues.includes(trimmed);
+    const normalizedTrimmed = trimmed.endsWith(".0") ? trimmed.slice(0, -2) : trimmed;
+    return metadata.missingValues.some((mv) => {
+      const normalizedMv = mv.endsWith(".0") ? mv.slice(0, -2) : mv;
+      return mv === trimmed || normalizedMv === normalizedTrimmed;
+    });
   }
   return false;
 }

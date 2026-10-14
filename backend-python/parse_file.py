@@ -24,6 +24,21 @@ def _normalize_extension(filename: str) -> str:
     return Path(name).suffix
 
 
+def _format_cell(val: Any) -> str:
+    """Chuyển ô dữ liệu thành chuỗi, chuẩn hóa float nguyên (1.0 -> '1') và NaN -> ''."""
+    if val == "" or pd.isna(val):
+        return ""
+    if isinstance(val, bool):
+        return str(val)
+    if isinstance(val, (int, float)):
+        try:
+            if float(val).is_integer():
+                return str(int(val))
+        except (ValueError, OverflowError):
+            pass
+    return str(val)
+
+
 def _df_to_rows(df: pd.DataFrame) -> list[list[str]]:
     """Chuyển DataFrame thành [headers] + data rows, mỗi ô là string."""
     df = df.fillna("")
@@ -31,7 +46,7 @@ def _df_to_rows(df: pd.DataFrame) -> list[list[str]]:
     headers = [str(c) for c in cols]
     rows = [headers]
     for _, r in df.iterrows():
-        rows.append([str(r[c]) if r[c] != "" else "" for c in cols])
+        rows.append([_format_cell(r[c]) for c in cols])
     return rows
 
 
