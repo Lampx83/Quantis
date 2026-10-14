@@ -107,6 +107,15 @@ export function ValueLabelsModal({
     }
   }, [isOpen, initialValueLabels, variableName]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   const sortedEntries = useMemo(() => {
     return Object.entries(labels).sort(([a], [b]) => {
       const na = Number(a);
