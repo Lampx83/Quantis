@@ -19,9 +19,12 @@ export function validateVariableName(
       error: "Tên biến chỉ được chứa chữ cái, số và dấu gạch dưới, không bắt đầu bằng số hoặc chứa khoảng trắng.",
     };
   }
+  const targetLower = trimmed.toLowerCase();
+  const currentLower = currentName?.toLowerCase();
   if (
-    currentName !== trimmed &&
-    existingNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())
+    existingNames.some(
+      (n) => n.toLowerCase() === targetLower && n.toLowerCase() !== currentLower
+    )
   ) {
     return { valid: false, error: `Tên biến "${trimmed}" đã tồn tại trong bộ dữ liệu.` };
   }

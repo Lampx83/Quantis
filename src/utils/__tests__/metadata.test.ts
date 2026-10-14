@@ -30,6 +30,11 @@ describe("Metadata Utilities", () => {
       expect(validateVariableName("age", ["AGE", "GENDER"]).valid).toBe(false);
       // allows keeping same name when currentName matches
       expect(validateVariableName("AGE", ["AGE", "GENDER"], "AGE").valid).toBe(true);
+      // allows renaming with case change on currentName without colliding with itself
+      expect(validateVariableName("age", ["AGE", "GENDER"], "AGE").valid).toBe(true);
+      // still rejects renaming when colliding with another variable
+      expect(validateVariableName("gender", ["AGE", "GENDER"], "AGE").valid).toBe(false);
+      expect(validateVariableName("GENDER", ["AGE", "GENDER"], "AGE").valid).toBe(false);
     });
   });
   describe("inferVariableMetadata", () => {
