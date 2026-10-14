@@ -91,7 +91,7 @@ export function buildTypeChangePatch(
   }
   return {
     type: "numeric",
-    decimals: current.type === "numeric" ? current.decimals : 2,
+    decimals: current.type === "numeric" ? current.decimals : 0,
     align: "right",
   };
 }
@@ -166,8 +166,9 @@ export function VariableViewGrid({
     });
   }, [variablesList, search]);
 
-  // Track inline Name drafts and Label drafts per variable
+  // Track inline Name drafts, Decimals drafts, and Label drafts per variable
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [decimalsDrafts, setDecimalsDrafts] = useState<Record<string, string>>({});
   const [nameError, setNameError] = useState<{
     varName: string;
     message: string;
@@ -245,7 +246,7 @@ export function VariableViewGrid({
         name: newName,
         type: "numeric",
         width: 100,
-        decimals: 2,
+        decimals: 0,
         label: "",
         valueLabels: {},
         missingValues: [],
@@ -491,9 +492,20 @@ export function VariableViewGrid({
                       min={0}
                       max={6}
                       disabled={isDecimalsLocked}
-                      value={isDecimalsLocked ? 0 : meta.decimals}
+                      value={
+                        isDecimalsLocked
+                          ? 0
+                          : decimalsDrafts[meta.name] !== undefined
+                          ? decimalsDrafts[meta.name]
+                          : meta.decimals ?? 0
+                      }
                       onChange={(e) => {
-                        const parsed = parseInt(e.target.value, 10);
+                        const val = e.target.value;
+                        setDecimalsDrafts((prev) => ({
+                          ...prev,
+                          [meta.name]: val,
+                        }));
+                        const parsed = parseInt(val, 10);
                         if (!Number.isNaN(parsed)) {
                           const clamped = Math.max(0, Math.min(6, parsed));
                           updateVariableMetadata(
@@ -502,6 +514,13 @@ export function VariableViewGrid({
                             activeDataset.id
                           );
                         }
+                      }}
+                      onBlur={() => {
+                        setDecimalsDrafts((prev) => {
+                          const next = { ...prev };
+                          delete next[meta.name];
+                          return next;
+                        });
                       }}
                       aria-label={`Decimals for ${meta.name}`}
                       className={`w-full px-2 py-1 text-right font-mono rounded border border-transparent focus:outline-none ${

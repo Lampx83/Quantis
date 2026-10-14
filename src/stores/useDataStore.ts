@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Dataset, VariableMetadata } from "@/types";
+import { ensureDatasetMetadata } from "@/utils/metadata";
 import { useSyncStore, canSyncToServer } from "./useSyncStore";
 
 export interface DataState {
@@ -154,7 +155,8 @@ export const useDataStore = create<DataState>()(
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
-              const currentVars = d.variables ? { ...d.variables } : {};
+              const ensured = ensureDatasetMetadata(d);
+              const currentVars = ensured.variables ? { ...ensured.variables } : {};
               if (!currentVars[varName]) {
                 currentVars[varName] = {
                   name: varName,
@@ -195,7 +197,8 @@ export const useDataStore = create<DataState>()(
               const newColumnNames = [...d.columnNames];
               newColumnNames[colIdx] = trimmedNew;
 
-              const newVars = { ...d.variables };
+              const ensured = ensureDatasetMetadata(d);
+              const newVars = { ...(ensured.variables ?? {}) };
               if (newVars[oldName]) {
                 const oldMeta = newVars[oldName];
                 delete newVars[oldName];

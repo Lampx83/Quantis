@@ -103,6 +103,28 @@ describe("DataStore & UIStore Expansion", () => {
       expect(ds?.variables?.["GENDER"].measure).toBe("nominal");
     });
 
+    it("updateVariableMetadata should preserve inferred numeric type when variables dict is initially undefined", () => {
+      const legacyDataset: Dataset = {
+        id: "ds_uninit",
+        name: "Uninitialized Dataset",
+        rows: 2,
+        columns: 1,
+        columnNames: ["SCORE"],
+        preview: [["SCORE"], ["10"], ["20"]],
+        data: [["SCORE"], ["10"], ["20"]],
+        sourceFormat: "csv",
+        createdAt: "2026-10-13T00:00:00Z",
+        updatedAt: "2026-10-13T00:00:00Z",
+      };
+      useDataStore.setState((s) => ({ datasets: [...s.datasets, legacyDataset] }));
+
+      useDataStore.getState().updateVariableMetadata("SCORE", { decimals: 2 }, "ds_uninit");
+
+      const ds = useDataStore.getState().datasets.find((d) => d.id === "ds_uninit");
+      expect(ds?.variables?.["SCORE"].decimals).toBe(2);
+      expect(ds?.variables?.["SCORE"].type).toBe("numeric");
+    });
+
     it("renameVariable should rename in columnNames, header rows, and variables dict", () => {
       const { renameVariable } = useDataStore.getState();
       renameVariable("SCORE", "FINAL_SCORE");

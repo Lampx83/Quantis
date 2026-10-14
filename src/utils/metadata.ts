@@ -92,7 +92,7 @@ export function inferVariableMetadata(name: string, values: string[]): VariableM
       const num = Number(v);
       return !isNaN(num) && !Number.isInteger(num);
     });
-    decimals = hasDecimals || measure === "scale" ? 2 : 0;
+    decimals = hasDecimals ? 2 : 0;
   }
 
   // Determine alignment
@@ -125,14 +125,30 @@ export function ensureDatasetMetadata(dataset: Dataset): Dataset {
   const existingVariables = dataset.variables ? { ...dataset.variables } : {};
   let modified = false;
 
+  const hasHeaderInData = Boolean(
+    dataset.data &&
+      dataset.data.length > 0 &&
+      dataset.columnNames.length > 0 &&
+      dataset.data[0][0] === dataset.columnNames[0]
+  );
+  const hasHeaderInPreview = Boolean(
+    dataset.preview &&
+      dataset.preview.length > 0 &&
+      dataset.columnNames.length > 0 &&
+      dataset.preview[0][0] === dataset.columnNames[0]
+  );
+
+  const effectiveData = hasHeaderInData ? dataset.data!.slice(1) : dataset.data;
+  const effectivePreview = hasHeaderInPreview ? dataset.preview!.slice(1) : dataset.preview;
+
   dataset.columnNames.forEach((colName, colIdx) => {
     if (!existingVariables[colName]) {
       modified = true;
       let values: string[] = [];
-      if (dataset.data && dataset.data.length > 0) {
-        values = dataset.data.map((row) => row[colIdx] ?? "");
-      } else if (dataset.preview && dataset.preview.length > 0) {
-        values = dataset.preview.map((row) => row[colIdx] ?? "");
+      if (effectiveData && effectiveData.length > 0) {
+        values = effectiveData.map((row) => row[colIdx] ?? "");
+      } else if (effectivePreview && effectivePreview.length > 0) {
+        values = effectivePreview.map((row) => row[colIdx] ?? "");
       }
       existingVariables[colName] = inferVariableMetadata(colName, values);
     }

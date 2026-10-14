@@ -144,5 +144,21 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
     );
     expect(dataViewHtml).toContain("SAT_SCORE");
     expect(dataViewHtml).toContain("Nam giới");
+
+    // 4. Update decimals for GENDER to 2 in store and switch Value Labels OFF -> reflects formatted decimals
+    useDataStore.getState().updateVariableMetadata("GENDER", { decimals: 2 }, "ds_workspace");
+    useUIStore.setState({ showValueLabels: false });
+    const dsWithDecimals = useDataStore.getState().datasets[0];
+    const dataViewDecimalsHtml = renderToStaticMarkup(
+      <DataView
+        tab="preview"
+        datasets={[dsWithDecimals]}
+        setDatasets={vi.fn()}
+        selectedDatasetId="ds_workspace"
+        onSelectDataset={vi.fn()}
+      />
+    );
+    expect(dataViewDecimalsHtml).toContain("1.00");
+    expect(dataViewDecimalsHtml).toContain("2.00");
   });
 });

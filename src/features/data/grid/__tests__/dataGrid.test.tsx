@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
-import type { Dataset } from "@/types";
+import type { Dataset, VariableMetadata } from "@/types";
 import {
   DataGrid,
   filterAndSortDataRows,
@@ -127,6 +127,47 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
 
     const missingCode = formatDisplayCellValue("99", genderMeta, true);
     expect(missingCode.isMissingCode).toBe(true);
+  });
+
+  it("formats numeric cell with decimals when meta.type is numeric and decimals is configured", () => {
+    const scoreMeta = mockDataset.variables!.SCORE; // type: numeric, decimals: 2
+
+    // Whole number formatted with 2 decimals
+    const wholeVal = formatDisplayCellValue("85", scoreMeta, false);
+    expect(wholeVal.text).toBe("85.00");
+
+    // Existing decimal formatted with 2 decimals
+    const singleDecVal = formatDisplayCellValue("85.5", scoreMeta, false);
+    expect(singleDecVal.text).toBe("85.50");
+
+    // Rounded with 2 decimals
+    const multiDecVal = formatDisplayCellValue("85.556", scoreMeta, false);
+    expect(multiDecVal.text).toBe("85.56");
+
+    // With 1 decimal
+    const oneDecMeta = { ...scoreMeta, decimals: 1 };
+    expect(formatDisplayCellValue("85", oneDecMeta, false).text).toBe("85.0");
+    expect(formatDisplayCellValue("85.5", oneDecMeta, false).text).toBe("85.5");
+
+    // With 0 decimals
+    const zeroDecMeta = { ...scoreMeta, decimals: 0 };
+    expect(formatDisplayCellValue("85.6", zeroDecMeta, false).text).toBe("86");
+    expect(formatDisplayCellValue("85", zeroDecMeta, false).text).toBe("85");
+
+    // Non-numeric or empty value remains unchanged
+    expect(formatDisplayCellValue("", scoreMeta, false).text).toBe("");
+    expect(formatDisplayCellValue("N/A", scoreMeta, false).text).toBe("N/A");
+
+    // String variable does not apply decimals
+    const stringMeta: VariableMetadata = {
+      name: "COMMENT",
+      type: "string",
+      label: "Bình luận",
+      decimals: 2,
+      align: "left",
+      measure: "nominal",
+    };
+    expect(formatDisplayCellValue("10", stringMeta, false).text).toBe("10");
   });
 
   it("parses multi-cell clipboard TSV paste matrix within bounds", () => {

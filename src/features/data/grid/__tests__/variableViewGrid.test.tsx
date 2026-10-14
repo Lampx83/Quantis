@@ -93,6 +93,7 @@ describe("Task 5: VariableViewGrid", () => {
 
     const toNumericPatch = buildTypeChangePatch(sampleDataset.variables!.COMMENTS, "numeric");
     expect(toNumericPatch.type).toBe("numeric");
+    expect(toNumericPatch.decimals).toBe(0);
     expect(toNumericPatch.align).toBe("right");
   });
 

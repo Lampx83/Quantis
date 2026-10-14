@@ -15,7 +15,7 @@ export interface VariableMetadata {
   measure: VariableMeasure;
   /** Danh sách các mã số quy ước khuyết dữ liệu (vd: ["99", "999", "-1"]) */
   missingValues?: string[];
-  /** Số chữ số sau dấu phẩy hiển thị (mặc định: 2 đối với numeric, 0 đối với int/string) */
+  /** Số chữ số sau dấu phẩy hiển thị (mặc định: 0) */
   decimals: number;
   /** Căn lề hiển thị (numeric: right; string: left; nominal/ordinal: center/left) */
   align: VariableAlign;

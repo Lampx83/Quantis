@@ -136,6 +136,28 @@ export function formatDisplayCellValue(
     }
   }
 
+  // Format decimals if variable is numeric and value is non-empty
+  if (
+    meta?.type === "numeric" &&
+    typeof meta?.decimals === "number" &&
+    meta.decimals >= 0 &&
+    trimmed !== ""
+  ) {
+    const normalizedStr =
+      trimmed.includes(",") && !trimmed.includes(".")
+        ? trimmed.replace(",", ".")
+        : trimmed;
+    const num = Number(normalizedStr);
+    if (!Number.isNaN(num) && Number.isFinite(num)) {
+      const clampedDecimals = Math.max(0, Math.min(20, Math.floor(meta.decimals)));
+      return {
+        text: num.toFixed(clampedDecimals),
+        isLabel: false,
+        isMissingCode,
+      };
+    }
+  }
+
   return {
     text: raw,
     isLabel: false,
@@ -405,7 +427,7 @@ export function DataGrid({
         name: newName,
         type: "numeric",
         width: 100,
-        decimals: 2,
+        decimals: 0,
         label: "",
         valueLabels: {},
         missingValues: [],
