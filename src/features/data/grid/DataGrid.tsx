@@ -122,7 +122,8 @@ export function formatDisplayCellValue(
   const isMissingCode = Boolean(
     trimmed !== "" &&
       meta?.missingValues &&
-      meta.missingValues.includes(trimmed)
+      meta.missingValues.length > 0 &&
+      isMissingValue(trimmed, meta)
   );
 
   if (showValueLabels && meta?.valueLabels) {
@@ -134,6 +135,14 @@ export function formatDisplayCellValue(
         isMissingCode,
       };
     }
+  }
+
+  if (isMissingCode) {
+    return {
+      text: raw,
+      isLabel: false,
+      isMissingCode: true,
+    };
   }
 
   // Format decimals if variable is numeric and value is non-empty

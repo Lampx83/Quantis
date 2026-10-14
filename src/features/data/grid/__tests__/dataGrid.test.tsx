@@ -168,6 +168,15 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
       measure: "nominal",
     };
     expect(formatDisplayCellValue("10", stringMeta, false).text).toBe("10");
+
+    // Discrete missing code should NOT be formatted with decimals (e.g. 999 not 999.00)
+    const missingVal = formatDisplayCellValue("999", scoreMeta, false);
+    expect(missingVal.text).toBe("999");
+    expect(missingVal.isMissingCode).toBe(true);
+
+    const missingValFloat = formatDisplayCellValue("999.0", scoreMeta, false);
+    expect(missingValFloat.text).toBe("999.0");
+    expect(missingValFloat.isMissingCode).toBe(true);
   });
 
   it("parses multi-cell clipboard TSV paste matrix within bounds", () => {
