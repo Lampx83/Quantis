@@ -4,7 +4,7 @@ import { getPortalTheme, applyPortalTheme } from "@/portal-theme";
 
 export type MainSection = "data" | "analysis" | "reproducibility" | "presentation" | "ai" | "workflow";
 export type DataTab = "import" | "profiling" | "transform" | "preview" | "descriptive";
-export type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian";
+export type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian" | "panel";
 export type ReproducibilityTab = "workflows" | "versioning" | "openscience";
 export type PresentationTab = "visualization";
 export type PresentationChartType =

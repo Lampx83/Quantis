@@ -7,6 +7,7 @@
  */
 import { Request, Response } from "express"
 import { query, withSchema } from "../db.js"
+import { sanitizeJson } from "../lib/sanitize.js"
 
 function isAdminRequest(req: Request): boolean {
   return req.headers["x-user-is-admin"] === "1"
@@ -147,7 +148,7 @@ function normalizeStringArray(v: unknown): string[] {
 export async function createSampleDataset(req: Request, res: Response): Promise<void> {
   if (!requireAdmin(req, res)) return
   try {
-    const body = req.body as SampleDatasetWriteBody
+    const body = sanitizeJson(req.body) as SampleDatasetWriteBody
     const name = typeof body?.name === "string" ? body.name.trim() : ""
     if (!name) {
       res.status(400).json({ error: "Thiếu tên bộ dữ liệu" })
@@ -214,7 +215,7 @@ export async function updateSampleDataset(req: Request, res: Response): Promise<
       res.status(400).json({ error: "Thiếu id" })
       return
     }
-    const body = req.body as SampleDatasetWriteBody
+    const body = sanitizeJson(req.body) as SampleDatasetWriteBody
 
     const currentR = await query<SampleDatasetRow>(
       withSchema(`SELECT ${SELECT_COLUMNS} FROM __SCHEMA__.sample_datasets WHERE id = $1`),

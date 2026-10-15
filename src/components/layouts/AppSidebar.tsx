@@ -20,6 +20,7 @@ import {
 import * as quantisApi from "@/api";
 import * as archiveApi from "@/archive-api";
 import { t } from "@/i18n";
+import { cleanRows } from "@/utils/sanitize";
 
 export function AppSidebar() {
   const {
@@ -71,8 +72,9 @@ export function AppSidebar() {
       if (!file) return;
       const format = getFormatFromFilename(file.name);
 
-      const applyRows = (rows: string[][], fmt: string) => {
-        if (!rows || rows.length < 2) return;
+      const applyRows = (rawRows: string[][], fmt: string) => {
+        if (!rawRows || rawRows.length < 2) return;
+        const rows = cleanRows(rawRows); // bỏ \u0000/ký tự điều khiển trước khi lưu
         const headers = rows[0];
         const kept = rows.slice(1, MAX_ROWS_STORED + 1);
         const id = generateId();

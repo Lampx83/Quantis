@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Loader2, Copy } from "lucide-react";
+import { InfoHint } from "@/components/common/InfoHint";
 import type { Dataset } from "@/types";
 import {
   numCell,
@@ -645,11 +646,11 @@ export function HypothesisTab({
       {tResult && (
         <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="font-medium">{t("hypothesisTab.common.resultLabel")} ({ttestEqualVar ? "Two-sample t-test (Equal variance)" : "Welch two-sample t-test"})</p>
+            <p className="font-medium">{t("hypothesisTab.common.resultLabel")} ({ttestEqualVar ? "Two-sample t-test (Equal variance)" : "Welch two-sample t-test"})<InfoHint term="ttest" /></p>
             <button type="button" onClick={() => navigator.clipboard.writeText(`t = ${tResult.t.toFixed(4)}, df = ${tResult.df.toFixed(1)}, p = ${tResult.pValue < 0.001 ? "< .001" : tResult.pValue.toFixed(4)}, Cohen's d = ${tResult.cohenD.toFixed(4)}\nMean nhóm 1 = ${tResult.mean1.toFixed(2)} (n = ${tResult.n1}), Mean nhóm 2 = ${tResult.mean2.toFixed(2)} (n = ${tResult.n2})`)} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
           </div>
-          <p>t = {tResult.t.toFixed(4)}, df = {tResult.df.toFixed(1)}, p-value {tResult.pValue < 0.001 ? "< 0.001" : `= ${tResult.pValue.toFixed(4)}`}</p>
-          <p>Cohen's d = {tResult.cohenD.toFixed(4)}</p>
+          <p>t = {tResult.t.toFixed(4)}, df = {tResult.df.toFixed(1)}, p-value<InfoHint term="pValue" /> {tResult.pValue < 0.001 ? "< 0.001" : `= ${tResult.pValue.toFixed(4)}`}</p>
+          <p>Cohen's d<InfoHint term="cohensD" /> = {tResult.cohenD.toFixed(4)}</p>
           <p>{t("hypothesisTab.ttest.meanGroup1")} = {tResult.mean1.toFixed(2)} (n = {tResult.n1}), {t("hypothesisTab.ttest.meanGroup2")} = {tResult.mean2.toFixed(2)} (n = {tResult.n2})</p>
           {(() => {
             const tx = buildTTestExcelTable(tResult, ttestEqualVar);
@@ -740,10 +741,10 @@ export function HypothesisTab({
           {anovaResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm space-y-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="font-medium">{t("hypothesisTab.anova.resultTitle")}</p>
+                <p className="font-medium">{t("hypothesisTab.anova.resultTitle")}<InfoHint term="anova" /></p>
                 <button type="button" onClick={() => { const lines = [`F(${anovaResult.dfBetween}, ${anovaResult.dfWithin}) = ${anovaResult.f.toFixed(4)}, p = ${anovaResult.pValue < 0.001 ? "< .001" : anovaResult.pValue.toFixed(4)}, η² = ${anovaResult.etaSq.toFixed(4)}${typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}`, "Nhóm\tM\tSD\tn", ...anovaResult.groupMeans.map((m) => `${m.group}\t${m.mean.toFixed(4)}\t${m.std.toFixed(4)}\t${m.n}`)]; const posthoc = analysisBackendAvailable && pairwisePosthocBackendResult ? pairwisePosthocBackendResult : pairwisePostHoc(anovaResult.groupMeans); if (posthoc.length) lines.push("", "Nhóm 1\tNhóm 2\tHiệu TB\tp (Bonferroni)", ...posthoc.map((r) => `${r.group1}\t${r.group2}\t${r.meanDiff.toFixed(4)}\t${r.pBonferroni < 0.001 ? "< .001" : r.pBonferroni.toFixed(4)}`)); navigator.clipboard.writeText(lines.join("\n")); }} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-3.5 h-3.5" /> {t("hypothesisTab.common.copy")}</button>
               </div>
-              <p>F({anovaResult.dfBetween}, {anovaResult.dfWithin}) = {anovaResult.f.toFixed(4)}, p-value {anovaResult.pValue < 0.001 ? "< 0.001" : `= ${anovaResult.pValue.toFixed(4)}`}, η² = {anovaResult.etaSq.toFixed(4)}{typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}</p>
+              <p>F({anovaResult.dfBetween}, {anovaResult.dfWithin}) = {anovaResult.f.toFixed(4)}, p-value<InfoHint term="pValue" /> {anovaResult.pValue < 0.001 ? "< 0.001" : `= ${anovaResult.pValue.toFixed(4)}`}, η² = {anovaResult.etaSq.toFixed(4)}{typeof anovaResult.omegaSq === "number" ? `, ω² = ${anovaResult.omegaSq.toFixed(4)}` : ""}</p>
               {(() => {
                 const at = buildAnovaTable(anovaResult.groupMeans);
                 if (!at) return null;
@@ -1083,8 +1084,8 @@ export function HypothesisTab({
           {pairedResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 text-sm">
               <p className="font-medium mb-2">{t("hypothesisTab.paired.resultTitle")}</p>
-              <p>t = {pairedResult.t.toFixed(4)}, df = {pairedResult.df}, p-value = {pairedResult.pValue < 0.001 ? "< 0.001" : pairedResult.pValue.toFixed(4)}</p>
-              <p>Cohen's d = {pairedResult.cohenD.toFixed(4)}, {t("hypothesisTab.paired.meanDiffPrefix")} {pairedResult.meanDiff.toFixed(4)} ({t("hypothesisTab.paired.sdDiffLabel")} {pairedResult.stdDiff.toFixed(4)}), n = {pairedResult.n}</p>
+              <p>t = {pairedResult.t.toFixed(4)}, df = {pairedResult.df}, p-value<InfoHint term="pValue" /> = {pairedResult.pValue < 0.001 ? "< 0.001" : pairedResult.pValue.toFixed(4)}</p>
+              <p>Cohen's d<InfoHint term="cohensD" /> = {pairedResult.cohenD.toFixed(4)}, {t("hypothesisTab.paired.meanDiffPrefix")} {pairedResult.meanDiff.toFixed(4)} ({t("hypothesisTab.paired.sdDiffLabel")} {pairedResult.stdDiff.toFixed(4)}), n = {pairedResult.n}</p>
               <p>{t("hypothesisTab.paired.meanCol1Prefix")} {pairedResult.mean1.toFixed(2)}, {t("hypothesisTab.paired.meanCol2Prefix")} {pairedResult.mean2.toFixed(2)}</p>
             </div>
           )}

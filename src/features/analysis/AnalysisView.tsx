@@ -18,6 +18,7 @@ import {
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint } from "@/components/common/InfoHint";
 import {
   BayesianTab,
   ReliabilityTab,
@@ -26,6 +27,7 @@ import {
   RegressionTab,
   SEMTab,
   HypothesisTab,
+  PanelTab,
 } from "./tabs";
 
 export interface AnalysisViewProps {
@@ -96,6 +98,10 @@ export function AnalysisView({
       title: t("analysisView.tabBayesianTitle"),
       desc: t("analysisView.tabBayesianDesc"),
     },
+    panel: {
+      title: t("analysisView.tabPanelTitle"),
+      desc: t("analysisView.tabPanelDesc"),
+    },
   };
   const { title, desc } = tabs[effectiveTab] ?? { title: effectiveTab, desc: "" };
   const [partialCol1, setPartialCol1] = useState("");
@@ -124,7 +130,7 @@ export function AnalysisView({
       );
     return (
       <div className="w-full max-w-full">
-        <h2 className="text-xl font-semibold mb-2">{t("analysisView.correlationTitle")}</h2>
+        <h2 className="text-xl font-semibold mb-2">{t("analysisView.correlationTitle")}<InfoHint term="correlationMatrix" /></h2>
         <p className="text-neutral-600 dark:text-neutral-400 mb-4">
           {t("analysisView.correlationDesc")}
         </p>
@@ -560,6 +566,16 @@ export function AnalysisView({
   if (effectiveTab === "ml" && selectedDataset) {
     return (
       <MLTab
+        selectedDataset={selectedDataset}
+        analysisBackendAvailable={analysisBackendAvailable}
+        showToast={showToast}
+      />
+    );
+  }
+
+  if (effectiveTab === "panel" && selectedDataset) {
+    return (
+      <PanelTab
         selectedDataset={selectedDataset}
         analysisBackendAvailable={analysisBackendAvailable}
         showToast={showToast}

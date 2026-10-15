@@ -4,6 +4,7 @@ import { computeCronbachAlpha, computeCronbachDetail } from "@/utils/stats";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint } from "@/components/common/InfoHint";
 
 export interface ReliabilityTabProps {
   selectedDataset: Dataset;
@@ -47,7 +48,7 @@ export function ReliabilityTab({
 
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">{t("reliabilityTab.title")}</h2>
+      <h2 className="text-xl font-semibold mb-2">{t("reliabilityTab.title")}<InfoHint term="cronbachAlpha" /></h2>
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reliabilityTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
@@ -133,8 +134,8 @@ export function ReliabilityTab({
                 <th className="text-left p-2">{t("reliabilityTab.colItem")}</th>
                 <th className="text-right p-2">{t("reliabilityTab.colScaleMean")}</th>
                 <th className="text-right p-2">{t("reliabilityTab.colScaleVar")}</th>
-                <th className="text-right p-2">{t("reliabilityTab.colCitc")}</th>
-                <th className="text-right p-2">{t("reliabilityTab.colAlphaDel")}</th>
+                <th className="text-right p-2">{t("reliabilityTab.colCitc")}<InfoHint term="correctedItemTotal" /></th>
+                <th className="text-right p-2">{t("reliabilityTab.colAlphaDel")}<InfoHint term="alphaIfDeleted" /></th>
               </tr>
             </thead>
             <tbody>

@@ -5,6 +5,22 @@ import { numCell, getDataRows, computeDescriptive, getColumnMode } from "@/utils
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint } from "@/components/common/InfoHint";
+import {
+  renameColumn,
+  coerceColumns,
+  computeVariable,
+  logTransform,
+  removeOutliersIQR,
+  removeDuplicates,
+  type LogKind,
+  type PrepResult,
+} from "@/utils/dataPrep";
+
+type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
+const PREP_ACTIONS: PrepAction[] = ["rename", "coerce_numeric", "coerce_text", "compute", "log", "outlier_iqr", "dedupe"];
+const tpl = (s: string, vars: Record<string, string | number>) =>
+  Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(String(v)), s);
 
 export interface TransformTabProps {
   selectedDs: Dataset | null;
@@ -21,7 +37,14 @@ export function TransformTab({
 }: TransformTabProps) {
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>([]);
-  const [transformAction, setTransformAction] = useState<"drop_missing" | "fill_mean" | "fill_median" | "fill_mode" | "z_score" | "min_max" | "filter" | "sort" | "recode">("drop_missing");
+  const [transformAction, setTransformAction] = useState<"drop_missing" | "fill_mean" | "fill_median" | "fill_mode" | "z_score" | "min_max" | "filter" | "sort" | "recode" | PrepAction>("drop_missing");
+  const [renameFrom, setRenameFrom] = useState("");
+  const [renameTo, setRenameTo] = useState("");
+  const [computeName, setComputeName] = useState("");
+  const [computeFormula, setComputeFormula] = useState("");
+  const [logKind, setLogKind] = useState<LogKind>("ln");
+  const [iqrK, setIqrK] = useState("1.5");
+  const [prepNote, setPrepNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [filterCol, setFilterCol] = useState("");
   const [filterOp, setFilterOp] = useState<"==" | "!=" | ">" | "<" | ">=" | "<=" | "contains">("==");
   const [filterValue, setFilterValue] = useState("");
@@ -47,11 +70,51 @@ export function TransformTab({
   const header = dataRows[0] || [];
   const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
 
+  const runPrep = (act: PrepAction): PrepResult => {
+    const cols2 = transformColsMultiple;
+    if (act === "rename") return renameColumn(dataRows, renameFrom, renameTo);
+    if (act === "coerce_numeric") return coerceColumns(dataRows, cols2, "numeric");
+    if (act === "coerce_text") return coerceColumns(dataRows, cols2, "text");
+    if (act === "compute") return computeVariable(dataRows, computeName, computeFormula);
+    if (act === "log") return logTransform(dataRows, cols2, logKind);
+    if (act === "outlier_iqr") {
+      const k = Number(iqrK.replace(",", "."));
+      return Number.isFinite(k) && k > 0 ? removeOutliersIQR(dataRows, cols2, k) : { rows: dataRows, error: "k phải là số dương." };
+    }
+    return removeDuplicates(dataRows, cols2);
+  };
+
+  /** Kiểm tra trước khi hỏi «ghi đè / tạo mới»: lỗi công thức, tên trùng… hiện ngay thay vì sau khi chọn. */
+  const requestApply = () => {
+    if ((PREP_ACTIONS as string[]).includes(transformAction)) {
+      const r = runPrep(transformAction as PrepAction);
+      if (r.error) {
+        setPrepNote({ ok: false, text: r.error });
+        return;
+      }
+    }
+    setPrepNote(null);
+    setShowTransformChoiceModal(true);
+  };
+
   const applyTransform = (overwriteOriginal: boolean) => {
     setShowTransformChoiceModal(false);
     if (dataRows.length < 2) return;
     let newRows: string[][];
-    if (transformAction === "filter") {
+    let prepSuffix: string | null = null;
+    if ((PREP_ACTIONS as string[]).includes(transformAction)) {
+      const act = transformAction as PrepAction;
+      const r = runPrep(act);
+      if (r.error) {
+        setPrepNote({ ok: false, text: r.error });
+        return;
+      }
+      const st = r.stats ?? {};
+      const msgKey = { rename: "resultRename", coerce_numeric: "resultCoerce", coerce_text: "resultCoerce", compute: "resultCompute", log: "resultLog", outlier_iqr: "resultOutlier", dedupe: "resultDedupe" }[act];
+      setPrepNote({ ok: true, text: tpl(t(`transformTab.${msgKey}`), st) });
+      newRows = r.rows;
+      prepSuffix = t(`transformTab.${{ rename: "suffixRename", coerce_numeric: "suffixCoerce", coerce_text: "suffixCoerce", compute: "suffixCompute", log: "suffixLog", outlier_iqr: "suffixOutlier", dedupe: "suffixDedupe" }[act]}`);
+    } else if (transformAction === "filter") {
       if (!filterCol || header.indexOf(filterCol) === -1) return;
       const ci = header.indexOf(filterCol);
       const val = filterValue.trim();
@@ -158,20 +221,20 @@ export function TransformTab({
       }
     }
     const now = new Date().toISOString();
-    const suffix = transformAction === "filter" ? t("transformTab.suffixFilter") : transformAction === "sort" ? t("transformTab.suffixSort") : transformAction === "recode" ? t("transformTab.suffixRecode") : transformAction === "z_score" ? " (z-score)" : transformAction === "min_max" ? " (min-max)" : t("transformTab.suffixDefault");
+    const suffix = prepSuffix ?? (transformAction === "filter" ? t("transformTab.suffixFilter") : transformAction === "sort" ? t("transformTab.suffixSort") : transformAction === "recode" ? t("transformTab.suffixRecode") : transformAction === "z_score" ? " (z-score)" : transformAction === "min_max" ? " (min-max)" : t("transformTab.suffixDefault"));
     const beforeSnapshot = dataRows.map((r) => [...r]);
     setLastTransformResult({ before: beforeSnapshot, after: newRows, actionLabel: suffix });
 
     if (overwriteOriginal) {
       setDatasets((prev) => prev.map((d) =>
         d.id === selectedDs.id
-          ? { ...d, name: `${selectedDs.name}${suffix}`, rows: newRows.length - 1, columns: header.length, columnNames: header, preview: newRows.slice(0, 6), data: newRows, updatedAt: now }
+          ? { ...d, name: `${selectedDs.name}${suffix}`, rows: newRows.length - 1, columns: newRows[0].length, columnNames: newRows[0], preview: newRows.slice(0, 6), data: newRows, updatedAt: now }
           : d
       ));
       setShowTransformChoiceModal(false);
     } else {
       const id = generateId();
-      setDatasets((prev) => [...prev, { id, name: `${selectedDs.name}${suffix}`, rows: newRows.length - 1, columns: header.length, columnNames: header, preview: newRows.slice(0, 6), data: newRows, sourceFormat: selectedDs.sourceFormat, createdAt: now, updatedAt: now }]);
+      setDatasets((prev) => [...prev, { id, name: `${selectedDs.name}${suffix}`, rows: newRows.length - 1, columns: newRows[0].length, columnNames: newRows[0], preview: newRows.slice(0, 6), data: newRows, sourceFormat: selectedDs.sourceFormat, createdAt: now, updatedAt: now }]);
       onSelectDataset(id);
       onWorkflowDatasetAdd?.(id);
       setShowTransformChoiceModal(false);
@@ -204,9 +267,68 @@ export function TransformTab({
           <option value="filter">{t("transformTab.actionFilter")}</option>
           <option value="sort">{t("transformTab.actionSort")}</option>
           <option value="recode">{t("transformTab.actionRecode")}</option>
+          <option value="rename">{t("transformTab.actionRename")}</option>
+          <option value="coerce_numeric">{t("transformTab.actionCoerceNumeric")}</option>
+          <option value="coerce_text">{t("transformTab.actionCoerceText")}</option>
+          <option value="compute">{t("transformTab.actionCompute")}</option>
+          <option value="log">{t("transformTab.actionLog")}</option>
+          <option value="outlier_iqr">{t("transformTab.actionOutlierIqr")}</option>
+          <option value="dedupe">{t("transformTab.actionDedupe")}</option>
         </select>
+        {transformAction === "z_score" && <InfoHint term="zScore" className="mb-3" />}
+        {transformAction === "outlier_iqr" && <InfoHint term="iqr" className="mb-3" />}
       </div>
-      {(transformAction === "drop_missing" || transformAction === "fill_mean" || transformAction === "fill_median" || transformAction === "fill_mode" || transformAction === "z_score" || transformAction === "min_max") && (
+      {transformAction === "rename" && (
+        <div className="flex flex-wrap gap-4 items-end mb-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.renameFrom")}</label>
+            <select value={renameFrom} onChange={(e) => setRenameFrom(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <option value="">{t("transformTab.selectPlaceholder")}</option>
+              {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.renameTo")}</label>
+            <input type="text" value={renameTo} onChange={(e) => setRenameTo(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
+          </div>
+        </div>
+      )}
+      {transformAction === "compute" && (
+        <div className="mb-3 space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.computeName")}</label>
+            <input type="text" value={computeName} onChange={(e) => setComputeName(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-full max-w-md" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.computeFormula")}</label>
+            <input type="text" value={computeFormula} onChange={(e) => setComputeFormula(e.target.value)} placeholder="([Điểm 1] + [Điểm 2]) / 2" className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-full max-w-xl font-mono text-sm" />
+            <p className="text-xs text-neutral-500 mt-1 max-w-xl">{t("transformTab.computeHint")}</p>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {cols.map((c) => (
+                <button key={c} type="button" onClick={() => setComputeFormula((f) => `${f}${f && !/[\s(]$/.test(f) ? " " : ""}[${c}]`)} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700">{c}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {transformAction === "log" && (
+        <div className="mb-3">
+          <label className="block text-sm font-medium mb-1">{t("transformTab.logKind")}</label>
+          <select value={logKind} onChange={(e) => setLogKind(e.target.value as LogKind)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <option value="ln">{t("transformTab.logLn")}</option>
+            <option value="log10">{t("transformTab.logLog10")}</option>
+            <option value="log1p">{t("transformTab.logLog1p")}</option>
+          </select>
+        </div>
+      )}
+      {transformAction === "outlier_iqr" && (
+        <div className="mb-3">
+          <label className="block text-sm font-medium mb-1">{t("transformTab.iqrK")}</label>
+          <input type="text" inputMode="decimal" value={iqrK} onChange={(e) => setIqrK(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+        </div>
+      )}
+      {transformAction === "dedupe" && <p className="text-sm text-neutral-500 mb-2">{t("transformTab.dedupeHint")}</p>}
+      {(transformAction === "drop_missing" || transformAction === "fill_mean" || transformAction === "fill_median" || transformAction === "fill_mode" || transformAction === "z_score" || transformAction === "min_max" || transformAction === "coerce_numeric" || transformAction === "coerce_text" || transformAction === "log" || transformAction === "outlier_iqr" || transformAction === "dedupe") && (
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.columnsMultiLabel")}</label>
@@ -287,7 +409,10 @@ export function TransformTab({
           <button type="button" onClick={addRecodeRule} className="text-sm text-brand hover:underline">{t("transformTab.addRuleButton")}</button>
         </div>
       )}
-      <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("transformTab.applyButton")}</button>
+      <button type="button" onClick={requestApply} disabled={(["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max","coerce_numeric","coerce_text","log","outlier_iqr"].includes(transformAction) && transformColsMultiple.length === 0) || (transformAction === "rename" && (!renameFrom || !renameTo.trim())) || (transformAction === "compute" && (!computeName.trim() || !computeFormula.trim()))} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("transformTab.applyButton")}</button>
+      {prepNote && (
+        <p role="status" className={`mt-3 text-sm ${prepNote.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{prepNote.text}</p>
+      )}
       {showTransformChoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowTransformChoiceModal(false)}>
           <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
