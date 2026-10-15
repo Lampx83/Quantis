@@ -56,12 +56,12 @@ const ADMIN_EMAILS = new Set(
 const PORTAL_ADMIN_STATUS_URL =
   process.env.PORTAL_ADMIN_STATUS_URL || "http://10.2.13.54:3001/api/quantis/auth/admin-status";
 
-async function isAdminViaPortal(req) {
+async function isAdminViaPortal(req, timeoutMs = 4000) {
   const cookie = req.headers.cookie;
   if (!cookie) return false;
   try {
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 4000);
+    const t = setTimeout(() => controller.abort(), timeoutMs);
     const resp = await fetch(PORTAL_ADMIN_STATUS_URL, {
       headers: { cookie },
       signal: controller.signal,
@@ -534,10 +534,22 @@ function handlePostData(req, res) {
   }
 }
 
-function handleGetSettings(req, res) {
+/** Trường chứa địa chỉ nội bộ (gateway/upstream) — chỉ trả cho quản trị viên Portal. */
+const INTERNAL_SETTING_KEYS = ["aiApiUrl", "ollamaUpstreamUrl"];
+
+async function handleGetSettings(req, res) {
   try {
     const { ollamaSeckey, ...safe } = readSettings();
-    res.json({ ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" });
+    const out = { ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" };
+    out.ollamaUpstreamSet = String(out.ollamaUpstreamUrl ?? "").trim() !== "";
+    const hasInternal = INTERNAL_SETTING_KEYS.some((k) => out[k] != null && String(out[k]).trim() !== "");
+    // Endpoint này công khai (nginx chuyển thẳng, không qua Portal): người không phải quản trị viên
+    // không được thấy địa chỉ nội bộ. Hỏi Portal (cookie phiên) với thời hạn ngắn để không làm chậm tải trang.
+    if (hasInternal && !(await isAdminViaPortal(req, 2000))) {
+      for (const k of INTERNAL_SETTING_KEYS) out[k] = null;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.json(out);
   } catch (e) {
     console.error("GET settings:", e);
     res.status(500).json({ error: e.message });
