@@ -1,10 +1,17 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows, computeDescriptive, getColumnMode } from "@/utils/stats";
+import { getDataRows, computeDescriptive } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import {
+  imputeListwise,
+  imputeMeanMedianMode,
+  imputeHotDeck,
+} from "@/utils/missing-imputation";
+import { analyzeMiceImputation, type MiceImputationResponse } from "@/api";
+import { useDataStore } from "@/stores/useDataStore";
 
 export interface TransformTabProps {
   selectedDs: Dataset | null;
@@ -21,7 +28,19 @@ export function TransformTab({
 }: TransformTabProps) {
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>([]);
-  const [transformAction, setTransformAction] = useState<"drop_missing" | "fill_mean" | "fill_median" | "fill_mode" | "z_score" | "min_max" | "filter" | "sort" | "recode">("drop_missing");
+  const [transformAction, setTransformAction] = useState<
+    | "drop_missing"
+    | "fill_mean"
+    | "fill_median"
+    | "fill_mode"
+    | "fill_hot_deck"
+    | "fill_mice"
+    | "z_score"
+    | "min_max"
+    | "filter"
+    | "sort"
+    | "recode"
+  >("drop_missing");
   const [filterCol, setFilterCol] = useState("");
   const [filterOp, setFilterOp] = useState<"==" | "!=" | ">" | "<" | ">=" | "<=" | "contains">("==");
   const [filterValue, setFilterValue] = useState("");
@@ -29,8 +48,16 @@ export function TransformTab({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [recodeCol, setRecodeCol] = useState("");
   const [recodeRules, setRecodeRules] = useState<{ from: string; to: string }[]>([{ from: "", to: "" }]);
+  const [miceMaxIter, setMiceMaxIter] = useState<number>(10);
+  const [isMiceLoading, setIsMiceLoading] = useState<boolean>(false);
+  const [miceError, setMiceError] = useState<string | null>(null);
   const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(false);
-  const [lastTransformResult, setLastTransformResult] = useState<{ before: string[][]; after: string[][]; actionLabel: string } | null>(null);
+  const [lastTransformResult, setLastTransformResult] = useState<{
+    before: string[][];
+    after: string[][];
+    actionLabel: string;
+    stats?: MiceImputationResponse["statistics"];
+  } | null>(null);
 
   if (!selectedDs) {
     return (
@@ -45,12 +72,14 @@ export function TransformTab({
   const dataRows = getDataRows(selectedDs);
   const cols = selectedDs.columnNames || [];
   const header = dataRows[0] || [];
-  const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
+  const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode/hot-deck/MICE, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
 
-  const applyTransform = (overwriteOriginal: boolean) => {
+  const applyTransform = async (overwriteOriginal: boolean) => {
     setShowTransformChoiceModal(false);
     if (dataRows.length < 2) return;
     let newRows: string[][];
+    let statsForMice: MiceImputationResponse["statistics"] | undefined = undefined;
+
     if (transformAction === "filter") {
       if (!filterCol || header.indexOf(filterCol) === -1) return;
       const ci = header.indexOf(filterCol);
@@ -100,9 +129,42 @@ export function TransformTab({
     } else {
       const columnsToApply = transformColsMultiple.length > 0 ? transformColsMultiple : (transformCol ? [transformCol] : []);
       if (columnsToApply.length === 0 || columnsToApply.some((c) => header.indexOf(c) === -1)) return;
+
       if (transformAction === "drop_missing") {
-        const indices = columnsToApply.map((c) => header.indexOf(c));
-        newRows = [header, ...dataRows.slice(1).filter((r) => indices.every((ci) => (r[ci] ?? "").toString().trim() !== ""))];
+        newRows = imputeListwise(dataRows, columnsToApply, selectedDs.variables);
+      } else if (transformAction === "fill_mean") {
+        newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "mean");
+      } else if (transformAction === "fill_median") {
+        newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "median");
+      } else if (transformAction === "fill_mode") {
+        newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "mode");
+      } else if (transformAction === "fill_hot_deck") {
+        newRows = imputeHotDeck(dataRows, columnsToApply, selectedDs.variables);
+      } else if (transformAction === "fill_mice") {
+        setIsMiceLoading(true);
+        setMiceError(null);
+        try {
+          const res = await analyzeMiceImputation(
+            dataRows,
+            columnsToApply,
+            selectedDs.variables,
+            miceMaxIter
+          );
+          if (!res || !res.rows) {
+            throw new Error("Không nhận được dữ liệu kết quả từ MICE backend");
+          }
+          newRows = res.rows;
+          if (res.statistics) {
+            statsForMice = res.statistics;
+          }
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setMiceError(msg || "Lỗi khi gọi MICE backend");
+          setIsMiceLoading(false);
+          return;
+        } finally {
+          setIsMiceLoading(false);
+        }
       } else if (transformAction === "z_score" || transformAction === "min_max") {
         const desc = computeDescriptive(dataRows);
         const numericRows = dataRows.slice(1).map((r) => r.map((v) => (v ?? "").trim()));
@@ -129,49 +191,69 @@ export function TransformTab({
           }
           return out;
         })];
-      } else if (transformAction === "fill_mode") {
-        newRows = [header, ...dataRows.slice(1).map((r) => {
-          const out = [...r];
-          for (const col of columnsToApply) {
-            const ci = header.indexOf(col);
-            const mode = getColumnMode(dataRows, col);
-            const v = (r[ci] ?? "").toString().trim();
-            if (v === "") out[ci] = mode || "";
-          }
-          return out;
-        })];
       } else {
-        const numericRows = dataRows.slice(1).map((r) => r.map((v) => (v ?? "").trim()));
-        newRows = [header, ...numericRows.map((r) => {
-          const out = [...r];
-          for (const col of columnsToApply) {
-            const ci = header.indexOf(col);
-            const numVals = numericRows.map((row) => Number(row[ci])).filter((v) => !Number.isNaN(v));
-            const fill = transformAction === "fill_median"
-              ? (numVals.length ? (() => { const s = [...numVals].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; })() : 0)
-              : (numVals.length ? numVals.reduce((a, b) => a + b, 0) / numVals.length : 0);
-            const v = r[ci];
-            out[ci] = (v === "" || Number.isNaN(Number(v))) ? String(fill.toFixed(2)) : v;
-          }
-          return out;
-        })];
+        return;
       }
     }
+
     const now = new Date().toISOString();
-    const suffix = transformAction === "filter" ? t("transformTab.suffixFilter") : transformAction === "sort" ? t("transformTab.suffixSort") : transformAction === "recode" ? t("transformTab.suffixRecode") : transformAction === "z_score" ? " (z-score)" : transformAction === "min_max" ? " (min-max)" : t("transformTab.suffixDefault");
+    const suffix =
+      transformAction === "filter"
+        ? t("transformTab.suffixFilter")
+        : transformAction === "sort"
+        ? t("transformTab.suffixSort")
+        : transformAction === "recode"
+        ? t("transformTab.suffixRecode")
+        : transformAction === "z_score"
+        ? " (z-score)"
+        : transformAction === "min_max"
+        ? " (min-max)"
+        : transformAction === "fill_hot_deck"
+        ? " (hot-deck)"
+        : transformAction === "fill_mice"
+        ? " (MICE)"
+        : t("transformTab.suffixDefault");
+
     const beforeSnapshot = dataRows.map((r) => [...r]);
-    setLastTransformResult({ before: beforeSnapshot, after: newRows, actionLabel: suffix });
+    setLastTransformResult({
+      before: beforeSnapshot,
+      after: newRows,
+      actionLabel: suffix,
+      stats: statsForMice,
+    });
 
     if (overwriteOriginal) {
-      setDatasets((prev) => prev.map((d) =>
-        d.id === selectedDs.id
-          ? { ...d, name: `${selectedDs.name}${suffix}`, rows: newRows.length - 1, columns: header.length, columnNames: header, preview: newRows.slice(0, 6), data: newRows, updatedAt: now }
-          : d
-      ));
+      const updatedDs: Dataset = {
+        ...selectedDs,
+        name: `${selectedDs.name}${suffix}`,
+        rows: newRows.length - 1,
+        columns: header.length,
+        columnNames: header,
+        preview: newRows.slice(0, 6),
+        data: newRows,
+        variables: selectedDs.variables ? { ...selectedDs.variables } : undefined,
+        updatedAt: now,
+      };
+      setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
+      useDataStore.getState().updateDataset(selectedDs.id, updatedDs);
       setShowTransformChoiceModal(false);
     } else {
       const id = generateId();
-      setDatasets((prev) => [...prev, { id, name: `${selectedDs.name}${suffix}`, rows: newRows.length - 1, columns: header.length, columnNames: header, preview: newRows.slice(0, 6), data: newRows, sourceFormat: selectedDs.sourceFormat, createdAt: now, updatedAt: now }]);
+      const newDs: Dataset = {
+        id,
+        name: `${selectedDs.name}${suffix}`,
+        rows: newRows.length - 1,
+        columns: header.length,
+        columnNames: header,
+        preview: newRows.slice(0, 6),
+        data: newRows,
+        variables: selectedDs.variables ? { ...selectedDs.variables } : undefined,
+        sourceFormat: selectedDs.sourceFormat,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setDatasets((prev) => [...prev, newDs]);
+      useDataStore.getState().addDataset(newDs);
       onSelectDataset(id);
       onWorkflowDatasetAdd?.(id);
       setShowTransformChoiceModal(false);
@@ -199,6 +281,8 @@ export function TransformTab({
           <option value="fill_mean">{t("transformTab.actionFillMean")}</option>
           <option value="fill_median">{t("transformTab.actionFillMedian")}</option>
           <option value="fill_mode">{t("transformTab.actionFillMode")}</option>
+          <option value="fill_hot_deck">{t("transformTab.actionFillHotDeck")}</option>
+          <option value="fill_mice">{t("transformTab.actionFillMice")}</option>
           <option value="z_score">{t("transformTab.actionZScore")}</option>
           <option value="min_max">{t("transformTab.actionMinMax")}</option>
           <option value="filter">{t("transformTab.actionFilter")}</option>
@@ -206,7 +290,7 @@ export function TransformTab({
           <option value="recode">{t("transformTab.actionRecode")}</option>
         </select>
       </div>
-      {(transformAction === "drop_missing" || transformAction === "fill_mean" || transformAction === "fill_median" || transformAction === "fill_mode" || transformAction === "z_score" || transformAction === "min_max") && (
+      {(["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max"].includes(transformAction)) && (
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.columnsMultiLabel")}</label>
@@ -220,6 +304,37 @@ export function TransformTab({
             </div>
             <p className="text-xs text-neutral-500 mt-1">{t("transformTab.columnsMultiHint")}</p>
           </div>
+        </div>
+      )}
+      {transformAction === "fill_mice" && (
+        <div className="flex flex-wrap gap-4 items-center mb-4 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
+              Số vòng lặp tối đa (max_iter)
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={miceMaxIter}
+              onChange={(e) => setMiceMaxIter(Math.max(1, parseInt(e.target.value) || 10))}
+              className="rounded-lg border border-sky-300 dark:border-sky-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm w-28 font-mono"
+            />
+          </div>
+          <div className="text-xs text-sky-700 dark:text-sky-300 max-w-lg">
+            Thuật toán MICE (Multiple Imputation by Chained Equations) sử dụng mô hình hồi quy Bayesian Ridge qua Python backend để dự báo và điền giá trị khuyết thiếu đa biến, tôn trọng mã missing quy ước.
+          </div>
+        </div>
+      )}
+      {isMiceLoading && (
+        <div className="flex items-center gap-2 text-sm text-sky-600 dark:text-sky-400 mb-3 animate-pulse">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          <span>Đang thực thi nội suy MICE qua Python backend...</span>
+        </div>
+      )}
+      {miceError && (
+        <div className="p-3 mb-3 text-sm text-red-700 bg-red-100 dark:bg-red-900/30 dark:text-red-300 rounded-lg border border-red-200 dark:border-red-800">
+          {miceError}
         </div>
       )}
       {transformAction === "filter" && (
@@ -287,7 +402,25 @@ export function TransformTab({
           <button type="button" onClick={addRecodeRule} className="text-sm text-brand hover:underline">{t("transformTab.addRuleButton")}</button>
         </div>
       )}
-      <button type="button" onClick={() => setShowTransformChoiceModal(true)} disabled={["drop_missing","fill_mean","fill_median","fill_mode","z_score","min_max"].includes(transformAction) && transformColsMultiple.length === 0} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50">{t("transformTab.applyButton")}</button>
+      <button
+        type="button"
+        onClick={() => setShowTransformChoiceModal(true)}
+        disabled={
+          isMiceLoading ||
+          (["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max"].includes(transformAction) &&
+            transformColsMultiple.length === 0)
+        }
+        className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50"
+      >
+        {isMiceLoading ? (
+          <span className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Đang xử lý...
+          </span>
+        ) : (
+          t("transformTab.applyButton")
+        )}
+      </button>
       {showTransformChoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowTransformChoiceModal(false)}>
           <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -322,6 +455,39 @@ export function TransformTab({
             {" → "}
             {t("transformTab.afterLabel")} <strong>{lastTransformResult.after.length - 1}</strong> {t("transformTab.rowsUnit")} × <strong>{lastTransformResult.after[0]?.length ?? 0}</strong> {t("transformTab.columnsUnit")}
           </p>
+          {lastTransformResult.stats && lastTransformResult.stats.length > 0 && (
+            <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 p-3 overflow-x-auto">
+              <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-200 uppercase tracking-wider mb-2">
+                Báo cáo MICE: Thống kê trước và sau nội suy
+              </h4>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300">
+                    <th className="text-left py-1 px-2 font-medium">Biến số</th>
+                    <th className="text-right py-1 px-2 font-medium">Số ô khuyết</th>
+                    <th className="text-right py-1 px-2 font-medium">Mean (trước)</th>
+                    <th className="text-right py-1 px-2 font-medium">Mean (sau MICE)</th>
+                    <th className="text-right py-1 px-2 font-medium">Std (sau MICE)</th>
+                    <th className="text-right py-1 px-2 font-medium">Min</th>
+                    <th className="text-right py-1 px-2 font-medium">Max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lastTransformResult.stats.map((st) => (
+                    <tr key={st.column} className="border-b border-sky-100 dark:border-sky-900/40">
+                      <td className="py-1 px-2 font-medium text-neutral-800 dark:text-neutral-200">{st.column}</td>
+                      <td className="py-1 px-2 text-right text-red-600 dark:text-red-400 font-medium">{st.missingCount}</td>
+                      <td className="py-1 px-2 text-right">{st.originalMean != null ? st.originalMean.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right font-semibold text-sky-700 dark:text-sky-300">{st.imputedMean != null ? st.imputedMean.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.imputedStd != null ? st.imputedStd.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.min != null ? st.min.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.max != null ? st.max.toFixed(2) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20 overflow-hidden">
               <div className="px-3 py-2 border-b border-amber-200 dark:border-amber-800 bg-amber-100/80 dark:bg-amber-900/40 font-medium text-amber-900 dark:text-amber-100 text-sm">

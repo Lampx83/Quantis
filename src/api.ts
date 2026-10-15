@@ -1975,3 +1975,51 @@ export async function aiComplete(apiBase: string, prompt: string, systemHint?: s
   }
   return out
 }
+
+export interface MiceImputationResponse {
+  rows: string[][];
+  imputedColumns: string[];
+  statistics: Array<{
+    column: string;
+    missingCount: number;
+    originalMean?: number | null;
+    originalStd?: number | null;
+    imputedMean?: number | null;
+    imputedStd?: number | null;
+    min?: number | null;
+    max?: number | null;
+  }>;
+  iterations: number;
+}
+
+/**
+ * Multiple Imputation by Chained Equations (MICE) via Python backend.
+ */
+export async function analyzeMiceImputation(
+  rows: string[][],
+  columns?: string[],
+  variables?: Record<string, VariableMetadata>,
+  maxIter?: number
+): Promise<MiceImputationResponse> {
+  const base = getANALYZE_BASE();
+  if (!base) {
+    throw new Error(t("api.backendNotConfigured") || "Backend phân tích chưa được cấu hình.");
+  }
+  const res = await fetch(`${base}/impute-mice`, {
+    method: "POST",
+    credentials: "include",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      rows,
+      columns: columns && columns.length > 0 ? columns : undefined,
+      variables,
+      maxIter: maxIter ?? 10,
+    }),
+  });
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => null);
+    throw new Error(formatAnalyzeErrorJson(errJson, res.status));
+  }
+  return await res.json();
+}
+
