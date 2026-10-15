@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Loader2, Copy } from "lucide-react";
-import { InfoHint } from "@/components/common/InfoHint";
+import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import type { Dataset } from "@/types";
 import {
   numCell,
@@ -518,6 +518,7 @@ export function HypothesisTab({
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("hypothesisTab.title")}</h2>
+      <GlossaryBar terms={["pValue", "ttest", "anova", "cohensD"]} />
       <div className="mb-4">
         <AIAssistPanel
           metadata={selectedDataset ? `Dataset: ${selectedDataset.name}. Số hàng: ${selectedDataset.rows}, số cột: ${selectedDataset.columns}. Cột: ${(selectedDataset.columnNames || []).slice(0, 20).join(", ")}${(selectedDataset.columnNames?.length || 0) > 20 ? "…" : ""}.` : undefined}

@@ -17,10 +17,10 @@ export interface PrepResult {
 
 const fail = (rows: Rows, error: string): PrepResult => ({ rows, error });
 
-/** Số -> chuỗi, tối đa 12 chữ số có nghĩa, không dùng "1e+21" cho số thường. */
+/** Số -> chuỗi, tối đa 10 chữ số có nghĩa, không dùng "1e+21" cho số thường. */
 export function fmtNum(x: number): string {
   if (!Number.isFinite(x)) return "";
-  return String(+x.toPrecision(12));
+  return String(+x.toPrecision(10));
 }
 
 function cellNum(v: string | undefined): number {

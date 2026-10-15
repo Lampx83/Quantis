@@ -13,7 +13,7 @@ import {
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
-import { InfoHint } from "@/components/common/InfoHint";
+import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 
 export interface RegressionTabProps {
   selectedDataset: Dataset | undefined;
@@ -147,6 +147,7 @@ export function RegressionTab({
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("regressionExplainer.title")}</h2>
+      <GlossaryBar terms={["coefficient", "pValue", "r2", "vif"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
         {t("regressionExplainer.description")}
       </p>

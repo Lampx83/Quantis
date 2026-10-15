@@ -5,7 +5,7 @@ import { getDataRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBa
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
-import { InfoHint } from "@/components/common/InfoHint";
+import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
@@ -61,6 +61,7 @@ export function FactorTab({
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("factorTab.title")}<InfoHint term="efa" /></h2>
+      <GlossaryBar terms={["efa", "kmo", "bartlett"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("factorTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel

@@ -301,7 +301,7 @@ export function TransformTab({
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.computeFormula")}</label>
-            <input type="text" value={computeFormula} onChange={(e) => setComputeFormula(e.target.value)} placeholder="([Điểm 1] + [Điểm 2]) / 2" className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-full max-w-xl font-mono text-sm" />
+            <input type="text" value={computeFormula} onChange={(e) => setComputeFormula(e.target.value)} placeholder="([x1] + [x2]) / 2" className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-full max-w-xl font-mono text-sm" />
             <p className="text-xs text-neutral-500 mt-1 max-w-xl">{t("transformTab.computeHint")}</p>
             <div className="flex flex-wrap gap-1 mt-2">
               {cols.map((c) => (

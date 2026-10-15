@@ -6,7 +6,7 @@ import * as quantisApi from "@/api";
 import type { PanelResult, PanelCoefRow } from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
-import { InfoHint } from "@/components/common/InfoHint";
+import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 
 export interface PanelTabProps {
   selectedDataset: Dataset;
@@ -16,6 +16,8 @@ export interface PanelTabProps {
 
 const num = (x: number | null | undefined, d = 4) => (x == null || Number.isNaN(x) ? "—" : x.toFixed(d));
 const pfmt = (p: number | null | undefined) => (p == null ? "—" : p < 0.0001 ? "< 0.0001" : p.toFixed(4));
+/** Dạng dùng trong câu «p = 0.0123» / «p < 0.0001». */
+const peq = (p: number | null | undefined) => (p == null ? "= —" : p < 0.0001 ? "< 0.0001" : `= ${p.toFixed(4)}`);
 const tpl = (s: string, vars: Record<string, string>) =>
   Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(v), s);
 
@@ -127,6 +129,7 @@ export function PanelTab({ selectedDataset, analysisBackendAvailable = false, sh
         {t("panelTab.title")}
         <InfoHint term="panelData" />
       </h2>
+      <GlossaryBar terms={["panelData", "pooledOls", "fixedEffects", "randomEffects", "hausman", "withinBetween"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("panelTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
@@ -246,7 +249,7 @@ export function PanelTab({ selectedDataset, analysisBackendAvailable = false, sh
             <p className="mt-2 text-neutral-600 dark:text-neutral-400">
               {tpl(t("panelTab.fitPooled"), {
                 r2: num(res.pooled.r2), adj: num(res.pooled.adjR2), df1: String(res.pooled.dfModel), df2: String(res.pooled.dfResid),
-                f: num(res.pooled.fStat, 3), fp: pfmt(res.pooled.fP), n: String(res.pooled.nObs),
+                f: num(res.pooled.fStat, 3), fp: peq(res.pooled.fP), n: String(res.pooled.nObs),
               })}
               <InfoHint term="r2" />
             </p>
@@ -260,12 +263,12 @@ export function PanelTab({ selectedDataset, analysisBackendAvailable = false, sh
                 {tpl(t("panelTab.fitFixed"), {
                   w: num(res.fixed.r2Within), b: num(res.fixed.r2Between), o: num(res.fixed.r2Overall),
                   df1: String(res.fixed.coefficients.length), df2: String(res.fixed.dfResid),
-                  f: num(res.fixed.fStat, 3), fp: pfmt(res.fixed.fP), n: String(res.fixed.nObs), g: String(res.fixed.nGroups),
+                  f: num(res.fixed.fStat, 3), fp: peq(res.fixed.fP), n: String(res.fixed.nObs), g: String(res.fixed.nGroups),
                 })}
               </p>
               <p className="mt-1 text-neutral-600 dark:text-neutral-400">
                 {tpl(t("panelTab.fitEntityF"), {
-                  df1: String(res.fixed.fEntityDf1), df2: String(res.fixed.fEntityDf2), f: num(res.fixed.fEntity, 3), p: pfmt(res.fixed.fEntityP),
+                  df1: String(res.fixed.fEntityDf1), df2: String(res.fixed.fEntityDf2), f: num(res.fixed.fEntity, 3), p: peq(res.fixed.fEntityP),
                 })}
               </p>
             </div>
@@ -279,7 +282,7 @@ export function PanelTab({ selectedDataset, analysisBackendAvailable = false, sh
                 {tpl(t("panelTab.fitRandom"), {
                   w: num(res.random.r2Within), b: num(res.random.r2Between), o: num(res.random.r2Overall),
                   su: num(res.random.sigmaU), se: num(res.random.sigmaE), rho: num(res.random.rho),
-                  df: String(res.random.waldDf), chi: num(res.random.waldChi2, 3), p: pfmt(res.random.waldP),
+                  df: String(res.random.waldDf), chi: num(res.random.waldChi2, 3), p: peq(res.random.waldP),
                   n: String(res.random.nObs), g: String(res.random.nGroups),
                 })}
               </p>
@@ -290,7 +293,7 @@ export function PanelTab({ selectedDataset, analysisBackendAvailable = false, sh
             <div className={card} data-testid="panel-hausman">
               <p className="font-medium mb-2">{t("panelTab.hausmanTitle")}<InfoHint term="hausman" /></p>
               <p>
-                {tpl(t("panelTab.hausmanResult"), { df: String(res.hausman.df), chi: num(res.hausman.chi2, 3), p: pfmt(res.hausman.p) })}
+                {tpl(t("panelTab.hausmanResult"), { df: String(res.hausman.df), chi: num(res.hausman.chi2, 3), p: peq(res.hausman.p) })}
               </p>
               <p className="mt-1 font-medium">{res.hausman.preferred === "FE" ? t("panelTab.hausmanReject") : t("panelTab.hausmanKeep")}</p>
               <p className="mt-3 text-sm font-medium">{t("panelTab.hausmanCompareTitle")}</p>

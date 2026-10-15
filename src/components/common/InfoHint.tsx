@@ -13,6 +13,21 @@ export type GlossaryTerm =
   | "panelData" | "pooledOls" | "fixedEffects" | "randomEffects" | "hausman" | "withinBetween"
   | "zScore" | "iqr";
 
+/** Dải thuật ngữ: «Giải thích thuật ngữ: p-value (i) · t-test (i) …» — đặt ngay dưới tiêu đề của một chức năng. */
+export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400 mb-3" data-testid="glossary-bar">
+      <span>{t("glossary.hintBarLabel")}</span>
+      {terms.map((term) => (
+        <span key={term} className="inline-flex items-center whitespace-nowrap">
+          {t(`glossary.${term}.title`).split(" (")[0]}
+          <InfoHint term={term} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function InfoHint({ term, className = "" }: { term: GlossaryTerm; className?: string }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
