@@ -4,6 +4,31 @@ Quantitative analysis and statistics platform for research and education: data m
 
 **Hai cách triển khai UI:** **Standalone** (tab trình duyệt / dev) dùng đăng nhập Quantis khi bật auth; **Embed AI Portal** nhận diện qua `__PORTAL_USER__`, `__WRITE_API_BASE__`, `embed-config.json`, URL `/embed/quantis`, hoặc `__QUANTIS_PORTAL_EMBED__` — không bắt form đăng nhập Node, đồng bộ `/data` theo header Portal. Chi tiết: [`docs/QUANTIS-DATABASE.md`](docs/QUANTIS-DATABASE.md) mục *Frontend: nhận biết embed*. So sánh triển khai với SurveyLab: [`docs/QUANTIS-PORTAL-AND-SURVEYLAB.md`](docs/QUANTIS-PORTAL-AND-SURVEYLAB.md).
 
+## Có gì mới (10/2026)
+
+> Các tính năng trong mục này **đã chạy trên hệ thống hỗ trợ nghiên cứu khoa học dựa trên AI của Đại học Kinh tế Quốc dân từ 15/10/2026**. Mã nguồn hiện nằm ở nhánh `feat/dataprep-panel-glossary-20261015`, **chưa gộp vào `main`**.
+
+- **Dữ liệu → Biến đổi** có thêm các thao tác chuẩn bị dữ liệu:
+  - **Đổi tên biến (cột)**.
+  - **Đổi loại biến**: văn bản → số (đọc được cả `6,84`, `1.234,5`, `1,234.5`; ô không đọc được để trống) hoặc số → văn bản (bỏ khoảng trắng thừa).
+  - **Tính biến mới từ công thức**: tham chiếu cột bằng `[Tên cột]`, ví dụ `([Điểm 1] + [Điểm 2]) / 2`. Hỗ trợ `+ − * / ^` và các hàm `ln`, `log10`, `sqrt`, `abs`, `exp`, `round`, `mean`, `sum`, `min`, `max` (`mean/sum/min/max` bỏ qua ô thiếu; các phép tính khác gặp ô thiếu thì kết quả thiếu).
+  - **Biến đổi log** (thêm cột mới): `ln(x)`, `log10(x)` (x phải > 0) hoặc `ln(1 + x)` (dùng khi có giá trị 0).
+  - **Loại dòng có giá trị ngoại lai (quy tắc IQR)** với hệ số k tuỳ chọn (mặc định 1,5).
+  - **Xoá dòng trùng lặp** (không chọn cột = so sánh mọi cột; giữ dòng xuất hiện đầu tiên).
+  - Các thao tác sẵn có vẫn giữ nguyên: loại dòng thiếu, thay giá trị thiếu bằng mean/median/mode, lọc, sắp xếp, recode, chuẩn hoá min-max và z-score.
+- **Phân tích → Dữ liệu bảng** (panel): chọn biến định danh đơn vị, biến thời gian, biến phụ thuộc (Y) và các biến độc lập (X); có thể tick **Thêm hiệu ứng thời gian**. Kết quả gồm tóm tắt cấu trúc dữ liệu (cân bằng / không cân bằng), thống kê mô tả overall / between / within, **OLS gộp (Pooled OLS)**, **Ảnh hưởng cố định (Fixed Effects)**, **Ảnh hưởng ngẫu nhiên (Random Effects, Swamy-Arora)** và **Kiểm định Hausman** (FE so với RE, kèm bảng so sánh hệ số).
+  - **Giới hạn:** chỉ có **sai số chuẩn dạng cổ điển** — **chưa có** sai số chuẩn vững (robust) hay theo cụm (cluster). Nếu nghiên cứu cần các loại sai số này, hãy kiểm tra lại bằng phần mềm khác (Stata, R, Python `linearmodels`).
+  - Cần backend Python (`backend-python`, `POST /api/quantis/analyze/panel`); nếu thiếu, giao diện báo «Phân tích dữ liệu bảng cần backend Python».
+- **Chú giải thuật ngữ (i):** bấm biểu tượng (i) cạnh thuật ngữ để xem giải thích ngắn (bấm ra ngoài hoặc Esc để đóng). Đầu các tab Kiểm định, Hồi quy, Tương quan, Độ tin cậy, Nhân tố, Dữ liệu bảng có dải **«Giải thích thuật ngữ:»** (p-value, t-test, ANOVA, Cohen's d, hệ số hồi quy, R², VIF, Cronbach's alpha, KMO, Bartlett, EFA, FE/RE, Hausman, within/between…). Trong Biến đổi, (i) hiện khi chọn chuẩn hoá z-score hoặc loại ngoại lai IQR.
+
+## Hướng dẫn sử dụng nhanh
+
+1. **Chọn dữ liệu:** ở thanh bên trái, mục **Bộ dữ liệu (Import)** → **Tải file** hoặc thêm dataset mẫu, rồi bấm chọn một bộ dữ liệu.
+2. **Kiểm tra và làm sạch:** tab **Dữ liệu** → **Xem dữ liệu**, **Sơ bộ** (thiếu, kiểu biến, độ lệch, ngoại lai), **Mô tả**.
+3. **Biến đổi:** tab **Dữ liệu** → **Biến đổi** → chọn **Hành động**, điền thông tin → **Áp dụng**. Hệ thống hỏi **Biến đổi dữ liệu gốc** hay **Sinh file mới (dataset mới)**; nên chọn sinh file mới để giữ bản gốc.
+4. **Phân tích:** tab **Phân tích** → chọn Kiểm định, Hồi quy, Tương quan, Độ tin cậy, Nhân tố, Dữ liệu bảng… Bấm (i) khi gặp thuật ngữ chưa rõ.
+5. **Hỏi AI:** các tab phân tích và tab Biến đổi có khung hỏi AI về kết quả. AI chỉ gợi ý cách đọc kết quả; người nghiên cứu tự kiểm tra lại số liệu và kết luận.
+
 ### Tại sao chưa thấy màn hình đăng nhập?
 
 Quantis **có** luồng giống SurveyLab (`/api/quantis/auth/register`, `login`, `me`, SSO OIDC, hộp thoại tài khoản) — **nhưng chỉ khi frontend kết nối được backend PostgreSQL** (`backend/` sau `npm run build && npm start`) và gọi được `GET …/auth/config` trả `authEnabled: true`.
