@@ -4,6 +4,8 @@
  * Embedded in AI Portal: use Portal locale (window.__AI_PORTAL_LOCALE__); if not en/vi, fall back to English.
  */
 
+import { EXTRA_EN, EXTRA_VI } from "./i18n-extra"
+
 export type Locale = "en" | "vi"
 
 const SUPPORTED: Locale[] = ["en", "vi"]
@@ -3045,6 +3047,10 @@ const messages: Record<Locale, Record<string, string>> = {
   "workflowView.title": "Workflow nghiên cứu tiêu chuẩn",
   },
 }
+
+// Chuỗi bổ sung (chú giải thuật ngữ, chuẩn bị dữ liệu, dữ liệu bảng) — xem i18n-extra.ts
+Object.assign(messages.en, EXTRA_EN)
+Object.assign(messages.vi, EXTRA_VI)
 
 export function t(key: string): string {
   const locale = getLocale()

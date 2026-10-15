@@ -5,3 +5,4 @@ export * from "./MLTab";
 export * from "./RegressionTab";
 export * from "./SEMTab";
 export * from "./HypothesisTab";
+export * from "./PanelTab";

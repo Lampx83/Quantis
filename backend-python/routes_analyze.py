@@ -1,6 +1,7 @@
 """
 API routes cho phân tích — nhận rows (string[][]) + params, gọi analysis_impl, trả JSON.
 """
+import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -57,6 +58,8 @@ from analysis_impl import (
     run_ttest_paired,
     run_ztest_two_means,
 )
+
+from panel_impl import run_panel
 
 router = APIRouter()
 
@@ -115,6 +118,15 @@ class OLSBody(BaseModel):
     rows: list[list[str]]
     yCol: str
     xCols: list[str]
+
+
+class PanelBody(BaseModel):
+    rows: list[list[str]]
+    yCol: str
+    xCols: list[str]
+    entityCol: str
+    timeCol: str
+    timeEffects: bool = False
 
 
 class LogisticBody(BaseModel):
@@ -529,6 +541,21 @@ async def analyze_ols(body: OLSBody):
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/panel")
+async def analyze_panel(body: PanelBody):
+    """Dữ liệu bảng: mô tả within/between, OLS gộp, Fixed Effects, Random Effects, Hausman."""
+    try:
+        return {"result": run_panel(body.rows, body.yCol, body.xCols, body.entityCol, body.timeCol, body.timeEffects)}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except np.linalg.LinAlgError as e:
+        raise HTTPException(status_code=400, detail=f"Lỗi đại số tuyến tính (đa cộng tuyến?): {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

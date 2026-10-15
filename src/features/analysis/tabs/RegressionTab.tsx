@@ -13,6 +13,7 @@ import {
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 
 export interface RegressionTabProps {
   selectedDataset: Dataset | undefined;
@@ -146,6 +147,7 @@ export function RegressionTab({
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("regressionExplainer.title")}</h2>
+      <GlossaryBar terms={["coefficient", "pValue", "r2", "vif"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">
         {t("regressionExplainer.description")}
       </p>
@@ -336,10 +338,10 @@ export function RegressionTab({
                 <thead>
                   <tr className="border-b border-neutral-200 dark:border-neutral-700">
                     <th className="text-left p-2">{t("regressionExplainer.tableVariable")}</th>
-                    <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}</th>
+                    <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}<InfoHint term="coefficient" /></th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">t</th>
-                    <th className="text-right p-2">p-value</th>
+                    <th className="text-right p-2">p-value<InfoHint term="pValue" /></th>
                     {olsResult.ciLower && <th className="text-right p-2">95% CI</th>}
                   </tr>
                 </thead>
@@ -402,11 +404,11 @@ export function RegressionTab({
               <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t border-neutral-100">
                 R² = {olsResult.r2.toFixed(4)}
                 {t("regressionExplainer.adjRSquaredLabel")}
-                {olsResult.adjR2.toFixed(4)}, n = {olsResult.n}, df = {olsResult.df}.
+                {olsResult.adjR2.toFixed(4)}, n = {olsResult.n}, df = {olsResult.df}.<InfoHint term="r2" />
               </p>
               {vifResult && Object.keys(vifResult).length > 0 && (
                 <div className="p-2 border-t border-neutral-100">
-                  <p className="font-medium mb-1">{t("regressionExplainer.vifLabel")}</p>
+                  <p className="font-medium mb-1">{t("regressionExplainer.vifLabel")}<InfoHint term="vif" /></p>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(vifResult).map(([name, v]) => (
                       <span

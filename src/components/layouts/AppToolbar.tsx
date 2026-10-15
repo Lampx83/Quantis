@@ -191,6 +191,17 @@ export function AppToolbar() {
           >
             <Sigma className="w-4 h-4 shrink-0" /> Bayesian
           </button>
+          <button
+            type="button"
+            onClick={() => setAnalysisTab("panel")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
+              analysisTab === "panel"
+                ? "bg-brand text-white"
+                : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
+            }`}
+          >
+            <Layers className="w-4 h-4 shrink-0" /> {t("app.analysisTab.panel")}
+          </button>
         </div>
       )}
 
@@ -562,6 +573,17 @@ export function AppToolbar() {
                   }`}
                 >
                   <Sigma className="w-4 h-4 shrink-0" /> Bayesian
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAnalysisTab("panel")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
+                    analysisTab === "panel"
+                      ? "bg-brand text-white"
+                      : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
+                  }`}
+                >
+                  <Layers className="w-4 h-4 shrink-0" /> {t("app.analysisTab.panel")}
                 </button>
               </>
             )}

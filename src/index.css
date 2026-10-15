@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* react-markdown dùng class sr-only cho nhãn chú thích cuối trang; không có trong src nên cần ép sinh. */
+@source inline("sr-only");
 @import "./neu-embed.css";
 @import "./neu-palette-gray.css";
 
