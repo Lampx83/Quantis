@@ -66,6 +66,31 @@ describe("DataStore & UIStore Expansion", () => {
   });
 
   describe("useDataStore Actions", () => {
+    it("addDataset should add a new dataset and prevent duplicate entries with identical IDs", () => {
+      const { addDataset } = useDataStore.getState();
+      const newDataset: Dataset = {
+        id: "ds_new_unique",
+        name: "New Unique Dataset",
+        rows: 1,
+        columns: 1,
+        columnNames: ["X"],
+        preview: [["X"], ["1"]],
+        data: [["X"], ["1"]],
+        sourceFormat: "csv",
+        createdAt: "2026-10-16T00:00:00Z",
+        updatedAt: "2026-10-16T00:00:00Z",
+      };
+
+      addDataset(newDataset);
+      expect(useDataStore.getState().datasets.filter((d) => d.id === "ds_new_unique").length).toBe(1);
+
+      // Adding the same dataset again should update/upsert, not duplicate
+      addDataset({ ...newDataset, name: "New Unique Dataset Updated" });
+      const matches = useDataStore.getState().datasets.filter((d) => d.id === "ds_new_unique");
+      expect(matches.length).toBe(1);
+      expect(matches[0].name).toBe("New Unique Dataset Updated");
+    });
+
     it("updateCell should immutably update a cell in data and preview", () => {
       const { updateCell } = useDataStore.getState();
       updateCell(0, 2, "95"); // row 0 (data row 0), col 2 (SCORE) -> update to 95

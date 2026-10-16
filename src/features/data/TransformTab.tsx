@@ -11,13 +11,14 @@ import {
   imputeHotDeck,
 } from "@/utils/missing-imputation";
 import { analyzeMiceImputation, type MiceImputationResponse } from "@/api";
-import { useDataStore } from "@/stores/useDataStore";
 
 export interface TransformTabProps {
   selectedDs: Dataset | null;
   setDatasets: Dispatch<SetStateAction<Dataset[]>>;
   onSelectDataset: (id: string | null) => void;
   onWorkflowDatasetAdd?: (id: string) => void;
+  initialShowChoiceModal?: boolean;
+  initialColsMultiple?: string[];
 }
 
 export function TransformTab({
@@ -25,9 +26,11 @@ export function TransformTab({
   setDatasets,
   onSelectDataset,
   onWorkflowDatasetAdd,
+  initialShowChoiceModal = false,
+  initialColsMultiple = [],
 }: TransformTabProps) {
   const [transformCol] = useState("");
-  const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>([]);
+  const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>(initialColsMultiple);
   const [transformAction, setTransformAction] = useState<
     | "drop_missing"
     | "fill_mean"
@@ -51,7 +54,7 @@ export function TransformTab({
   const [miceMaxIter, setMiceMaxIter] = useState<number>(10);
   const [isMiceLoading, setIsMiceLoading] = useState<boolean>(false);
   const [miceError, setMiceError] = useState<string | null>(null);
-  const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(false);
+  const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(initialShowChoiceModal);
   const [lastTransformResult, setLastTransformResult] = useState<{
     before: string[][];
     after: string[][];
@@ -235,7 +238,6 @@ export function TransformTab({
         updatedAt: now,
       };
       setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
-      useDataStore.getState().updateDataset(selectedDs.id, updatedDs);
       setShowTransformChoiceModal(false);
     } else {
       const id = generateId();
@@ -253,7 +255,6 @@ export function TransformTab({
         updatedAt: now,
       };
       setDatasets((prev) => [...prev, newDs]);
-      useDataStore.getState().addDataset(newDs);
       onSelectDataset(id);
       onWorkflowDatasetAdd?.(id);
       setShowTransformChoiceModal(false);

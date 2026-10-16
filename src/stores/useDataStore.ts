@@ -39,7 +39,11 @@ export const useDataStore = create<DataState>()(
           datasets: typeof datasets === "function" ? datasets(s.datasets) : datasets,
         })),
       addDataset: (dataset) =>
-        set((s) => ({ datasets: [...s.datasets, dataset] })),
+        set((s) => ({
+          datasets: s.datasets.some((d) => d.id === dataset.id)
+            ? s.datasets.map((d) => (d.id === dataset.id ? dataset : d))
+            : [...s.datasets, dataset],
+        })),
       removeDataset: (id) =>
         set((s) => ({
           datasets: s.datasets.filter((d) => d.id !== id),

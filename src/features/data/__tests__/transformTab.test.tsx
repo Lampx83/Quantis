@@ -199,4 +199,58 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(t("transformTab.mice.colImputedMean")).toBe("Mean (sau MICE)");
     expect(t("transformTab.mice.colImputedStd")).toBe("Std (sau MICE)");
   });
+
+  it("does not duplicate dataset in useDataStore when creating a new dataset from transform", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function Harness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialShowChoiceModal: true,
+        initialColsMultiple: ["INCOME"],
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<Harness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    // Trigger create new dataset
+    await createNewBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    // Before action: 1 dataset.
+    // After action: exactly 2 datasets (1 original + 1 newly created), NOT 3!
+    expect(datasets.length).toBe(2);
+    expect(datasets[0].id).toBe("ds_transform_test");
+    expect(datasets[1].id).not.toBe("ds_transform_test");
+
+    // Deleting the newly created dataset should delete ONLY that dataset, leaving the original
+    const newDsId = datasets[1].id;
+    useDataStore.getState().removeDataset(newDsId);
+    expect(useDataStore.getState().datasets.length).toBe(1);
+    expect(useDataStore.getState().datasets[0].id).toBe("ds_transform_test");
+  });
 });
