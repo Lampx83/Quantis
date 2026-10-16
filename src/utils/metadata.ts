@@ -1,4 +1,5 @@
 import { Dataset, VariableAlign, VariableMeasure, VariableMetadata, VariableType } from "../types";
+import { t } from "../i18n";
 
 /**
  * Validate variable name according to academic standard (SPSS-like identifier)
@@ -11,12 +12,12 @@ export function validateVariableName(
 ): { valid: boolean; error?: string } {
   const trimmed = name.trim();
   if (!trimmed) {
-    return { valid: false, error: "Tên biến không được để trống." };
+    return { valid: false, error: t("metadata.validation.empty") };
   }
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
     return {
       valid: false,
-      error: "Tên biến chỉ được chứa chữ cái, số và dấu gạch dưới, không bắt đầu bằng số hoặc chứa khoảng trắng.",
+      error: t("metadata.validation.invalidChars"),
     };
   }
   const targetLower = trimmed.toLowerCase();
@@ -26,7 +27,7 @@ export function validateVariableName(
       (n) => n.toLowerCase() === targetLower && n.toLowerCase() !== currentLower
     )
   ) {
-    return { valid: false, error: `Tên biến "${trimmed}" đã tồn tại trong bộ dữ liệu.` };
+    return { valid: false, error: t("metadata.validation.duplicate", { name: trimmed }) };
   }
   return { valid: true };
 }

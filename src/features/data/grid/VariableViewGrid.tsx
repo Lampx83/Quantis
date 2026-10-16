@@ -21,6 +21,7 @@ import {
   ensureDatasetMetadata,
   validateVariableName,
 } from "@/utils/metadata";
+import { t } from "@/i18n";
 import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
 import {
@@ -105,20 +106,20 @@ export function MeasureIcon({
 }) {
   if (measure === "scale") {
     return (
-      <span title="Scale (Thang đo định lượng)" className="inline-flex shrink-0">
+      <span title={t("variableView.measureScaleTooltip")} className="inline-flex shrink-0">
         <Ruler className={`${className} text-blue-600 dark:text-blue-400`} />
       </span>
     );
   }
   if (measure === "ordinal") {
     return (
-      <span title="Ordinal (Thang đo thứ bậc)" className="inline-flex shrink-0">
+      <span title={t("variableView.measureOrdinalTooltip")} className="inline-flex shrink-0">
         <BarChart3 className={`${className} text-amber-600 dark:text-amber-400`} />
       </span>
     );
   }
   return (
-    <span title="Nominal (Thang đo định danh)" className="inline-flex shrink-0">
+    <span title={t("variableView.measureNominalTooltip")} className="inline-flex shrink-0">
       <Tags className={`${className} text-emerald-600 dark:text-emerald-400`} />
     </span>
   );
@@ -197,7 +198,7 @@ export function VariableViewGrid({
     return (
       <div className="flex flex-col items-center justify-center p-12 text-neutral-400">
         <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
-        <p className="text-sm">Vui lòng chọn một bộ dữ liệu để xem Variable View.</p>
+        <p className="text-sm">{t("variableView.selectDatasetPrompt")}</p>
       </div>
     );
   }
@@ -217,7 +218,7 @@ export function VariableViewGrid({
       originalName
     );
     if (!validation.valid) {
-      const msg = validation.error ?? "Tên biến không hợp lệ.";
+      const msg = validation.error ?? t("metadata.validation.invalidChars");
       setNameError({ varName: originalName, message: msg });
       if (showToast) showToast(msg);
       // Revert draft back to originalName
@@ -228,7 +229,7 @@ export function VariableViewGrid({
     setNameError(null);
     renameVariable(originalName, trimmed, activeDataset.id);
     if (showToast) {
-      showToast(`Đã đổi tên biến "${originalName}" → "${trimmed}"`);
+      showToast(t("dataGrid.renameVarSuccessToast", { oldName: originalName, newName: trimmed }));
     }
   };
 
@@ -284,18 +285,18 @@ export function VariableViewGrid({
       activeDataset.id
     );
     if (showToast) {
-      showToast(`Đã thêm biến mới "${newName}"`);
+      showToast(t("dataGrid.addVarSuccessToast", { name: newName }));
     }
   };
 
   const handleDeleteVariable = (varName: string) => {
     if (setConfirmDialog) {
       setConfirmDialog({
-        message: `Bạn có chắc chắn muốn xóa biến "${varName}" khỏi bộ dữ liệu không?`,
+        message: t("variableView.deleteVarConfirm", { name: varName }),
         onConfirm: () => {
           removeVariable(varName, activeDataset.id);
           if (showToast) {
-            showToast(`Đã xóa biến "${varName}"`);
+            showToast(t("variableView.deleteVarToast", { name: varName }));
           }
           setConfirmDialog(null);
         },
@@ -303,7 +304,7 @@ export function VariableViewGrid({
     } else {
       removeVariable(varName, activeDataset.id);
       if (showToast) {
-        showToast(`Đã xóa biến "${varName}"`);
+        showToast(t("variableView.deleteVarToast", { name: varName }));
       }
     }
   };
@@ -330,7 +331,7 @@ export function VariableViewGrid({
             onClick={() => setNameError(null)}
             className="text-rose-500 hover:underline ml-4"
           >
-            Đóng
+            {t("variableView.closeBanner")}
           </button>
         </div>
       )}
@@ -340,7 +341,7 @@ export function VariableViewGrid({
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="w-4 h-4 text-brand shrink-0" />
           <span className="text-xs sm:text-sm font-semibold text-neutral-800 dark:text-neutral-200">
-            Variable View — Quản trị Thuộc tính Biến số ({variablesList.length} biến)
+            {t("variableView.title", { count: variablesList.length })}
           </span>
         </div>
 
@@ -351,7 +352,7 @@ export function VariableViewGrid({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm theo tên hoặc nhãn..."
+              placeholder={t("variableView.searchPlaceholder")}
               className="pl-8 pr-7 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-1 focus:ring-brand w-48 sm:w-56"
             />
             {search && (
@@ -359,7 +360,7 @@ export function VariableViewGrid({
                 type="button"
                 onClick={() => setSearch("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-                title="Xóa tìm kiếm"
+                title={t("variableView.clearSearchTitle")}
               >
                 <X className="w-3 h-3" />
               </button>
@@ -371,7 +372,7 @@ export function VariableViewGrid({
             className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-brand hover:bg-brand/90 rounded-md shadow-xs transition-colors shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Thêm biến</span>
+            <span>{t("variableView.addVariableButton")}</span>
           </button>
         </div>
       </div>
@@ -382,37 +383,37 @@ export function VariableViewGrid({
           <thead className="sticky top-0 z-10 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 font-semibold border-b border-neutral-200 dark:border-neutral-700 select-none shadow-xs">
             <tr>
               <th className="w-10 py-2.5 px-2 text-center border-r border-neutral-200 dark:border-neutral-700">
-                #
+                {t("variableView.colIndex")}
               </th>
               <th className="min-w-[130px] py-2.5 px-2.5 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Name
+                {t("variableView.colName")}
               </th>
               <th className="w-28 py-2.5 px-2 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Type
+                {t("variableView.colType")}
               </th>
               <th className="w-20 py-2.5 px-2 text-right border-r border-neutral-200 dark:border-neutral-700">
-                Width
+                {t("variableView.colWidth")}
               </th>
               <th className="w-20 py-2.5 px-2 text-right border-r border-neutral-200 dark:border-neutral-700">
-                Decimals
+                {t("variableView.colDecimals")}
               </th>
               <th className="min-w-[220px] py-2.5 px-2.5 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Label
+                {t("variableView.colLabel")}
               </th>
               <th className="min-w-[160px] py-2.5 px-2.5 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Values
+                {t("variableView.colValues")}
               </th>
               <th className="min-w-[130px] py-2.5 px-2.5 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Missing
+                {t("variableView.colMissing")}
               </th>
               <th className="w-24 py-2.5 px-2 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Align
+                {t("variableView.colAlign")}
               </th>
               <th className="w-36 py-2.5 px-2 text-left border-r border-neutral-200 dark:border-neutral-700">
-                Measure
+                {t("variableView.colMeasure")}
               </th>
-              <th className="w-10 py-2.5 px-1.5 text-center" title="Thao tác">
-                <span className="sr-only">Actions</span>
+              <th className="w-10 py-2.5 px-1.5 text-center" title={t("variableView.colActions")}>
+                <span className="sr-only">{t("variableView.colActions")}</span>
               </th>
             </tr>
           </thead>
@@ -487,9 +488,9 @@ export function VariableViewGrid({
                       aria-label={`Type for ${meta.name}`}
                       className="w-full px-1.5 py-1 rounded border border-transparent hover:border-neutral-300 dark:hover:border-neutral-700 focus:border-brand bg-transparent dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 focus:outline-none"
                     >
-                      <option value="numeric">Numeric</option>
-                      <option value="string">String</option>
-                      <option value="date">Date</option>
+                      <option value="numeric">{t("variableView.typeNumeric")}</option>
+                      <option value="string">{t("variableView.typeString")}</option>
+                      <option value="date">{t("variableView.typeDate")}</option>
                     </select>
                   </td>
 
@@ -580,7 +581,7 @@ export function VariableViewGrid({
                     <input
                       type="text"
                       value={meta.label}
-                      placeholder="Nhập nhãn mô tả câu hỏi / biến số..."
+                      placeholder={t("variableView.labelInputPlaceholder")}
                       onChange={(e) =>
                         updateVariableMetadata(
                           meta.name,
@@ -598,7 +599,7 @@ export function VariableViewGrid({
                     <div className="flex items-center justify-between gap-1.5 px-1.5 py-0.5">
                       <span
                         className={`truncate max-w-[130px] ${
-                          valueLabelsSummary === "None"
+                          valueLabelsSummary === t("variableView.noneValue")
                             ? "text-neutral-400 dark:text-neutral-500"
                             : "text-neutral-800 dark:text-neutral-200 font-medium"
                         }`}
@@ -610,7 +611,7 @@ export function VariableViewGrid({
                         type="button"
                         onClick={() => setValueLabelsTarget(meta.name)}
                         aria-label={`Configure value labels for ${meta.name}`}
-                        title="Cấu hình Value Labels"
+                        title={t("variableView.configValuesTitle")}
                         className="px-2 py-0.5 rounded bg-neutral-200/80 dark:bg-neutral-700 hover:bg-brand hover:text-white text-neutral-700 dark:text-neutral-200 font-mono text-[11px] font-semibold shrink-0 transition-colors"
                       >
                         ...
@@ -623,7 +624,7 @@ export function VariableViewGrid({
                     <div className="flex items-center justify-between gap-1.5 px-1.5 py-0.5">
                       <span
                         className={`truncate max-w-[95px] font-mono ${
-                          missingSummary === "None"
+                          missingSummary === t("variableView.noneValue")
                             ? "text-neutral-400 dark:text-neutral-500 font-sans"
                             : "text-amber-700 dark:text-amber-400 font-medium"
                         }`}
@@ -635,7 +636,7 @@ export function VariableViewGrid({
                         type="button"
                         onClick={() => setMissingValuesTarget(meta.name)}
                         aria-label={`Configure missing values for ${meta.name}`}
-                        title="Cấu hình Missing Values"
+                        title={t("variableView.configMissingTitle")}
                         className="px-2 py-0.5 rounded bg-neutral-200/80 dark:bg-neutral-700 hover:bg-brand hover:text-white text-neutral-700 dark:text-neutral-200 font-mono text-[11px] font-semibold shrink-0 transition-colors"
                       >
                         ...
@@ -657,9 +658,9 @@ export function VariableViewGrid({
                       aria-label={`Align for ${meta.name}`}
                       className="w-full px-1.5 py-1 rounded border border-transparent hover:border-neutral-300 dark:hover:border-neutral-700 focus:border-brand bg-transparent dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 focus:outline-none"
                     >
-                      <option value="left">Left</option>
-                      <option value="right">Right</option>
-                      <option value="center">Center</option>
+                      <option value="left">{t("variableView.alignLeft")}</option>
+                      <option value="right">{t("variableView.alignRight")}</option>
+                      <option value="center">{t("variableView.alignCenter")}</option>
                     </select>
                   </td>
 
@@ -679,9 +680,9 @@ export function VariableViewGrid({
                         aria-label={`Measure for ${meta.name}`}
                         className="w-full py-1 rounded border border-transparent hover:border-neutral-300 dark:hover:border-neutral-700 focus:border-brand bg-transparent dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 focus:outline-none font-medium"
                       >
-                        {meta.type !== "string" && <option value="scale">Scale</option>}
-                        <option value="ordinal">Ordinal</option>
-                        <option value="nominal">Nominal</option>
+                        {meta.type !== "string" && <option value="scale">{t("variableView.measureScale")}</option>}
+                        <option value="ordinal">{t("variableView.measureOrdinal")}</option>
+                        <option value="nominal">{t("variableView.measureNominal")}</option>
                       </select>
                     </div>
                   </td>
@@ -692,7 +693,7 @@ export function VariableViewGrid({
                       <button
                         type="button"
                         onClick={() => handleDeleteVariable(meta.name)}
-                        title={`Xóa biến ${meta.name}`}
+                        title={t("variableView.deleteVarTitle", { name: meta.name })}
                         className="p-1 rounded text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -709,7 +710,7 @@ export function VariableViewGrid({
                   colSpan={11}
                   className="py-10 text-center text-neutral-400 dark:text-neutral-500 italic"
                 >
-                  Không tìm thấy biến số nào phù hợp với từ khóa &ldquo;{search}&rdquo;.
+                  {t("variableView.emptySearch", { query: search })}
                 </td>
               </tr>
             )}
@@ -721,14 +722,17 @@ export function VariableViewGrid({
       {search && (
         <div className="px-3.5 py-1.5 bg-neutral-50/70 dark:bg-neutral-800/40 border-t border-neutral-200 dark:border-neutral-700 text-xs text-neutral-500 dark:text-neutral-400 flex items-center justify-between shrink-0">
           <span>
-            Đang hiển thị {filteredVariablesList.length} / {variablesList.length} biến
+            {t("variableView.filterFooter", {
+              filtered: filteredVariablesList.length,
+              total: variablesList.length,
+            })}
           </span>
           <button
             type="button"
             onClick={() => setSearch("")}
             className="text-brand hover:underline font-medium"
           >
-            Xóa bộ lọc
+            {t("variableView.clearFilter")}
           </button>
         </div>
       )}

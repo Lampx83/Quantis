@@ -1,9 +1,11 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { setLocale } from "../../../../i18n";
 import {
   ValueLabelsModal,
   QUICK_VALUE_LABEL_TEMPLATES,
+  getQuickValueLabelTemplates,
   upsertValueLabel,
   removeValueLabel,
   formatValueLabelsSummary,
@@ -15,8 +17,13 @@ import {
 } from "../MissingValuesModal";
 
 describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
+  beforeEach(() => {
+    setLocale("vi");
+  });
+
   describe("ValueLabelsModal logic & rendering", () => {
-    it("provides standard academic quick templates (Likert 5, Gender, Binary)", () => {
+    it("provides standard academic quick templates (Likert 5, Gender, Binary) for both locales", () => {
+      setLocale("vi");
       expect(QUICK_VALUE_LABEL_TEMPLATES.likert5["1"]).toBe("Hoàn toàn không đồng ý");
       expect(QUICK_VALUE_LABEL_TEMPLATES.likert5["5"]).toBe("Hoàn toàn đồng ý");
       expect(QUICK_VALUE_LABEL_TEMPLATES.gender).toEqual({
@@ -28,9 +35,23 @@ describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
         "0": "Không",
         "1": "Có",
       });
+
+      setLocale("en");
+      expect(QUICK_VALUE_LABEL_TEMPLATES.likert5["1"]).toBe("Strongly disagree");
+      expect(QUICK_VALUE_LABEL_TEMPLATES.likert5["5"]).toBe("Strongly agree");
+      expect(QUICK_VALUE_LABEL_TEMPLATES.gender).toEqual({
+        "1": "Male",
+        "2": "Female",
+        "3": "Other",
+      });
+      expect(QUICK_VALUE_LABEL_TEMPLATES.binary).toEqual({
+        "0": "No",
+        "1": "Yes",
+      });
     });
 
     it("adds and updates value-label pairs immutably with validation", () => {
+      setLocale("vi");
       const initial = { "1": "Nam" };
       const added = upsertValueLabel(initial, " 2 ", " Nữ ");
       expect(added.error).toBeUndefined();
@@ -54,13 +75,20 @@ describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
       expect(initial).toEqual({ "1": "Nam", "2": "Nữ" });
     });
 
-    it("formats value labels summary for grid display", () => {
+    it("formats value labels summary for grid display in active locale", () => {
+      setLocale("en");
       expect(formatValueLabelsSummary(undefined)).toBe("None");
       expect(formatValueLabelsSummary({})).toBe("None");
+      expect(formatValueLabelsSummary({ "1": "Male", "2": "Female" })).toContain('1="Male"');
+
+      setLocale("vi");
+      expect(formatValueLabelsSummary(undefined)).toBe("Không");
+      expect(formatValueLabelsSummary({})).toBe("Không");
       expect(formatValueLabelsSummary({ "1": "Nam", "2": "Nữ" })).toContain('1="Nam"');
     });
 
     it("renders nothing when isOpen is false and renders 2-column modal when open", () => {
+      setLocale("vi");
       const closedHtml = renderToStaticMarkup(
         <ValueLabelsModal
           isOpen={false}
@@ -106,13 +134,20 @@ describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
       expect(tooMany.error).toBeDefined();
     });
 
-    it("formats missing values summary for grid display", () => {
+    it("formats missing values summary for grid display in active locale", () => {
+      setLocale("en");
       expect(formatMissingValuesSummary(undefined)).toBe("None");
       expect(formatMissingValuesSummary([])).toBe("None");
+      expect(formatMissingValuesSummary(["99", "999"])).toBe("99, 999");
+
+      setLocale("vi");
+      expect(formatMissingValuesSummary(undefined)).toBe("Không");
+      expect(formatMissingValuesSummary([])).toBe("Không");
       expect(formatMissingValuesSummary(["99", "999"])).toBe("99, 999");
     });
 
     it("renders nothing when isOpen is false and renders mode options when open", () => {
+      setLocale("en");
       const closedHtml = renderToStaticMarkup(
         <MissingValuesModal
           isOpen={false}

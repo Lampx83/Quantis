@@ -1,27 +1,60 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { X, Plus, Trash2, Sparkles, Check, Tag } from "lucide-react";
+import { t, getLocale } from "../../../i18n";
 
-export const QUICK_VALUE_LABEL_TEMPLATES: Record<
+export function getQuickValueLabelTemplates(): Record<
   "likert5" | "gender" | "binary",
   Record<string, string>
-> = {
-  likert5: {
-    "1": "Hoàn toàn không đồng ý",
-    "2": "Không đồng ý",
-    "3": "Trung lập",
-    "4": "Đồng ý",
-    "5": "Hoàn toàn đồng ý",
-  },
-  gender: {
-    "1": "Nam",
-    "2": "Nữ",
-    "3": "Khác",
-  },
-  binary: {
-    "0": "Không",
-    "1": "Có",
-  },
-};
+> {
+  const locale = getLocale();
+  if (locale === "vi") {
+    return {
+      likert5: {
+        "1": "Hoàn toàn không đồng ý",
+        "2": "Không đồng ý",
+        "3": "Trung lập",
+        "4": "Đồng ý",
+        "5": "Hoàn toàn đồng ý",
+      },
+      gender: {
+        "1": "Nam",
+        "2": "Nữ",
+        "3": "Khác",
+      },
+      binary: {
+        "0": "Không",
+        "1": "Có",
+      },
+    };
+  }
+  return {
+    likert5: {
+      "1": "Strongly disagree",
+      "2": "Disagree",
+      "3": "Neutral",
+      "4": "Agree",
+      "5": "Strongly agree",
+    },
+    gender: {
+      "1": "Male",
+      "2": "Female",
+      "3": "Other",
+    },
+    binary: {
+      "0": "No",
+      "1": "Yes",
+    },
+  };
+}
+
+export const QUICK_VALUE_LABEL_TEMPLATES = new Proxy(
+  {} as Record<"likert5" | "gender" | "binary", Record<string, string>>,
+  {
+    get(_target, prop: "likert5" | "gender" | "binary") {
+      return getQuickValueLabelTemplates()[prop];
+    },
+  }
+);
 
 export function upsertValueLabel(
   current: Record<string, string>,
@@ -32,10 +65,10 @@ export function upsertValueLabel(
   const lbl = rawLabel.trim();
 
   if (!val) {
-    return { next: current, error: "Vui lòng nhập giá trị mã hóa (Value)." };
+    return { next: current, error: t("valueLabelsModal.errorEmptyValue") };
   }
   if (!lbl) {
-    return { next: current, error: "Vui lòng nhập nhãn hiển thị (Label)." };
+    return { next: current, error: t("valueLabelsModal.errorEmptyLabel") };
   }
 
   return {
@@ -58,9 +91,10 @@ export function removeValueLabel(
 export function formatValueLabelsSummary(
   valueLabels?: Record<string, string>
 ): string {
-  if (!valueLabels) return "None";
+  const noneText = t("variableView.noneValue");
+  if (!valueLabels) return noneText;
   const entries = Object.entries(valueLabels);
-  if (entries.length === 0) return "None";
+  if (entries.length === 0) return noneText;
   const sorted = [...entries].sort(([a], [b]) => {
     const na = Number(a);
     const nb = Number(b);
@@ -157,8 +191,9 @@ export function ValueLabelsModal({
     }
   };
 
-  const applyTemplate = (templateKey: keyof typeof QUICK_VALUE_LABEL_TEMPLATES) => {
-    setLabels({ ...QUICK_VALUE_LABEL_TEMPLATES[templateKey] });
+  const applyTemplate = (templateKey: "likert5" | "gender" | "binary") => {
+    const templates = getQuickValueLabelTemplates();
+    setLabels({ ...templates[templateKey] });
     setSelectedKey(null);
     setInputValue("");
     setInputLabel("");
@@ -169,6 +204,8 @@ export function ValueLabelsModal({
     onSave(labels);
     onClose();
   };
+
+  const titlePrefix = t("valueLabelsModal.title", { name: "" }).split("—")[0].trim();
 
   return (
     <div
@@ -193,11 +230,11 @@ export function ValueLabelsModal({
                 id="value-labels-modal-title"
                 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
               >
-                Nhãn giá trị (Value Labels) —{" "}
+                {titlePrefix} —{" "}
                 <span className="font-mono text-brand">{variableName}</span>
               </h3>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Ánh xạ mã số sang nhãn định tính hiển thị trên bảng và báo cáo
+                {t("valueLabelsModal.subtitle")}
               </p>
             </div>
           </div>
@@ -205,7 +242,7 @@ export function ValueLabelsModal({
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-neutral-500 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors"
-            aria-label="Đóng"
+            aria-label={t("variableView.closeBanner")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -215,28 +252,28 @@ export function ValueLabelsModal({
         <div className="px-5 py-2.5 bg-neutral-100/70 dark:bg-neutral-800/30 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 dark:text-neutral-400 mr-1">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            Mẫu nhanh:
+            {t("valueLabelsModal.quickTemplates")}
           </span>
           <button
             type="button"
             onClick={() => applyTemplate("likert5")}
             className="px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:border-brand hover:text-brand transition-colors"
           >
-            Likert 5 mức (1→5)
+            {t("valueLabelsModal.templateLikert5")}
           </button>
           <button
             type="button"
             onClick={() => applyTemplate("gender")}
             className="px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:border-brand hover:text-brand transition-colors"
           >
-            Giới tính (1=Nam, 2=Nữ, 3=Khác)
+            {t("valueLabelsModal.templateGender")}
           </button>
           <button
             type="button"
             onClick={() => applyTemplate("binary")}
             className="px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:border-brand hover:text-brand transition-colors"
           >
-            Nhị phân Có/Không (0/1)
+            {t("valueLabelsModal.templateBinary")}
           </button>
           {sortedEntries.length > 0 && (
             <button
@@ -247,7 +284,7 @@ export function ValueLabelsModal({
               }}
               className="ml-auto px-2 py-1 rounded-md text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
             >
-              Xóa tất cả
+              {t("valueLabelsModal.clearAll")}
             </button>
           )}
         </div>
@@ -258,7 +295,7 @@ export function ValueLabelsModal({
           <form onSubmit={handleUpsert} className="md:col-span-5 flex flex-col gap-3">
             <div>
               <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                Giá trị mã hóa (Value)
+                {t("valueLabelsModal.valueFieldLabel")}
               </label>
               <input
                 type="text"
@@ -267,14 +304,14 @@ export function ValueLabelsModal({
                   setInputValue(e.target.value);
                   if (error) setError(null);
                 }}
-                placeholder="VD: 1"
+                placeholder={t("valueLabelsModal.valuePlaceholder")}
                 className="w-full px-3 py-1.5 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                Nhãn diễn giải (Label)
+                {t("valueLabelsModal.labelFieldLabel")}
               </label>
               <input
                 type="text"
@@ -283,7 +320,7 @@ export function ValueLabelsModal({
                   setInputLabel(e.target.value);
                   if (error) setError(null);
                 }}
-                placeholder="VD: Hoàn toàn không đồng ý"
+                placeholder={t("valueLabelsModal.labelPlaceholder")}
                 className="w-full px-3 py-1.5 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
@@ -301,8 +338,8 @@ export function ValueLabelsModal({
               >
                 <Plus className="w-3.5 h-3.5" />
                 {inputValue.trim() && labels[inputValue.trim()] !== undefined
-                  ? "Cập nhật (Change)"
-                  : "Thêm (Add)"}
+                  ? t("valueLabelsModal.updateButton")
+                  : t("valueLabelsModal.addButton")}
               </button>
               {selectedKey && labels[selectedKey] !== undefined && (
                 <button
@@ -311,7 +348,7 @@ export function ValueLabelsModal({
                   className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Xóa (Remove)
+                  {t("valueLabelsModal.removeButton")}
                 </button>
               )}
             </div>
@@ -321,17 +358,17 @@ export function ValueLabelsModal({
           <div className="md:col-span-7 flex flex-col">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                Danh sách ánh xạ ({sortedEntries.length})
+                {t("valueLabelsModal.mappingListTitle", { count: sortedEntries.length })}
               </span>
               <span className="text-[11px] text-neutral-400">
-                Nhấn vào dòng để sửa
+                {t("valueLabelsModal.mappingListHint")}
               </span>
             </div>
 
             <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50/50 dark:bg-neutral-950/40 h-56 overflow-y-auto divide-y divide-neutral-200/70 dark:divide-neutral-800">
               {sortedEntries.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-xs text-neutral-400 p-4 text-center">
-                  Chưa có nhãn giá trị nào. Nhập Value & Label bên trái hoặc chọn Mẫu nhanh ở trên.
+                  {t("valueLabelsModal.emptyList")}
                 </div>
               ) : (
                 sortedEntries.map(([k, v]) => {
@@ -360,7 +397,7 @@ export function ValueLabelsModal({
                           handleRemoveKey(k);
                         }}
                         className="p-1 rounded text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                        title="Xóa nhãn này"
+                        title={t("valueLabelsModal.removeLabelTitle")}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -379,7 +416,7 @@ export function ValueLabelsModal({
             onClick={onClose}
             className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
           >
-            Hủy (Cancel)
+            {t("valueLabelsModal.cancelButton")}
           </button>
           <button
             type="button"
@@ -387,7 +424,7 @@ export function ValueLabelsModal({
             className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
           >
             <Check className="w-3.5 h-3.5" />
-            Lưu thay đổi (Save)
+            {t("valueLabelsModal.saveButton")}
           </button>
         </div>
       </div>

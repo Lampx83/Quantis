@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, AlertCircle, Check } from "lucide-react";
+import { t } from "../../../i18n";
 
 export type MissingValuesMode = "none" | "discrete";
 
@@ -14,7 +15,7 @@ export function parseAndValidateDiscreteMissing(inputs: string[]): {
     return {
       valid: false,
       values: cleaned.slice(0, 3),
-      error: "Chỉ cho phép tối đa 3 mã khuyết thiếu rời rạc (Discrete missing values).",
+      error: t("missingValuesModal.errorMaxCodes"),
     };
   }
 
@@ -23,7 +24,7 @@ export function parseAndValidateDiscreteMissing(inputs: string[]): {
     return {
       valid: false,
       values: cleaned,
-      error: "Các mã khuyết thiếu rời rạc không được trùng lặp nhau.",
+      error: t("missingValuesModal.errorDuplicateCodes"),
     };
   }
 
@@ -34,7 +35,7 @@ export function parseAndValidateDiscreteMissing(inputs: string[]): {
 }
 
 export function formatMissingValuesSummary(missingValues?: string[]): string {
-  if (!missingValues || missingValues.length === 0) return "None";
+  if (!missingValues || missingValues.length === 0) return t("variableView.noneValue");
   return missingValues.join(", ");
 }
 
@@ -118,13 +119,15 @@ export function MissingValuesModal({
 
     const validation = parseAndValidateDiscreteMissing(slots);
     if (!validation.valid) {
-      setError(validation.error ?? "Giá trị không hợp lệ.");
+      setError(validation.error ?? t("missingValuesModal.errorInvalidValue"));
       return;
     }
 
     onSave(validation.values);
     onClose();
   };
+
+  const titlePrefix = t("missingValuesModal.title", { name: "" }).split("—")[0].trim();
 
   return (
     <div
@@ -149,11 +152,11 @@ export function MissingValuesModal({
                 id="missing-values-modal-title"
                 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100"
               >
-                Giá trị khuyết thiếu (Missing Values) —{" "}
+                {titlePrefix} —{" "}
                 <span className="font-mono text-brand">{variableName}</span>
               </h3>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Định nghĩa mã số quy ước khuyết dữ liệu (tự động loại trừ khi phân tích)
+                {t("missingValuesModal.subtitle")}
               </p>
             </div>
           </div>
@@ -161,7 +164,7 @@ export function MissingValuesModal({
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-neutral-500 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors"
-            aria-label="Đóng"
+            aria-label={t("variableView.closeBanner")}
           >
             <X className="w-4 h-4" />
           </button>
@@ -189,10 +192,10 @@ export function MissingValuesModal({
             />
             <div>
               <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
-                No missing values (Không có mã khuyết thiếu)
+                {t("missingValuesModal.optionNoneTitle")}
               </div>
               <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                Chỉ xem các ô trống (rỗng) là dữ liệu khuyết thiếu.
+                {t("missingValuesModal.optionNoneDesc")}
               </div>
             </div>
           </label>
@@ -215,12 +218,10 @@ export function MissingValuesModal({
               />
               <div>
                 <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
-                  Discrete missing values (Mã khuyết thiếu rời rạc)
+                  {t("missingValuesModal.optionDiscreteTitle")}
                 </div>
                 <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                  Nhập tối đa 3 mã quy ước (VD: <code className="font-mono">99</code>,{" "}
-                  <code className="font-mono">999</code>,{" "}
-                  <code className="font-mono">-1</code>).
+                  {t("missingValuesModal.optionDiscreteDesc")}
                 </div>
               </div>
             </label>
@@ -230,7 +231,7 @@ export function MissingValuesModal({
                 {([0, 1, 2] as const).map((idx) => (
                   <div key={idx}>
                     <label className="block text-[11px] text-neutral-500 dark:text-neutral-400 mb-1">
-                      Mã {idx + 1}
+                      {t("missingValuesModal.codeSlot", { index: idx + 1 })}
                     </label>
                     <input
                       type="text"
@@ -244,7 +245,7 @@ export function MissingValuesModal({
               </div>
 
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-neutral-500">Gợi ý nhanh:</span>
+                <span className="text-[11px] text-neutral-500">{t("missingValuesModal.quickPresets")}</span>
                 <button
                   type="button"
                   onClick={() => applyPreset(["99", "", ""])}
@@ -276,14 +277,14 @@ export function MissingValuesModal({
               onClick={onClose}
               className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
             >
-              Hủy (Cancel)
+              {t("missingValuesModal.cancelButton")}
             </button>
             <button
               type="submit"
               className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
             >
               <Check className="w-3.5 h-3.5" />
-              Lưu thay đổi (Save)
+              {t("missingValuesModal.saveButton")}
             </button>
           </div>
         </form>

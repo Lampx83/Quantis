@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
+import { t } from "../../../i18n";
 
 export type GridContextMenuTarget =
   | {
@@ -83,7 +84,7 @@ export function GridContextMenu({
       {menu.type === "column" ? (
         <>
           <div className="px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 font-mono font-semibold text-brand truncate">
-            Biến: {menu.colName}
+            {t("gridContextMenu.colHeader", { name: menu.colName })}
           </div>
           <button
             type="button"
@@ -94,7 +95,7 @@ export function GridContextMenu({
             className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <ArrowUpAZ className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Sắp xếp tăng dần (Asc)</span>
+            <span>{t("gridContextMenu.sortAsc")}</span>
           </button>
           <button
             type="button"
@@ -105,7 +106,7 @@ export function GridContextMenu({
             className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <ArrowDownZA className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Sắp xếp giảm dần (Desc)</span>
+            <span>{t("gridContextMenu.sortDesc")}</span>
           </button>
           <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
           <button
@@ -117,7 +118,7 @@ export function GridContextMenu({
             className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <Pencil className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Đổi tên biến...</span>
+            <span>{t("gridContextMenu.renameCol")}</span>
           </button>
           <button
             type="button"
@@ -128,7 +129,7 @@ export function GridContextMenu({
             className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <Plus className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Thêm biến mới</span>
+            <span>{t("gridContextMenu.insertCol")}</span>
           </button>
           {canDeleteColumn && (
             <button
@@ -140,14 +141,14 @@ export function GridContextMenu({
               className="w-full px-3 py-1.5 text-left flex items-center gap-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Xóa biến &ldquo;{menu.colName}&rdquo;</span>
+              <span>{t("gridContextMenu.deleteCol", { name: menu.colName })}</span>
             </button>
           )}
         </>
       ) : (
         <>
           <div className="px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-800 font-mono font-semibold text-neutral-600 dark:text-neutral-300">
-            Quan sát #{menu.rowIndex + 1}
+            {t("gridContextMenu.rowHeader", { row: menu.rowIndex + 1 })}
           </div>
           <button
             type="button"
@@ -158,7 +159,7 @@ export function GridContextMenu({
             className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <ArrowUp className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Chèn dòng phía trên</span>
+            <span>{t("gridContextMenu.insertRowAbove")}</span>
           </button>
           <button
             type="button"
@@ -169,7 +170,7 @@ export function GridContextMenu({
             className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             <ArrowDown className="w-3.5 h-3.5 text-neutral-500" />
-            <span>Chèn dòng phía dưới</span>
+            <span>{t("gridContextMenu.insertRowBelow")}</span>
           </button>
           {canDeleteRow && (
             <>
@@ -183,7 +184,7 @@ export function GridContextMenu({
                 className="w-full px-3 py-1.5 text-left flex items-center gap-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Xóa dòng #{menu.rowIndex + 1}</span>
+                <span>{t("gridContextMenu.deleteRow", { row: menu.rowIndex + 1 })}</span>
               </button>
             </>
           )}

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { TransformTab } from "../TransformTab";
 import { useDataStore } from "@/stores/useDataStore";
 import { analyzeMiceImputation } from "@/api";
+import { setLocale, t } from "@/i18n";
 import {
   imputeListwise,
   imputeMeanMedianMode,
@@ -50,6 +51,7 @@ const sampleDatasetWithMissing: Dataset = {
 
 describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
   beforeEach(() => {
+    setLocale("en");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
       selectedDatasetId: "ds_transform_test",
@@ -170,5 +172,31 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(res.imputedColumns).toContain("INCOME");
     expect(res.statistics[0].missingCount).toBe(2);
     expect(res.iterations).toBe(3);
+  });
+
+  it("provides bilingual localization for MICE parameters, descriptions, and reports", () => {
+    // English verification
+    setLocale("en");
+    expect(t("transformTab.mice.maxIterLabel")).toBe("Maximum iterations (max_iter)");
+    expect(t("transformTab.mice.loading")).toBe("Executing MICE imputation via Python backend...");
+    expect(t("transformTab.processing")).toBe("Processing...");
+    expect(t("transformTab.mice.reportTitle")).toBe("MICE Report: Pre & Post Imputation Statistics");
+    expect(t("transformTab.mice.colVariable")).toBe("Variable");
+    expect(t("transformTab.mice.colMissingCount")).toBe("Missing cells");
+    expect(t("transformTab.mice.colOriginalMean")).toBe("Mean (before)");
+    expect(t("transformTab.mice.colImputedMean")).toBe("Mean (after MICE)");
+    expect(t("transformTab.mice.colImputedStd")).toBe("Std (after MICE)");
+
+    // Vietnamese verification
+    setLocale("vi");
+    expect(t("transformTab.mice.maxIterLabel")).toBe("Số vòng lặp tối đa (max_iter)");
+    expect(t("transformTab.mice.loading")).toBe("Đang thực thi nội suy MICE qua Python backend...");
+    expect(t("transformTab.processing")).toBe("Đang xử lý...");
+    expect(t("transformTab.mice.reportTitle")).toBe("Báo cáo MICE: Thống kê trước và sau nội suy");
+    expect(t("transformTab.mice.colVariable")).toBe("Biến số");
+    expect(t("transformTab.mice.colMissingCount")).toBe("Số ô khuyết");
+    expect(t("transformTab.mice.colOriginalMean")).toBe("Mean (trước)");
+    expect(t("transformTab.mice.colImputedMean")).toBe("Mean (sau MICE)");
+    expect(t("transformTab.mice.colImputedStd")).toBe("Std (sau MICE)");
   });
 });

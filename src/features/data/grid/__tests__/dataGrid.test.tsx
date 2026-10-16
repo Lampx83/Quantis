@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { setLocale } from "@/i18n";
 import type { Dataset, VariableMetadata } from "@/types";
 import {
   DataGrid,
@@ -66,6 +67,7 @@ const mockDataset: Dataset = {
 
 describe("Task 6: DataGrid & GridContextMenu", () => {
   beforeEach(() => {
+    setLocale("vi");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(mockDataset))],
       selectedDatasetId: "ds_grid_test",
@@ -253,7 +255,7 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     expect(rowMenuHtml).toContain("Xóa dòng");
   });
 
-  it("renders empty missing cells as (khuyết) with rose background by default even without discrete missing codes", () => {
+  it("renders empty missing cells as (khuyết) or (missing) based on active locale", () => {
     const dsWithEmptyCell: Dataset = {
       ...mockDataset,
       preview: [
@@ -273,11 +275,19 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
       },
     };
 
-    const html = renderToStaticMarkup(
+    setLocale("vi");
+    const htmlVi = renderToStaticMarkup(
       <DataGrid dataset={dsWithEmptyCell} showValueLabels={false} />
     );
-    expect(html).toContain("(khuyết)");
-    expect(html).toContain("bg-rose-50/40");
+    expect(htmlVi).toContain("(khuyết)");
+    expect(htmlVi).toContain("bg-rose-50/40");
+
+    setLocale("en");
+    const htmlEn = renderToStaticMarkup(
+      <DataGrid dataset={dsWithEmptyCell} showValueLabels={false} />
+    );
+    expect(htmlEn).toContain("(missing)");
+    expect(htmlEn).toContain("bg-rose-50/40");
   });
 
   it("prompts confirmation dialog before deleting column or row from DataGrid context menu", () => {

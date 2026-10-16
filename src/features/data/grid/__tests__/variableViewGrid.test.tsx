@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, beforeEach } from "vitest";
 import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { setLocale } from "@/i18n";
 import type { Dataset } from "@/types";
 import {
   VariableViewGrid,
@@ -66,6 +67,7 @@ const sampleDataset: Dataset = {
 
 describe("Task 5: VariableViewGrid", () => {
   beforeEach(() => {
+    setLocale("en");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(sampleDataset))],
       selectedDatasetId: "ds_var_view",
@@ -98,38 +100,59 @@ describe("Task 5: VariableViewGrid", () => {
     expect(toNumericPatch.align).toBe("right");
   });
 
-  it("renders all 10 standard SPSS columns and all variables in the dataset", () => {
-    const html = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
+  it("renders all 10 standard SPSS columns and all variables in the dataset bilingually", () => {
+    setLocale("en");
+    const htmlEn = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
 
-    // 10 standard SPSS columns
-    expect(html).toContain("#");
-    expect(html).toContain("Name");
-    expect(html).toContain("Type");
-    expect(html).toContain("Width");
-    expect(html).toContain("Decimals");
-    expect(html).toContain("Label");
-    expect(html).toContain("Values");
-    expect(html).toContain("Missing");
-    expect(html).toContain("Align");
-    expect(html).toContain("Measure");
+    // 10 standard SPSS columns in English
+    expect(htmlEn).toContain("#");
+    expect(htmlEn).toContain("Name");
+    expect(htmlEn).toContain("Type");
+    expect(htmlEn).toContain("Width");
+    expect(htmlEn).toContain("Decimals");
+    expect(htmlEn).toContain("Label");
+    expect(htmlEn).toContain("Values");
+    expect(htmlEn).toContain("Missing");
+    expect(htmlEn).toContain("Align");
+    expect(htmlEn).toContain("Measure");
 
     // Variable rows & values
-    expect(html).toContain('value="Q1_SAT"');
-    expect(html).toContain('value="GENDER"');
-    expect(html).toContain('value="COMMENTS"');
-    expect(html).toContain("Mức độ hài lòng chung");
-    expect(html).toContain("1=&quot;Rất không hài lòng&quot;");
-    expect(html).toContain("99");
+    expect(htmlEn).toContain('value="Q1_SAT"');
+    expect(htmlEn).toContain('value="GENDER"');
+    expect(htmlEn).toContain('value="COMMENTS"');
+    expect(htmlEn).toContain("Mức độ hài lòng chung");
+    expect(htmlEn).toContain("1=&quot;Rất không hài lòng&quot;");
+    expect(htmlEn).toContain("99");
 
     // Modal trigger buttons [...]
-    expect(html).toContain("...");
+    expect(htmlEn).toContain("...");
+
+    // Test Vietnamese headers
+    setLocale("vi");
+    const htmlVi = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
+    expect(htmlVi).toContain("Tên biến");
+    expect(htmlVi).toContain("Kiểu");
+    expect(htmlVi).toContain("Độ rộng");
+    expect(htmlVi).toContain("Thập phân");
+    expect(htmlVi).toContain("Nhãn biến số");
+    expect(htmlVi).toContain("Nhãn giá trị");
+    expect(htmlVi).toContain("Giá trị khuyết");
+    expect(htmlVi).toContain("Căn lề");
+    expect(htmlVi).toContain("Thang đo");
   });
 
-  it("renders top toolbar with variable count, search box, and add variable button", () => {
-    const html = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
-    expect(html).toContain("Variable View — Quản trị Thuộc tính Biến số (3 biến)");
-    expect(html).toContain("Tìm theo tên hoặc nhãn...");
-    expect(html).toContain("Thêm biến");
+  it("renders top toolbar with variable count, search box, and add variable button bilingually", () => {
+    setLocale("vi");
+    const htmlVi = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
+    expect(htmlVi).toContain("Variable View — Quản trị Thuộc tính Biến số (3 biến)");
+    expect(htmlVi).toContain("Tìm theo tên hoặc nhãn...");
+    expect(htmlVi).toContain("Thêm biến");
+
+    setLocale("en");
+    const htmlEn = renderToStaticMarkup(<VariableViewGrid dataset={sampleDataset} />);
+    expect(htmlEn).toContain("Variable View — Manage Variable Metadata (3 variables)");
+    expect(htmlEn).toContain("Search by name or label...");
+    expect(htmlEn).toContain("Add Variable");
   });
 
   it("hides Scale option in Measure dropdown for string variables but retains it for numeric", () => {

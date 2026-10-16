@@ -24,6 +24,7 @@ import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { MeasureIcon } from "./VariableViewGrid";
 import { GridContextMenu, type GridContextMenuTarget } from "./GridContextMenu";
+import { t } from "@/i18n";
 
 export const DATA_GRID_PAGE_SIZE_DEFAULT = 100;
 export const DATA_GRID_PAGE_SIZES = [20, 50, 100, 200] as const;
@@ -335,7 +336,7 @@ export function DataGrid({
   if (!enrichedDataset) {
     return (
       <div className="p-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-        Chưa chọn bộ dữ liệu nào để hiển thị Data View.
+        {t("variableView.selectDatasetPrompt")}
       </div>
     );
   }
@@ -413,11 +414,16 @@ export function DataGrid({
         renamingCol.oldName
       );
       if (!check.valid) {
-        if (showToast) showToast(check.error ?? "Tên biến không hợp lệ.");
+        if (showToast) showToast(check.error ?? t("missingValuesModal.errorInvalidValue"));
       } else {
         renameVariable(renamingCol.oldName, trimmed, enrichedDataset.id);
         if (showToast) {
-          showToast(`Đã đổi tên biến "${renamingCol.oldName}" → "${trimmed}"`);
+          showToast(
+            t("dataGrid.renameVarSuccessToast", {
+              oldName: renamingCol.oldName,
+              newName: trimmed,
+            })
+          );
         }
       }
     }
@@ -447,7 +453,7 @@ export function DataGrid({
       undefined,
       enrichedDataset.id
     );
-    if (showToast) showToast(`Đã thêm biến "${newName}"`);
+    if (showToast) showToast(t("dataGrid.addVarSuccessToast", { name: newName }));
   };
 
   return (
@@ -515,7 +521,7 @@ export function DataGrid({
           e.preventDefault();
           batchUpdateCells(updates, enrichedDataset.id);
           if (showToast) {
-            showToast(`Đã dán ${updates.length} ô dữ liệu từ Clipboard.`);
+            showToast(t("dataGrid.pasteClipboardToast", { count: updates.length }));
           }
         }
       }}
@@ -532,7 +538,7 @@ export function DataGrid({
               {enrichedDataset.name}
             </span>
             <span className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">
-              {dataRows.length} dòng × {headers.length} cột
+              {t("dataGrid.dimensions", { rows: dataRows.length, cols: headers.length })}
             </span>
 
             {/* Toggle Value Labels Button */}
@@ -544,14 +550,14 @@ export function DataGrid({
                   ? "bg-brand/10 border-brand/40 text-brand font-medium dark:bg-brand/20"
                   : "border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300"
               }`}
-              title="Bật/Tắt hiển thị nhãn giá trị (Value Labels) thay cho mã số thô"
+              title={t("dataGrid.valueLabelsToggleTitle")}
             >
               {effectiveShowValueLabels ? (
                 <Eye className="w-3.5 h-3.5" />
               ) : (
                 <EyeOff className="w-3.5 h-3.5" />
               )}
-              <span>Value Labels</span>
+              <span>{t("dataGrid.valueLabelsToggle")}</span>
             </button>
           </div>
 
@@ -568,7 +574,7 @@ export function DataGrid({
                   else setInternalSearch(val);
                   setPage(1);
                 }}
-                placeholder="Lọc dòng nhanh..."
+                placeholder={t("dataGrid.quickFilterPlaceholder")}
                 className="pl-7 pr-6 py-1 text-xs border border-neutral-200 dark:border-neutral-700 rounded-md bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 focus:outline-hidden focus:ring-1 focus:ring-brand w-36 sm:w-48"
               />
               {effectiveQuery && (
@@ -580,7 +586,7 @@ export function DataGrid({
                     setPage(1);
                   }}
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
-                  aria-label="Xóa lọc"
+                  aria-label={t("dataGrid.clearFilterAriaLabel")}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -592,13 +598,13 @@ export function DataGrid({
               type="button"
               onClick={() => {
                 addRow(undefined, undefined, enrichedDataset.id);
-                if (showToast) showToast("Đã thêm một dòng quan sát mới");
+                if (showToast) showToast(t("dataGrid.addRowSuccessToast"));
               }}
               className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-md shadow-2xs transition"
-              title="Thêm một dòng quan sát mới vào cuối bảng"
+              title={t("dataGrid.addRowTitle")}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Dòng</span>
+              <span>{t("dataGrid.addRowButton")}</span>
             </button>
           </div>
         </div>
@@ -663,8 +669,8 @@ export function DataGrid({
                           className="flex items-center gap-1.5 truncate flex-1"
                           title={
                             meta?.label
-                              ? `${colName} — ${meta.label} (Click để sắp xếp)`
-                              : `${colName} (Click để sắp xếp)`
+                              ? `${colName} — ${meta.label} (${t("dataGrid.clickToSort")})`
+                              : `${colName} (${t("dataGrid.clickToSort")})`
                           }
                         >
                           <MeasureIcon measure={measure} />
@@ -676,7 +682,7 @@ export function DataGrid({
                           type="button"
                           onClick={() => handleSortToggle(ci)}
                           className="opacity-0 group-hover:opacity-100 p-0.5 text-neutral-400 hover:text-neutral-600 transition"
-                          title="Sắp xếp"
+                          title={t("dataGrid.sortColumn")}
                         >
                           <ArrowUpDown className="w-3 h-3" />
                         </button>
@@ -684,7 +690,9 @@ export function DataGrid({
                           <span
                             className="text-[11px] font-bold text-brand"
                             aria-label={
-                              sortDir === "asc" ? "Tăng dần" : "Giảm dần"
+                              sortDir === "asc"
+                                ? t("dataGrid.sortAscending")
+                                : t("dataGrid.sortDescending")
                             }
                           >
                             {sortDir === "asc" ? "↑" : "↓"}
@@ -705,7 +713,7 @@ export function DataGrid({
                   colSpan={headers.length + 1}
                   className="py-12 text-center text-xs text-neutral-400 dark:text-neutral-500"
                 >
-                  Không có dòng dữ liệu nào khớp với tìm kiếm.
+                  {t("variableView.emptySearch", { query: effectiveQuery })}
                 </td>
               </tr>
             ) : (
@@ -832,16 +840,16 @@ export function DataGrid({
                               }`}
                               title={
                                 formatted.isLabel
-                                  ? `Giá trị mã hóa gốc: ${rawValue}`
+                                  ? t("dataGrid.rawCodeTooltip", { value: rawValue })
                                   : formatted.isMissingCode
-                                  ? `Mã khuyết thiếu (${rawValue})`
+                                  ? t("dataGrid.missingCodeTooltip", { code: rawValue })
                                   : isMissing && rawValue.trim() === ""
-                                  ? "Dữ liệu khuyết thiếu"
+                                  ? t("dataGrid.missingCellTooltip")
                                   : undefined
                               }
                             >
                               {rawValue.trim() === "" && isMissing
-                                ? "(khuyết)"
+                                ? t("dataGrid.missingCellText")
                                 : formatted.text}
                             </div>
                           )}
@@ -860,32 +868,24 @@ export function DataGrid({
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-800/40 text-xs text-neutral-600 dark:text-neutral-400">
         <div className="flex items-center gap-2">
           <span>
-            Hiển thị{" "}
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 font-mono">
-              {filteredAndSorted.length === 0 ? 0 : startIdx + 1}
-            </span>{" "}
-            -{" "}
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 font-mono">
-              {endIdx}
-            </span>{" "}
-            /{" "}
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 font-mono">
-              {filteredAndSorted.length}
-            </span>{" "}
-            dòng
+            {t("dataGrid.paginationShowing", {
+              start: filteredAndSorted.length === 0 ? 0 : startIdx + 1,
+              end: endIdx,
+              total: filteredAndSorted.length,
+            })}
           </span>
 
           <span className="text-neutral-300 dark:text-neutral-700">|</span>
 
           <label className="flex items-center gap-1.5">
-            <span>Dòng/trang:</span>
+            <span>{t("dataGrid.rowsPerPage")}</span>
             <select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setPage(1);
               }}
-              aria-label="Kích thước trang"
+              aria-label={t("dataGrid.pageSizeAriaLabel")}
               className="px-1.5 py-0.5 border border-neutral-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-brand"
             >
               {DATA_GRID_PAGE_SIZES.map((sz) => (
@@ -903,7 +903,7 @@ export function DataGrid({
             onClick={() => setPage(1)}
             disabled={safePage <= 1}
             className="p-1 rounded border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-30 transition"
-            title="Trang đầu"
+            title={t("dataGrid.firstPage")}
           >
             <ChevronsLeft className="w-3.5 h-3.5" />
           </button>
@@ -912,19 +912,19 @@ export function DataGrid({
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={safePage <= 1}
             className="p-1 rounded border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-30 transition"
-            title="Trang trước"
+            title={t("dataGrid.prevPage")}
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <span className="px-2 font-mono font-semibold text-neutral-800 dark:text-neutral-200">
-            Trang {safePage} / {totalPages}
+            {t("dataGrid.pageIndicator", { page: safePage, totalPages })}
           </span>
           <button
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={safePage >= totalPages}
             className="p-1 rounded border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-30 transition"
-            title="Trang kế"
+            title={t("dataGrid.nextPage")}
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -933,7 +933,7 @@ export function DataGrid({
             onClick={() => setPage(totalPages)}
             disabled={safePage >= totalPages}
             className="p-1 rounded border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-30 transition"
-            title="Trang cuối"
+            title={t("dataGrid.lastPage")}
           >
             <ChevronsRight className="w-3.5 h-3.5" />
           </button>
@@ -963,39 +963,39 @@ export function DataGrid({
         onDeleteColumn={(colName) => {
           if (setConfirmDialog) {
             setConfirmDialog({
-              message: `Bạn có chắc chắn muốn xóa biến "${colName}" cùng toàn bộ dữ liệu cột này không?`,
+              message: t("dataGrid.deleteColConfirm", { name: colName }),
               onConfirm: () => {
                 removeVariable(colName, enrichedDataset.id);
-                if (showToast) showToast(`Đã xóa biến "${colName}"`);
+                if (showToast) showToast(t("dataGrid.deleteColToast", { name: colName }));
                 setConfirmDialog(null);
               },
             });
           } else {
             removeVariable(colName, enrichedDataset.id);
-            if (showToast) showToast(`Đã xóa biến "${colName}"`);
+            if (showToast) showToast(t("dataGrid.deleteColToast", { name: colName }));
           }
         }}
         onInsertRowAbove={(rIdx) => {
           addRow(undefined, rIdx, enrichedDataset.id);
-          if (showToast) showToast(`Đã chèn dòng mới tại vị trí #${rIdx + 1}`);
+          if (showToast) showToast(t("dataGrid.insertRowAboveToast", { row: rIdx + 1 }));
         }}
         onInsertRowBelow={(rIdx) => {
           addRow(undefined, rIdx + 1, enrichedDataset.id);
-          if (showToast) showToast(`Đã chèn dòng mới tại vị trí #${rIdx + 2}`);
+          if (showToast) showToast(t("dataGrid.insertRowBelowToast", { row: rIdx + 2 }));
         }}
         onDeleteRow={(rIdx) => {
           if (setConfirmDialog) {
             setConfirmDialog({
-              message: `Bạn có chắc chắn muốn xóa quan sát dòng #${rIdx + 1} không?`,
+              message: t("dataGrid.deleteRowConfirm", { row: rIdx + 1 }),
               onConfirm: () => {
                 removeRow(rIdx, enrichedDataset.id);
-                if (showToast) showToast(`Đã xóa dòng quan sát #${rIdx + 1}`);
+                if (showToast) showToast(t("dataGrid.deleteRowToast", { row: rIdx + 1 }));
                 setConfirmDialog(null);
               },
             });
           } else {
             removeRow(rIdx, enrichedDataset.id);
-            if (showToast) showToast(`Đã xóa dòng quan sát #${rIdx + 1}`);
+            if (showToast) showToast(t("dataGrid.deleteRowToast", { row: rIdx + 1 }));
           }
         }}
       />

@@ -36,6 +36,23 @@ describe("Metadata Utilities", () => {
       expect(validateVariableName("gender", ["AGE", "GENDER"], "AGE").valid).toBe(false);
       expect(validateVariableName("GENDER", ["AGE", "GENDER"], "AGE").valid).toBe(false);
     });
+
+    it("should return localized error messages based on active locale", async () => {
+      const { setLocale } = await import("../../i18n");
+      setLocale("vi");
+      expect(validateVariableName("").error).toBe("Tên biến không được để trống.");
+      expect(validateVariableName("1VAR").error).toBe(
+        "Tên biến chỉ được chứa chữ cái, số và dấu gạch dưới, không bắt đầu bằng số hoặc chứa khoảng trắng."
+      );
+      expect(validateVariableName("AGE", ["AGE"]).error).toBe('Tên biến "AGE" đã tồn tại trong bộ dữ liệu.');
+
+      setLocale("en");
+      expect(validateVariableName("").error).toBe("Variable name cannot be empty.");
+      expect(validateVariableName("1VAR").error).toBe(
+        "Variable name must start with a letter or underscore and contain only letters, numbers, and underscores without spaces."
+      );
+      expect(validateVariableName("AGE", ["AGE"]).error).toBe('Variable name "AGE" already exists in the dataset.');
+    });
   });
   describe("inferVariableMetadata", () => {
     it("should infer numeric scale variable for continuous numbers", () => {

@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
+import { setLocale } from "@/i18n";
 import type { Dataset } from "@/types";
 import * as DataFeatureExports from "../../index";
 import { DataView } from "../../DataView";
@@ -51,6 +52,7 @@ const mockDataset: Dataset = {
 
 describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
   beforeEach(() => {
+    setLocale("en");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(mockDataset))],
       selectedDatasetId: "ds_workspace",
@@ -84,7 +86,8 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
     expect(html).not.toContain("Variable View");
   });
 
-  it("renders DataGrid, Value Labels toggle button, and bottom-left tab strip in Data View mode", () => {
+  it("renders DataGrid, Value Labels toggle button, and bottom-left tab strip in Data View mode bilingually", () => {
+    setLocale("en");
     useUIStore.setState({ dataEditorView: "data", showValueLabels: true });
     const ds = useDataStore.getState().datasets[0];
 
@@ -103,6 +106,20 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
     expect(html).toContain("Value Labels");
     expect(html).toContain("Nam");
     expect(html).toContain("Rất hài lòng");
+
+    setLocale("vi");
+    const htmlVi = renderToStaticMarkup(
+      <DataView
+        tab="preview"
+        datasets={[ds]}
+        setDatasets={vi.fn()}
+        selectedDatasetId="ds_workspace"
+        onSelectDataset={vi.fn()}
+      />
+    );
+    expect(htmlVi).toContain("Xem Dữ liệu");
+    expect(htmlVi).toContain("Xem Biến số");
+    expect(htmlVi).toContain("Nhãn Giá trị");
   });
 
   it("renders VariableViewGrid when switched to Variable View and reflects metadata updates immediately in Data View", () => {

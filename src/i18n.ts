@@ -23,7 +23,10 @@ function isEmbedded(): boolean {
   }
 }
 
+let memoryLocale: Locale | null = null
+
 export function getLocale(): Locale {
+  if (memoryLocale) return memoryLocale
   if (typeof window === "undefined") return "en"
   try {
     const fromQuery = new URLSearchParams(window.location.search).get("locale")
@@ -40,7 +43,7 @@ export function getLocale(): Locale {
     return "en"
   }
   try {
-    const stored = localStorage.getItem(STORAGE_KEY) as Locale | null
+    const stored = typeof localStorage !== "undefined" ? (localStorage.getItem(STORAGE_KEY) as Locale | null) : null
     if (stored && SUPPORTED.includes(stored)) return stored
     const nav = (navigator.language || "").toLowerCase().split(/[-_]/)[0]
     if (nav === "vi") return "vi"
@@ -52,11 +55,31 @@ export function getLocale(): Locale {
 
 export function setLocale(locale: Locale): void {
   if (!SUPPORTED.includes(locale)) return
+  memoryLocale = locale
   try {
-    localStorage.setItem(STORAGE_KEY, locale)
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, locale)
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("quantis-locale-change"))
+    }
   } catch {
     /* ignore */
   }
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("message", (e: MessageEvent) => {
+    const d = e.data as { type?: string; locale?: string } | null
+    if (d?.type === "portal-locale" && typeof d.locale === "string") {
+      const raw = d.locale.toLowerCase().split(/[-_]/)[0]
+      if (raw === "vi" || raw === "en") {
+        (window as Window).__AI_PORTAL_LOCALE__ = raw
+        memoryLocale = raw
+        window.dispatchEvent(new Event("quantis-locale-change"))
+      }
+    }
+  })
 }
 
 const messages: Record<Locale, Record<string, string>> = {
@@ -1529,6 +1552,142 @@ const messages: Record<Locale, Record<string, string>> = {
   "transformTab.viewDataTabName": "View data",
   "workflowView.subtitle": "Click each step to switch to the corresponding feature.",
   "workflowView.title": "Standard research workflow",
+  "dualView.dataView": "Data View",
+  "dualView.variableView": "Variable View",
+  "dataGrid.dimensions": "{rows} rows × {cols} columns",
+  "dataGrid.valueLabelsToggle": "Value Labels",
+  "dataGrid.valueLabelsToggleTitle": "Toggle Value Labels display instead of raw coded values",
+  "dataGrid.quickFilterPlaceholder": "Quick filter rows...",
+  "dataGrid.clearFilterAriaLabel": "Clear filter",
+  "dataGrid.addRowButton": "Row",
+  "dataGrid.addRowTitle": "Add a new observation row at the end of the table",
+  "dataGrid.addRowSuccessToast": "Added a new observation row",
+  "dataGrid.clickToSort": "Click to sort",
+  "dataGrid.sortColumn": "Sort",
+  "dataGrid.sortAscending": "Ascending",
+  "dataGrid.sortDescending": "Descending",
+  "dataGrid.missingCellText": "(missing)",
+  "dataGrid.missingCellTooltip": "Missing data",
+  "dataGrid.missingCodeTooltip": "Missing code ({code})",
+  "dataGrid.rawCodeTooltip": "Original coded value: {value}",
+  "dataGrid.paginationShowing": "Showing {start} - {end} of {total} rows",
+  "dataGrid.rowsPerPage": "Rows/page:",
+  "dataGrid.pageSizeAriaLabel": "Page size",
+  "dataGrid.pageIndicator": "Page {page} of {totalPages}",
+  "dataGrid.firstPage": "First page",
+  "dataGrid.prevPage": "Previous page",
+  "dataGrid.nextPage": "Next page",
+  "dataGrid.lastPage": "Last page",
+  "dataGrid.pasteClipboardToast": "Pasted {count} data cells from clipboard",
+  "dataGrid.deleteColConfirm": "Are you sure you want to delete variable \"{name}\" and all its column data?",
+  "dataGrid.deleteColToast": "Deleted variable \"{name}\"",
+  "dataGrid.deleteRowConfirm": "Are you sure you want to delete observation row #{row}?",
+  "dataGrid.deleteRowToast": "Deleted observation row #{row}",
+  "dataGrid.insertRowAboveToast": "Inserted new row at #{row}",
+  "dataGrid.insertRowBelowToast": "Inserted new row at #{row}",
+  "dataGrid.renameVarSuccessToast": "Renamed variable \"{oldName}\" → \"{newName}\"",
+  "dataGrid.addVarSuccessToast": "Added variable \"{name}\"",
+  "variableView.title": "Variable View — Manage Variable Metadata ({count} variables)",
+  "variableView.selectDatasetPrompt": "Please select a dataset to inspect Variable View.",
+  "variableView.searchPlaceholder": "Search by name or label...",
+  "variableView.clearSearchTitle": "Clear search",
+  "variableView.addVariableButton": "Add Variable",
+  "variableView.colIndex": "#",
+  "variableView.colName": "Name",
+  "variableView.colType": "Type",
+  "variableView.colWidth": "Width",
+  "variableView.colDecimals": "Decimals",
+  "variableView.colLabel": "Label",
+  "variableView.colValues": "Values",
+  "variableView.colMissing": "Missing",
+  "variableView.colAlign": "Align",
+  "variableView.colMeasure": "Measure",
+  "variableView.colActions": "Actions",
+  "variableView.typeNumeric": "Numeric",
+  "variableView.typeString": "String",
+  "variableView.typeDate": "Date",
+  "variableView.alignLeft": "Left",
+  "variableView.alignRight": "Right",
+  "variableView.alignCenter": "Center",
+  "variableView.measureScale": "Scale",
+  "variableView.measureOrdinal": "Ordinal",
+  "variableView.measureNominal": "Nominal",
+  "variableView.measureScaleTooltip": "Scale (Continuous / Metric variable)",
+  "variableView.measureOrdinalTooltip": "Ordinal (Ranked / Ordered variable)",
+  "variableView.measureNominalTooltip": "Nominal (Categorical / Unordered variable)",
+  "variableView.labelInputPlaceholder": "Enter descriptive question or variable label...",
+  "variableView.noneValue": "None",
+  "variableView.configValuesTitle": "Configure Value Labels",
+  "variableView.configMissingTitle": "Configure Missing Values",
+  "variableView.deleteVarTitle": "Delete variable {name}",
+  "variableView.deleteVarConfirm": "Are you sure you want to delete variable \"{name}\" from dataset?",
+  "variableView.deleteVarToast": "Deleted variable \"{name}\"",
+  "variableView.emptySearch": "No variables found matching \"{query}\".",
+  "variableView.filterFooter": "Showing {filtered} of {total} variables",
+  "variableView.clearFilter": "Clear filter",
+  "variableView.closeBanner": "Close",
+  "valueLabelsModal.title": "Value Labels — {name}",
+  "valueLabelsModal.subtitle": "Map coded numeric values to qualitative descriptive labels for tables and charts",
+  "valueLabelsModal.quickTemplates": "Quick templates:",
+  "valueLabelsModal.templateLikert5": "5-point Likert (1→5)",
+  "valueLabelsModal.templateGender": "Gender (1=Male, 2=Female, 3=Other)",
+  "valueLabelsModal.templateBinary": "Binary Yes/No (0/1)",
+  "valueLabelsModal.clearAll": "Clear all",
+  "valueLabelsModal.valueFieldLabel": "Coded value (Value)",
+  "valueLabelsModal.valuePlaceholder": "e.g. 1",
+  "valueLabelsModal.labelFieldLabel": "Display label (Label)",
+  "valueLabelsModal.labelPlaceholder": "e.g. Strongly disagree",
+  "valueLabelsModal.addButton": "Add",
+  "valueLabelsModal.updateButton": "Change",
+  "valueLabelsModal.removeButton": "Remove",
+  "valueLabelsModal.mappingListTitle": "Label mappings ({count})",
+  "valueLabelsModal.mappingListHint": "Click entry to edit",
+  "valueLabelsModal.emptyList": "No value labels defined yet. Enter Value & Label on the left or choose a Quick template above.",
+  "valueLabelsModal.removeLabelTitle": "Remove this label",
+  "valueLabelsModal.cancelButton": "Cancel",
+  "valueLabelsModal.saveButton": "Save changes",
+  "valueLabelsModal.errorEmptyValue": "Please enter a coded value (Value).",
+  "valueLabelsModal.errorEmptyLabel": "Please enter a display label (Label).",
+  "missingValuesModal.title": "Missing Values — {name}",
+  "missingValuesModal.subtitle": "Define discrete missing codes (automatically excluded during statistical analysis)",
+  "missingValuesModal.optionNoneTitle": "No missing values",
+  "missingValuesModal.optionNoneDesc": "Only empty cells are considered missing data.",
+  "missingValuesModal.optionDiscreteTitle": "Discrete missing values",
+  "missingValuesModal.optionDiscreteDesc": "Enter up to 3 discrete missing codes (e.g. 99, 999, -1).",
+  "missingValuesModal.codeSlot": "Code {index}",
+  "missingValuesModal.quickPresets": "Quick suggestions:",
+  "missingValuesModal.cancelButton": "Cancel",
+  "missingValuesModal.saveButton": "Save changes",
+  "missingValuesModal.errorMaxCodes": "Maximum of 3 discrete missing codes allowed.",
+  "missingValuesModal.errorDuplicateCodes": "Discrete missing codes must not contain duplicate values.",
+  "missingValuesModal.errorInvalidValue": "Invalid missing code value.",
+  "gridContextMenu.colHeader": "Variable: {name}",
+  "gridContextMenu.sortAsc": "Sort Ascending (Asc)",
+  "gridContextMenu.sortDesc": "Sort Descending (Desc)",
+  "gridContextMenu.renameCol": "Rename variable...",
+  "gridContextMenu.insertCol": "Add new variable",
+  "gridContextMenu.deleteCol": "Delete variable \"{name}\"",
+  "gridContextMenu.rowHeader": "Observation #{row}",
+  "gridContextMenu.insertRowAbove": "Insert row above",
+  "gridContextMenu.insertRowBelow": "Insert row below",
+  "gridContextMenu.deleteRow": "Delete row #{row}",
+  "transformTab.mice.maxIterLabel": "Maximum iterations (max_iter)",
+  "transformTab.mice.description": "The MICE (Multiple Imputation by Chained Equations) algorithm uses Bayesian Ridge regression via the Python backend to forecast and impute multivariate missing data, respecting discrete missing codes.",
+  "transformTab.mice.loading": "Executing MICE imputation via Python backend...",
+  "transformTab.mice.errEmptyResponse": "No result data returned from MICE backend",
+  "transformTab.mice.errFailed": "Error connecting to MICE backend",
+  "transformTab.mice.reportTitle": "MICE Report: Pre & Post Imputation Statistics",
+  "transformTab.mice.colVariable": "Variable",
+  "transformTab.mice.colMissingCount": "Missing cells",
+  "transformTab.mice.colOriginalMean": "Mean (before)",
+  "transformTab.mice.colImputedMean": "Mean (after MICE)",
+  "transformTab.mice.colImputedStd": "Std (after MICE)",
+  "transformTab.mice.colMin": "Min",
+  "transformTab.mice.colMax": "Max",
+  "transformTab.processing": "Processing...",
+  "metadata.validation.empty": "Variable name cannot be empty.",
+  "metadata.validation.invalidChars": "Variable name must start with a letter or underscore and contain only letters, numbers, and underscores without spaces.",
+  "metadata.validation.duplicate": "Variable name \"{name}\" already exists in the dataset.",
   },
   vi: {
   "aiAssistPanel.aiDisclaimerNote": "⚠️ AI có thể sai; cần kiểm tra lại kỹ câu trả lời trước khi sử dụng.",
@@ -2999,13 +3158,154 @@ const messages: Record<Locale, Record<string, string>> = {
   "transformTab.viewDataTabName": "Xem dữ liệu",
   "workflowView.subtitle": "Bấm vào từng bước để chuyển sang tính năng tương ứng.",
   "workflowView.title": "Workflow nghiên cứu tiêu chuẩn",
+  "dualView.dataView": "Xem Dữ liệu",
+  "dualView.variableView": "Xem Biến số",
+  "dataGrid.dimensions": "{rows} dòng × {cols} cột",
+  "dataGrid.valueLabelsToggle": "Nhãn Giá trị",
+  "dataGrid.valueLabelsToggleTitle": "Bật/Tắt hiển thị nhãn giá trị (Value Labels) thay cho mã số thô",
+  "dataGrid.quickFilterPlaceholder": "Lọc dòng nhanh...",
+  "dataGrid.clearFilterAriaLabel": "Xóa lọc",
+  "dataGrid.addRowButton": "Dòng",
+  "dataGrid.addRowTitle": "Thêm một dòng quan sát mới vào cuối bảng",
+  "dataGrid.addRowSuccessToast": "Đã thêm một dòng quan sát mới",
+  "dataGrid.clickToSort": "Click để sắp xếp",
+  "dataGrid.sortColumn": "Sắp xếp",
+  "dataGrid.sortAscending": "Tăng dần",
+  "dataGrid.sortDescending": "Giảm dần",
+  "dataGrid.missingCellText": "(khuyết)",
+  "dataGrid.missingCellTooltip": "Dữ liệu khuyết thiếu",
+  "dataGrid.missingCodeTooltip": "Mã khuyết thiếu ({code})",
+  "dataGrid.rawCodeTooltip": "Giá trị mã hóa gốc: {value}",
+  "dataGrid.paginationShowing": "Hiển thị {start} - {end} / {total} dòng",
+  "dataGrid.rowsPerPage": "Dòng/trang:",
+  "dataGrid.pageSizeAriaLabel": "Kích thước trang",
+  "dataGrid.pageIndicator": "Trang {page} / {totalPages}",
+  "dataGrid.firstPage": "Trang đầu",
+  "dataGrid.prevPage": "Trang trước",
+  "dataGrid.nextPage": "Trang kế",
+  "dataGrid.lastPage": "Trang cuối",
+  "dataGrid.pasteClipboardToast": "Đã dán {count} ô dữ liệu từ Clipboard",
+  "dataGrid.deleteColConfirm": "Bạn có chắc chắn muốn xóa biến \"{name}\" cùng toàn bộ dữ liệu cột này không?",
+  "dataGrid.deleteColToast": "Đã xóa biến \"{name}\"",
+  "dataGrid.deleteRowConfirm": "Bạn có chắc chắn muốn xóa quan sát dòng #{row} không?",
+  "dataGrid.deleteRowToast": "Đã xóa dòng quan sát #{row}",
+  "dataGrid.insertRowAboveToast": "Đã chèn dòng mới tại vị trí #{row}",
+  "dataGrid.insertRowBelowToast": "Đã chèn dòng mới tại vị trí #{row}",
+  "dataGrid.renameVarSuccessToast": "Đã đổi tên biến \"{oldName}\" → \"{newName}\"",
+  "dataGrid.addVarSuccessToast": "Đã thêm biến \"{name}\"",
+  "variableView.title": "Variable View — Quản trị Thuộc tính Biến số ({count} biến)",
+  "variableView.selectDatasetPrompt": "Vui lòng chọn một bộ dữ liệu để xem Variable View.",
+  "variableView.searchPlaceholder": "Tìm theo tên hoặc nhãn...",
+  "variableView.clearSearchTitle": "Xóa tìm kiếm",
+  "variableView.addVariableButton": "Thêm biến",
+  "variableView.colIndex": "#",
+  "variableView.colName": "Tên biến",
+  "variableView.colType": "Kiểu",
+  "variableView.colWidth": "Độ rộng",
+  "variableView.colDecimals": "Thập phân",
+  "variableView.colLabel": "Nhãn biến số",
+  "variableView.colValues": "Nhãn giá trị",
+  "variableView.colMissing": "Giá trị khuyết",
+  "variableView.colAlign": "Căn lề",
+  "variableView.colMeasure": "Thang đo",
+  "variableView.colActions": "Thao tác",
+  "variableView.typeNumeric": "Numeric",
+  "variableView.typeString": "String",
+  "variableView.typeDate": "Date",
+  "variableView.alignLeft": "Trái",
+  "variableView.alignRight": "Phải",
+  "variableView.alignCenter": "Giữa",
+  "variableView.measureScale": "Scale",
+  "variableView.measureOrdinal": "Ordinal",
+  "variableView.measureNominal": "Nominal",
+  "variableView.measureScaleTooltip": "Scale (Thang đo định lượng)",
+  "variableView.measureOrdinalTooltip": "Ordinal (Thang đo thứ bậc)",
+  "variableView.measureNominalTooltip": "Nominal (Thang đo định danh)",
+  "variableView.labelInputPlaceholder": "Nhập nhãn mô tả câu hỏi / biến số...",
+  "variableView.noneValue": "Không",
+  "variableView.configValuesTitle": "Cấu hình Value Labels",
+  "variableView.configMissingTitle": "Cấu hình Missing Values",
+  "variableView.deleteVarTitle": "Xóa biến {name}",
+  "variableView.deleteVarConfirm": "Bạn có chắc chắn muốn xóa biến \"{name}\" khỏi bộ dữ liệu không?",
+  "variableView.deleteVarToast": "Đã xóa biến \"{name}\"",
+  "variableView.emptySearch": "Không tìm thấy biến số nào phù hợp với từ khóa \"{query}\".",
+  "variableView.filterFooter": "Đang hiển thị {filtered} / {total} biến",
+  "variableView.clearFilter": "Xóa bộ lọc",
+  "variableView.closeBanner": "Đóng",
+  "valueLabelsModal.title": "Nhãn giá trị (Value Labels) — {name}",
+  "valueLabelsModal.subtitle": "Ánh xạ mã số sang nhãn định tính hiển thị trên bảng và báo cáo",
+  "valueLabelsModal.quickTemplates": "Mẫu nhanh:",
+  "valueLabelsModal.templateLikert5": "Likert 5 mức (1→5)",
+  "valueLabelsModal.templateGender": "Giới tính (1=Nam, 2=Nữ, 3=Khác)",
+  "valueLabelsModal.templateBinary": "Nhị phân Có/Không (0/1)",
+  "valueLabelsModal.clearAll": "Xóa tất cả",
+  "valueLabelsModal.valueFieldLabel": "Giá trị mã hóa (Value)",
+  "valueLabelsModal.valuePlaceholder": "VD: 1",
+  "valueLabelsModal.labelFieldLabel": "Nhãn diễn giải (Label)",
+  "valueLabelsModal.labelPlaceholder": "VD: Hoàn toàn không đồng ý",
+  "valueLabelsModal.addButton": "Thêm (Add)",
+  "valueLabelsModal.updateButton": "Cập nhật (Change)",
+  "valueLabelsModal.removeButton": "Xóa (Remove)",
+  "valueLabelsModal.mappingListTitle": "Danh sách ánh xạ ({count})",
+  "valueLabelsModal.mappingListHint": "Nhấn vào dòng để sửa",
+  "valueLabelsModal.emptyList": "Chưa có nhãn giá trị nào. Nhập Value & Label bên trái hoặc chọn Mẫu nhanh ở trên.",
+  "valueLabelsModal.removeLabelTitle": "Xóa nhãn này",
+  "valueLabelsModal.cancelButton": "Hủy",
+  "valueLabelsModal.saveButton": "Lưu thay đổi",
+  "valueLabelsModal.errorEmptyValue": "Vui lòng nhập giá trị mã hóa (Value).",
+  "valueLabelsModal.errorEmptyLabel": "Vui lòng nhập nhãn hiển thị (Label).",
+  "missingValuesModal.title": "Giá trị khuyết thiếu (Missing Values) — {name}",
+  "missingValuesModal.subtitle": "Định nghĩa mã số quy ước khuyết dữ liệu (tự động loại trừ khi phân tích)",
+  "missingValuesModal.optionNoneTitle": "Không có mã khuyết thiếu (No missing values)",
+  "missingValuesModal.optionNoneDesc": "Chỉ xem các ô trống (rỗng) là dữ liệu khuyết thiếu.",
+  "missingValuesModal.optionDiscreteTitle": "Mã khuyết thiếu rời rạc (Discrete missing values)",
+  "missingValuesModal.optionDiscreteDesc": "Nhập tối đa 3 mã quy ước (VD: 99, 999, -1).",
+  "missingValuesModal.codeSlot": "Mã {index}",
+  "missingValuesModal.quickPresets": "Gợi ý nhanh:",
+  "missingValuesModal.cancelButton": "Hủy",
+  "missingValuesModal.saveButton": "Lưu thay đổi",
+  "missingValuesModal.errorMaxCodes": "Chỉ cho phép tối đa 3 mã khuyết thiếu rời rạc.",
+  "missingValuesModal.errorDuplicateCodes": "Các mã khuyết thiếu rời rạc không được trùng lặp nhau.",
+  "missingValuesModal.errorInvalidValue": "Giá trị không hợp lệ.",
+  "gridContextMenu.colHeader": "Biến: {name}",
+  "gridContextMenu.sortAsc": "Sắp xếp tăng dần (Asc)",
+  "gridContextMenu.sortDesc": "Sắp xếp giảm dần (Desc)",
+  "gridContextMenu.renameCol": "Đổi tên biến...",
+  "gridContextMenu.insertCol": "Thêm biến mới",
+  "gridContextMenu.deleteCol": "Xóa biến \"{name}\"",
+  "gridContextMenu.rowHeader": "Quan sát #{row}",
+  "gridContextMenu.insertRowAbove": "Chèn dòng phía trên",
+  "gridContextMenu.insertRowBelow": "Chèn dòng phía dưới",
+  "gridContextMenu.deleteRow": "Xóa dòng #{row}",
+  "transformTab.mice.maxIterLabel": "Số vòng lặp tối đa (max_iter)",
+  "transformTab.mice.description": "Thuật toán MICE (Multiple Imputation by Chained Equations) sử dụng mô hình hồi quy Bayesian Ridge qua Python backend để dự báo và điền giá trị khuyết thiếu đa biến, tôn trọng mã missing quy ước.",
+  "transformTab.mice.loading": "Đang thực thi nội suy MICE qua Python backend...",
+  "transformTab.mice.errEmptyResponse": "Không nhận được dữ liệu kết quả từ MICE backend",
+  "transformTab.mice.errFailed": "Lỗi khi gọi MICE backend",
+  "transformTab.mice.reportTitle": "Báo cáo MICE: Thống kê trước và sau nội suy",
+  "transformTab.mice.colVariable": "Biến số",
+  "transformTab.mice.colMissingCount": "Số ô khuyết",
+  "transformTab.mice.colOriginalMean": "Mean (trước)",
+  "transformTab.mice.colImputedMean": "Mean (sau MICE)",
+  "transformTab.mice.colImputedStd": "Std (sau MICE)",
+  "transformTab.mice.colMin": "Min",
+  "transformTab.mice.colMax": "Max",
+  "transformTab.processing": "Đang xử lý...",
+  "metadata.validation.empty": "Tên biến không được để trống.",
+  "metadata.validation.invalidChars": "Tên biến chỉ được chứa chữ cái, số và dấu gạch dưới, không bắt đầu bằng số hoặc chứa khoảng trắng.",
+  "metadata.validation.duplicate": "Tên biến \"{name}\" đã tồn tại trong bộ dữ liệu.",
   },
 }
 
-export function t(key: string): string {
+export function t(key: string, params?: Record<string, string | number>): string {
   const locale = getLocale()
-  const m = messages[locale][key] ?? messages.en[key]
-  return m ?? key
+  let m = messages[locale]?.[key] ?? messages.en?.[key] ?? key
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      m = m.replace(new RegExp(`\\{${k}\\}`, "g"), String(v))
+    })
+  }
+  return m
 }
 
 /**

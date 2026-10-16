@@ -65,7 +65,7 @@ function DualViewWorkspace({
           }`}
         >
           <Table2 className="w-3.5 h-3.5" />
-          <span>Data View</span>
+          <span>{t("dualView.dataView")}</span>
         </button>
 
         <button
@@ -80,7 +80,7 @@ function DualViewWorkspace({
           }`}
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>Variable View</span>
+          <span>{t("dualView.variableView")}</span>
         </button>
       </div>
     </div>

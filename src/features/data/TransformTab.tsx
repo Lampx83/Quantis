@@ -151,7 +151,7 @@ export function TransformTab({
             miceMaxIter
           );
           if (!res || !res.rows) {
-            throw new Error("Không nhận được dữ liệu kết quả từ MICE backend");
+            throw new Error(t("transformTab.mice.errEmptyResponse"));
           }
           newRows = res.rows;
           if (res.statistics) {
@@ -159,7 +159,7 @@ export function TransformTab({
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
-          setMiceError(msg || "Lỗi khi gọi MICE backend");
+          setMiceError(msg || t("transformTab.mice.errFailed"));
           setIsMiceLoading(false);
           return;
         } finally {
@@ -310,7 +310,7 @@ export function TransformTab({
         <div className="flex flex-wrap gap-4 items-center mb-4 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
-              Số vòng lặp tối đa (max_iter)
+              {t("transformTab.mice.maxIterLabel")}
             </label>
             <input
               type="number"
@@ -322,14 +322,14 @@ export function TransformTab({
             />
           </div>
           <div className="text-xs text-sky-700 dark:text-sky-300 max-w-lg">
-            Thuật toán MICE (Multiple Imputation by Chained Equations) sử dụng mô hình hồi quy Bayesian Ridge qua Python backend để dự báo và điền giá trị khuyết thiếu đa biến, tôn trọng mã missing quy ước.
+            {t("transformTab.mice.description")}
           </div>
         </div>
       )}
       {isMiceLoading && (
         <div className="flex items-center gap-2 text-sm text-sky-600 dark:text-sky-400 mb-3 animate-pulse">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          <span>Đang thực thi nội suy MICE qua Python backend...</span>
+          <span>{t("transformTab.mice.loading")}</span>
         </div>
       )}
       {miceError && (
@@ -415,7 +415,7 @@ export function TransformTab({
         {isMiceLoading ? (
           <span className="flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
-            Đang xử lý...
+            {t("transformTab.processing")}
           </span>
         ) : (
           t("transformTab.applyButton")
@@ -458,18 +458,18 @@ export function TransformTab({
           {lastTransformResult.stats && lastTransformResult.stats.length > 0 && (
             <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 p-3 overflow-x-auto">
               <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-200 uppercase tracking-wider mb-2">
-                Báo cáo MICE: Thống kê trước và sau nội suy
+                {t("transformTab.mice.reportTitle")}
               </h4>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300">
-                    <th className="text-left py-1 px-2 font-medium">Biến số</th>
-                    <th className="text-right py-1 px-2 font-medium">Số ô khuyết</th>
-                    <th className="text-right py-1 px-2 font-medium">Mean (trước)</th>
-                    <th className="text-right py-1 px-2 font-medium">Mean (sau MICE)</th>
-                    <th className="text-right py-1 px-2 font-medium">Std (sau MICE)</th>
-                    <th className="text-right py-1 px-2 font-medium">Min</th>
-                    <th className="text-right py-1 px-2 font-medium">Max</th>
+                    <th className="text-left py-1 px-2 font-medium">{t("transformTab.mice.colVariable")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colMissingCount")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colOriginalMean")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colImputedMean")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colImputedStd")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colMin")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colMax")}</th>
                   </tr>
                 </thead>
                 <tbody>
