@@ -2572,7 +2572,7 @@ export function computeKMOBartlett(rows: string[][], columnNames: string[]): KMO
 function eigenDecomposition(matrix: number[][]): { eigenvalues: number[]; eigenvectors: number[][] } {
   const n = matrix.length;
   let A = matrix.map((r) => r.map((x) => x));
-  const V = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 1 : 0));
+  const V: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 1 : 0));
   for (let iter = 0; iter < 100; iter++) {
     let maxOff = 0;
     let p = 0, q = 1;

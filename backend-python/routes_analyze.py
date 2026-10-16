@@ -1,6 +1,7 @@
 """
 API routes cho phân tích — nhận rows (string[][]) + params, gọi analysis_impl, trả JSON.
 """
+from typing import Any
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -57,11 +58,19 @@ from analysis_impl import (
     run_sampling,
     run_ttest_paired,
     run_ztest_two_means,
+    run_mice_imputation,
 )
 
 from panel_impl import run_panel
 
 router = APIRouter()
+
+
+class MiceImputeBody(BaseModel):
+    rows: list[list[Any]]
+    columns: list[str] | None = None
+    variables: dict[str, Any] | None = None
+    maxIter: int | None = 10
 
 
 class RowsBody(BaseModel):
@@ -1173,3 +1182,24 @@ async def analyze_ztest_two_means(body: ZTestTwoMeansBody):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/impute-mice")
+async def analyze_impute_mice(body: MiceImputeBody):
+    try:
+        result = run_mice_imputation(
+            rows=body.rows,
+            columns=body.columns,
+            variables=body.variables,
+            max_iter=body.maxIter or 10,
+        )
+        if result is None:
+            raise HTTPException(status_code=400, detail="Không thể thực hiện nội suy MICE")
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

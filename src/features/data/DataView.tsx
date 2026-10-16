@@ -1,10 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
+import { Table2, SlidersHorizontal } from "lucide-react";
 import type { Dataset } from "@/types";
-import type { DataTab } from "@/stores";
+import { useUIStore, type DataTab } from "@/stores";
 import { type DescriptiveRow, getDataRows, computeProfileWithOutliers } from "@/utils/stats";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
-import { PreviewTable } from "./PreviewTable";
+import { DataGrid } from "./grid/DataGrid";
+import { VariableViewGrid } from "./grid/VariableViewGrid";
 import { TransformTab } from "./TransformTab";
 import { DescriptiveStatsView } from "./DescriptiveStatsView";
 
@@ -21,13 +23,78 @@ export interface DataViewProps {
   descriptiveBackendResult?: DescriptiveRow[] | null;
 }
 
+function DualViewWorkspace({
+  selectedDs,
+  showToast,
+}: {
+  selectedDs: Dataset;
+  showToast?: (msg: string) => void;
+}) {
+  const uiHook = useUIStore();
+  const {
+    dataEditorView,
+    setDataEditorView,
+    showValueLabels,
+  } = typeof window === "undefined" ? useUIStore.getState() : uiHook;
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-13rem)] min-h-[500px] w-full">
+      {/* Main Active Grid View */}
+      <div className="flex-1 min-h-0 w-full">
+        {dataEditorView === "data" ? (
+          <DataGrid
+            dataset={selectedDs}
+            showValueLabels={showValueLabels}
+            showToast={showToast}
+          />
+        ) : (
+          <VariableViewGrid dataset={selectedDs} showToast={showToast} />
+        )}
+      </div>
+
+      {/* SPSS Style Bottom View Switcher Strip */}
+      <div className="flex items-center gap-1.5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-100/90 dark:bg-neutral-800/80 px-2 py-1 select-none">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={dataEditorView === "data"}
+          onClick={() => setDataEditorView("data")}
+          className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded font-medium transition ${
+            dataEditorView === "data"
+              ? "bg-white dark:bg-neutral-900 text-brand shadow-xs border border-neutral-200 dark:border-neutral-700 font-bold"
+              : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50"
+          }`}
+        >
+          <Table2 className="w-3.5 h-3.5" />
+          <span>{t("dualView.dataView")}</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={dataEditorView === "variable"}
+          onClick={() => setDataEditorView("variable")}
+          className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded font-medium transition ${
+            dataEditorView === "variable"
+              ? "bg-white dark:bg-neutral-900 text-brand shadow-xs border border-neutral-200 dark:border-neutral-700 font-bold"
+              : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50"
+          }`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span>{t("dualView.variableView")}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function DataView({
   tab,
   datasets,
   setDatasets,
   selectedDatasetId,
   onSelectDataset,
-  showToast: _showToast,
+  showToast,
   onWorkflowDatasetAdd,
   analysisBackendAvailable = false,
   descriptiveBackendResult = null,
@@ -55,7 +122,7 @@ export function DataView({
         </div>
       );
     }
-    return <PreviewTable selectedDs={selectedDs} />;
+    return <DualViewWorkspace selectedDs={selectedDs} showToast={showToast} />;
   }
 
   if (tab === "profiling") {
@@ -152,7 +219,7 @@ export function DataView({
         </div>
       );
     }
-    return <PreviewTable selectedDs={selectedDs} />;
+    return <DualViewWorkspace selectedDs={selectedDs} showToast={showToast} />;
   }
 
   return null;

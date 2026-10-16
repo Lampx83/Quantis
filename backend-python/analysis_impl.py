@@ -1776,3 +1776,155 @@ def run_ztest_two_means(
         "knownVar1": known_var1,
         "knownVar2": known_var2,
     }
+
+
+def run_mice_imputation(
+    rows: list,
+    columns: list[str] | None = None,
+    variables: dict[str, dict] | None = None,
+    max_iter: int = 10,
+    random_state: int = 42,
+) -> dict:
+    """
+    Multiple Imputation by Chained Equations (MICE) sử dụng IterativeImputer với BayesianRidge.
+    - Quy đổi các giá trị trùng với missingValues trong metadata hoặc rỗng/NaN thành np.nan.
+    - Nội suy các biến định lượng đa biến.
+    - Xử lý ngoại lệ an toàn khi ma trận suy biến.
+    - Trả về bảng dữ liệu đã điền (dạng string[][]) kèm thống kê trước và sau nội suy.
+    """
+    df = _rows_to_df(rows)
+    if df.empty or len(df.columns) == 0:
+        raise ValueError("Dữ liệu rỗng hoặc không có cột")
+
+    # Target columns
+    if columns and len(columns) > 0:
+        target_cols = [c for c in columns if c in df.columns]
+    else:
+        target_cols = list(df.columns)
+
+    if not target_cols:
+        raise ValueError("Không tìm thấy cột hợp lệ để nội suy")
+
+    # Mask missing values for all columns based on variables metadata
+    cleaned_df = df.copy()
+    if variables:
+        for col in df.columns:
+            meta = variables.get(col)
+            if meta and isinstance(meta, dict):
+                missing_codes = meta.get("missingValues") or []
+                if missing_codes:
+                    def _is_missing_code(val):
+                        if pd.isna(val):
+                            return True
+                        s = str(val).strip()
+                        norm_s = s[:-2] if s.endswith(".0") else s
+                        for code in missing_codes:
+                            norm_code = str(code).strip()
+                            norm_c = norm_code[:-2] if norm_code.endswith(".0") else norm_code
+                            if s == norm_code or norm_s == norm_c:
+                                return True
+                        return False
+
+                    mask = cleaned_df[col].apply(_is_missing_code)
+                    cleaned_df.loc[mask, col] = np.nan
+
+    # Replace whitespace-only strings and literal nan strings with np.nan
+    for col in target_cols:
+        cleaned_df[col] = cleaned_df[col].replace(r"^\s*$", np.nan, regex=True)
+        cleaned_df[col] = cleaned_df[col].replace(["nan", "NaN", "None", "<NA>", "NA", "null"], np.nan)
+
+    # Convert target columns to numeric
+    numeric_target_cols = []
+    numeric_df = pd.DataFrame(index=cleaned_df.index)
+
+    for col in target_cols:
+        num_series = pd.to_numeric(cleaned_df[col], errors="coerce")
+        if num_series.notna().sum() > 0:
+            numeric_target_cols.append(col)
+            numeric_df[col] = num_series
+
+    if len(numeric_target_cols) == 0:
+        raise ValueError("Không có cột số hợp lệ nào chứa dữ liệu để thực hiện MICE")
+
+    # Collect pre-imputation statistics
+    statistics = []
+    for col in numeric_target_cols:
+        s = numeric_df[col]
+        missing_count = int(s.isna().sum())
+        orig_mean = float(s.mean()) if s.notna().sum() > 0 else None
+        orig_std = float(s.std()) if s.notna().sum() > 1 else None
+        statistics.append({
+            "column": col,
+            "missingCount": missing_count,
+            "originalMean": orig_mean,
+            "originalStd": orig_std,
+        })
+
+    # If no missing values across all target columns, return original rows
+    total_missing = sum(item["missingCount"] for item in statistics)
+    if total_missing == 0:
+        return {
+            "rows": rows,
+            "imputedColumns": numeric_target_cols,
+            "statistics": statistics,
+            "iterations": 0,
+        }
+
+    # Run IterativeImputer
+    try:
+        from sklearn.experimental import enable_iterative_imputer  # noqa: F401
+        from sklearn.impute import IterativeImputer
+        from sklearn.linear_model import BayesianRidge
+
+        imputer = IterativeImputer(
+            estimator=BayesianRidge(),
+            max_iter=max_iter,
+            random_state=random_state,
+            initial_strategy="mean",
+        )
+        imputed_array = imputer.fit_transform(numeric_df)
+    except Exception as e:
+        raise ValueError(f"Thuật toán MICE gặp lỗi trong quá trình hội tụ: {str(e)}")
+
+    imputed_df = pd.DataFrame(imputed_array, columns=numeric_target_cols, index=numeric_df.index)
+
+    # Update statistics with post-imputation metrics
+    for item in statistics:
+        col = item["column"]
+        s = imputed_df[col]
+        item["imputedMean"] = float(s.mean())
+        item["imputedStd"] = float(s.std()) if len(s) > 1 else 0.0
+        item["min"] = float(s.min())
+        item["max"] = float(s.max())
+
+    # Build final rows
+    final_df = df.copy()
+    for col in numeric_target_cols:
+        meta = variables.get(col) if variables else None
+        decimals = 2
+        if meta and isinstance(meta, dict) and "decimals" in meta:
+            try:
+                decimals = int(meta["decimals"])
+            except (ValueError, TypeError):
+                decimals = 2
+
+        for idx in df.index:
+            orig_val = cleaned_df.loc[idx, col]
+            if pd.isna(orig_val):
+                imp_val = imputed_df.loc[idx, col]
+                if decimals == 0:
+                    final_df.loc[idx, col] = str(int(round(imp_val)))
+                else:
+                    final_df.loc[idx, col] = f"{imp_val:.{decimals}f}"
+
+    header = list(df.columns)
+    data_rows = final_df.astype(str).values.tolist()
+    out_rows = [header] + data_rows
+
+    return {
+        "rows": out_rows,
+        "imputedColumns": numeric_target_cols,
+        "statistics": statistics,
+        "iterations": int(getattr(imputer, "n_iter_", max_iter)),
+    }
+

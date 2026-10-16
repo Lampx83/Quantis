@@ -42,12 +42,12 @@ async def _parse_file_impl(file: UploadFile):
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
     try:
-        rows, format_name = parse_file_impl(content, file.filename or "data")
+        rows, format_name, variables = parse_file_impl(content, file.filename or "data")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Parse error: {e}")
-    return {"rows": rows, "format": format_name}
+    return {"rows": rows, "format": format_name, "variables": variables}
 
 
 @app.post("/parse-file")
