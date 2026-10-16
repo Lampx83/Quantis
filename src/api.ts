@@ -7,6 +7,7 @@ import type { Dataset, Workflow, VariableMetadata } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
+import { cleanJsonReplacer } from "./utils/sanitize";
 
 /** Base URL backend Quantis (để hiển thị trong Cài đặt). Mặc định research.neu.edu.vn */
 const RESEARCH_NEU_HOST = "research.neu.edu.vn";
@@ -569,6 +570,45 @@ export async function analyzeOLS(
     return json?.result ?? null;
   } catch {
     return null;
+  }
+}
+
+export interface PanelCoefRow { name: string; coef: number | null; se: number | null; t: number | null; p: number | null; ciLower: number | null; ciUpper: number | null }
+export interface PanelResult {
+  yName: string; xNames: string[]; entityCol: string; timeCol: string; timeEffects: boolean; nTimePeriods: number | null;
+  nObs: number; nGroups: number; droppedRows: number; tMin: number; tMax: number; tAvg: number | null; balanced: boolean;
+  descriptive: Array<{ variable: string; mean: number | null; sdOverall: number | null; sdBetween: number | null; sdWithin: number | null; min: number | null; max: number | null }>;
+  pooled: { coefficients: PanelCoefRow[]; r2: number | null; adjR2: number | null; fStat: number | null; fP: number | null; dfModel: number; dfResid: number; nObs: number; sigma: number | null };
+  fixed: null | { coefficients: PanelCoefRow[]; constant: number | null; r2Within: number | null; r2Between: number | null; r2Overall: number | null; fStat: number | null; fP: number | null; fEntity: number | null; fEntityDf1: number; fEntityDf2: number; fEntityP: number | null; dfResid: number; nObs: number; nGroups: number; sigmaE: number | null; droppedVars: string[] };
+  random: null | { coefficients: PanelCoefRow[]; r2Within: number | null; r2Between: number | null; r2Overall: number | null; sigmaU: number | null; sigmaE: number | null; rho: number | null; thetaMean: number | null; waldChi2: number | null; waldDf: number; waldP: number | null; dfResid: number; nObs: number; nGroups: number };
+  hausman: null | { chi2: number | null; df: number; p: number | null; psd: boolean; preferred: "FE" | "RE"; conclusion: string; comparison: Array<{ name: string; fe: number | null; re: number | null; diff: number | null; seDiff: number | null }> };
+  notes: string[];
+}
+
+/** Phân tích dữ liệu bảng (panel): mô tả within/between, OLS gộp, Fixed Effects, Random Effects, Hausman. */
+export async function analyzePanel(
+  rows: string[][],
+  yCol: string,
+  xCols: string[],
+  entityCol: string,
+  timeCol: string,
+  timeEffects = false
+): Promise<{ result?: PanelResult; error?: string }> {
+  const base = getANALYZE_BASE();
+  if (!base) return { error: t("panelTab.needBackend") };
+  try {
+    const res = await fetch(`${base}/panel`, {
+      method: "POST",
+      credentials: "include",
+      headers: getHeaders(),
+      body: JSON.stringify({ rows, yCol, xCols, entityCol, timeCol, timeEffects }),
+    });
+    const json: unknown = await res.json().catch(() => null);
+    if (!res.ok) return { error: formatAnalyzeErrorJson(json, res.status) };
+    const r = (json as { result?: PanelResult } | null)?.result;
+    return r ? { result: r } : { error: t("api.analysisFailed") };
+  } catch {
+    return { error: t("panelTab.needBackend") };
   }
 }
 
@@ -1502,10 +1542,11 @@ export async function saveData(payload: { datasets: Dataset[]; workflows: Workfl
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
+      // cleanJsonReplacer: bỏ \u0000/ký tự điều khiển để PostgreSQL không từ chối payload.
       body: JSON.stringify({
         datasets: payload.datasets,
         workflows: payload.workflows,
-      }),
+      }, cleanJsonReplacer),
     });
     return res.ok;
   } catch {
@@ -1899,8 +1940,9 @@ function parseAiResponseRaw(rawText: string): string {
       const data = JSON.parse(line) as unknown
       const o = data as Record<string, unknown>
       if (typeof o.response === "string") parts.push(o.response)
-      else if (o.choices?.[0] && typeof o.choices[0] === "object") {
-        const c = (o.choices[0] as Record<string, unknown>).delta ?? (o.choices[0] as Record<string, unknown>).message
+      else if (Array.isArray(o.choices) && o.choices[0] && typeof o.choices[0] === "object") {
+        const first = o.choices[0] as Record<string, unknown>
+        const c = first.delta ?? first.message
         if (c && typeof c === "object" && c !== null && typeof (c as Record<string, unknown>).content === "string")
           parts.push((c as Record<string, unknown>).content as string)
       } else {

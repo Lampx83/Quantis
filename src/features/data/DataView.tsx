@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from "react";
 import { Table2, SlidersHorizontal } from "lucide-react";
 import type { Dataset } from "@/types";
 import { useUIStore, type DataTab } from "@/stores";

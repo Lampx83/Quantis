@@ -33,16 +33,17 @@ const sampleDatasetWithMissing: Dataset = {
     ["4", "1500", "Nam"],
   ],
   variables: {
-    ID: { name: "ID", type: "string", measure: "nominal", decimals: 0, align: "left" },
+    ID: { name: "ID", label: "ID", type: "string", measure: "nominal", decimals: 0, align: "left" },
     INCOME: {
       name: "INCOME",
+      label: "INCOME",
       type: "numeric",
       measure: "scale",
       decimals: 2,
       align: "right",
       missingValues: ["99"],
     },
-    GENDER: { name: "GENDER", type: "string", measure: "nominal", decimals: 0, align: "left" },
+    GENDER: { name: "GENDER", label: "GENDER", type: "string", measure: "nominal", decimals: 0, align: "left" },
   },
   sourceFormat: "csv",
   createdAt: "2026-10-15T00:00:00Z",
@@ -123,8 +124,8 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
       ["3", "26", ""], // missing SALARY, should borrow from row 1 (AGE 25 vs 50)
     ];
     const vars = {
-      AGE: { name: "AGE", type: "numeric" as const, measure: "scale" as const, decimals: 0, align: "right" as const },
-      SALARY: { name: "SALARY", type: "numeric" as const, measure: "scale" as const, decimals: 0, align: "right" as const },
+      AGE: { name: "AGE", label: "Age", type: "numeric" as const, measure: "scale" as const, decimals: 0, align: "right" as const },
+      SALARY: { name: "SALARY", label: "Salary", type: "numeric" as const, measure: "scale" as const, decimals: 0, align: "right" as const },
     };
 
     const res = imputeHotDeck(donorData, ["SALARY"], vars);

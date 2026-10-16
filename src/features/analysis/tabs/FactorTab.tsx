@@ -5,6 +5,7 @@ import { getDataRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBa
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
@@ -59,7 +60,8 @@ export function FactorTab({
 
   return (
     <div className="w-full max-w-full">
-      <h2 className="text-xl font-semibold mb-2">{t("factorTab.title")}</h2>
+      <h2 className="text-xl font-semibold mb-2">{t("factorTab.title")}<InfoHint term="efa" /></h2>
+      <GlossaryBar terms={["efa", "kmo", "bartlett"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("factorTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
@@ -108,7 +110,7 @@ export function FactorTab({
                   setResult(null);
                   setKmoResult(null);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
                 placeholder="Auto"
               />
             </div>
@@ -116,7 +118,7 @@ export function FactorTab({
               type="button"
               onClick={runEFA}
               disabled={efaLoading}
-              className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+              className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {efaLoading ? (
                 <>
@@ -175,11 +177,11 @@ export function FactorTab({
                       <table className="w-full">
                         <tbody>
                           <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                            <td className="p-2">{t("factorTab.kmoLabel")}</td>
+                            <td className="p-2">{t("factorTab.kmoLabel")}<InfoHint term="kmo" /></td>
                             <td className={`p-2 text-right font-semibold ${kmoResult.kmo >= 0.5 ? "" : "text-red-600 dark:text-red-400"}`}>{kmoResult.kmo.toFixed(3)}</td>
                           </tr>
                           <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                            <td className="p-2">{t("factorTab.bartlettChi2Label")}</td>
+                            <td className="p-2">{t("factorTab.bartlettChi2Label")}<InfoHint term="bartlett" /></td>
                             <td className="p-2 text-right">{kmoResult.bartlettChi2 != null ? kmoResult.bartlettChi2.toFixed(3) : "—"}</td>
                           </tr>
                           <tr className="border-b border-neutral-100 dark:border-neutral-700/50">

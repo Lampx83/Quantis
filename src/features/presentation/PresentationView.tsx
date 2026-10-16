@@ -17,8 +17,7 @@ import {
   Pie,
   Cell,
   ComposedChart,
-  ReferenceArea,
-  ReferenceLine,
+  ErrorBar,
   AreaChart,
   Area,
   RadarChart,
@@ -36,6 +35,7 @@ import type {
   MannWhitneyResult,
 } from "@/utils/stats";
 import {
+  numCell,
   getDataRows,
   getBoxStatsByGroup,
   getHistogramBins,
@@ -113,7 +113,7 @@ export function PresentationView({
     const rows = getDataRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
     const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histColIdx >= 0 ? rows.slice(1).map((r) => Number(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
+    const histValues = histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
     if (histValues.length === 0) { setHistBinsBackendResult(null); return; }
     quantisApi.analyzeHistogramBins(histValues).then(setHistBinsBackendResult);
   }, [tab, selectedDataset?.id, chartType, histogramCol, analysisBackendAvailable]);
@@ -130,7 +130,7 @@ export function PresentationView({
     const yIdx = cols.indexOf(yCol);
     const isScatter = xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol);
     const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: isScatter ? Number(r[xIdx]) : r[xIdx], y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
+      ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
       : [];
     const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
     /** Biểu đồ cột: dùng X làm danh mục; nếu có Y (số) thì chiều cao = tổng Y theo nhóm, không thì = tần số */
@@ -140,7 +140,7 @@ export function PresentationView({
               const sums: Record<string, number> = {};
               rows.slice(1).forEach((r) => {
                 const name = String(r[xIdx] ?? "").trim();
-                const val = Number(r[yIdx]);
+                const val = numCell(r[yIdx]);
                 if (name === "" || Number.isNaN(val)) return;
                 sums[name] = (sums[name] || 0) + val;
               });
@@ -152,14 +152,22 @@ export function PresentationView({
     const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
       ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
       : [];
-    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n }));
+    // Hộp xếp chồng: phần đệm trong suốt (0→Q1) + hộp Q1→Median + hộp Median→Q3; râu = ErrorBar (Q1→Min, Q3→Max).
+    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
+    const boxYDomain: [number, number] = (() => {
+      if (boxStats.length === 0) return [0, 1];
+      const lo = Math.min(...boxStats.map((b) => b.min));
+      const hi = Math.max(...boxStats.map((b) => b.max));
+      const pad = (hi - lo) * 0.05 || 1;
+      return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+    })();
     const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
     const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
     const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
       const groups: Record<string, number[]> = {};
       rows.slice(1).forEach((r) => {
         const g = String(r[densityGroupIdx] ?? "").trim();
-        const v = Number(r[densityValueIdx]);
+        const v = numCell(r[densityValueIdx]);
         if (g === "" || Number.isNaN(v)) return;
         if (!groups[g]) groups[g] = [];
         groups[g].push(v);
@@ -178,7 +186,7 @@ export function PresentationView({
       return series;
     })() : [];
     const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => Number(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
+    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
     const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
     const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
     const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
@@ -203,7 +211,7 @@ export function PresentationView({
       ? (pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol)
           ? (() => {
               const idx = cols.indexOf(pieNumericCol);
-              const vals = rows.slice(1).map((r) => Number(r[idx])).filter((v) => !Number.isNaN(v));
+              const vals = rows.slice(1).map((r) => numCell(r[idx])).filter((v) => !Number.isNaN(v));
               const binned = binNumericForPie(vals, pieBinCount);
               return binned.map((b) => ({ name: b.label, value: b.count })).filter((d) => d.value > 0);
             })()
@@ -222,7 +230,7 @@ export function PresentationView({
               : []))
       : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
     const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: Number(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
+      ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
     const areaData = lineData;
     const stackByIdx = stackByCol ? cols.indexOf(stackByCol) : -1;
@@ -234,7 +242,7 @@ export function PresentationView({
       rows.slice(1).forEach((r) => {
         const x = r[xIdx] ??"";
         const s = r[stackByIdx] ??"";
-        const y = Number(r[yIdx]);
+        const y = numCell(r[yIdx]);
         if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
       });
       return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
@@ -248,7 +256,7 @@ export function PresentationView({
         const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
         radarGroups.forEach((g) => {
           const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
-          const vals = subset.map((r) => Number(r[colIdx])).filter((v) => !Number.isNaN(v));
+          const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
           entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
         });
         return entry;
@@ -266,7 +274,7 @@ export function PresentationView({
         const point: Record<string, string | number> = { x: r[multiLineXIdx] ??"" };
         multiLineYCols.forEach((col) => {
           const idx = cols.indexOf(col);
-          if (idx >= 0) { const v = Number(r[idx]); point[col] = Number.isNaN(v) ? "" : v; }
+          if (idx >= 0) { const v = numCell(r[idx]); point[col] = Number.isNaN(v) ? "" : v; }
         });
         return point;
       }).filter((d) => multiLineYCols.some((c) => d[c] !== "" && d[c] !== undefined));
@@ -398,14 +406,14 @@ export function PresentationView({
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.axisXLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.axisYNumericLabel")}</label>
-              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -413,7 +421,7 @@ export function PresentationView({
             {chartType === "bar" && (
               <div>
                 <label className="block text-sm font-medium mb-1">{t("presentationView.sortAxisXLabel")}</label>
-                <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                   <option value="none">{t("presentationView.sortNone")}</option>
                   <option value="asc">{t("presentationView.sortAsc")}</option>
                   <option value="desc">{t("presentationView.sortDesc")}</option>
@@ -426,21 +434,21 @@ export function PresentationView({
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.axisXCategoryLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.stackByLabel")}</label>
-              <select value={stackByCol} onChange={(e) => setStackByCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={stackByCol} onChange={(e) => setStackByCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.filter((c) => c !== xCol).map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.valueNumericLabel")}</label>
-              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -451,7 +459,7 @@ export function PresentationView({
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.groupColumnOptionalLabel")}</label>
-              <select value={radarGroupCol} onChange={(e) => setRadarGroupCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={radarGroupCol} onChange={(e) => setRadarGroupCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("presentationView.noGroupOption")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -476,9 +484,9 @@ export function PresentationView({
         {chartType === "heatmap" && (
           <div className="flex flex-wrap gap-4 mb-4">
             <span className="text-sm font-medium">{t("presentationView.coefficientLabel")}</span>
-            <button type="button" onClick={() => setHeatmapCorrMethod("pearson")} className={`rounded-lg px-3 py-1.5 text-sm ${heatmapCorrMethod === "pearson" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Pearson</button>
-            <button type="button" onClick={() => setHeatmapCorrMethod("spearman")} className={`rounded-lg px-3 py-1.5 text-sm ${heatmapCorrMethod === "spearman" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Spearman</button>
-            <button type="button" onClick={() => setHeatmapCorrMethod("kendall")} className={`rounded-lg px-3 py-1.5 text-sm ${heatmapCorrMethod === "kendall" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Kendall</button>
+            <button type="button" onClick={() => setHeatmapCorrMethod("pearson")} className={`rounded-md px-3 py-1.5 text-sm ${heatmapCorrMethod === "pearson" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Pearson</button>
+            <button type="button" onClick={() => setHeatmapCorrMethod("spearman")} className={`rounded-md px-3 py-1.5 text-sm ${heatmapCorrMethod === "spearman" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Spearman</button>
+            <button type="button" onClick={() => setHeatmapCorrMethod("kendall")} className={`rounded-md px-3 py-1.5 text-sm ${heatmapCorrMethod === "kendall" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Kendall</button>
             {corrResult && corrResult.columnNames.length >= 2 && (
               <button
                 type="button"
@@ -493,7 +501,7 @@ export function PresentationView({
                   a.click();
                   URL.revokeObjectURL(a.href);
                 }}
-                className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"
               >
                 <Download className="w-4 h-4" /> {t("presentationView.exportCsvButton")}
               </button>
@@ -511,14 +519,14 @@ export function PresentationView({
               <div className="flex flex-wrap gap-4">
                 <div>
                   <label className="block text-xs font-medium mb-1">{t("presentationView.numericColumnLabel")}</label>
-                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("analysisView.selectPlaceholder")}</option>
                     {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1">{t("presentationView.binCountLabel")}</label>
-                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} {t("presentationView.binCountUnit")}</option>)}
                   </select>
                 </div>
@@ -529,7 +537,7 @@ export function PresentationView({
         {chartType === "donut" && (
           <div className="mb-4 space-y-3">
             <label className="block text-sm font-medium mb-1">{t("presentationView.categoricalColumnLabel")}</label>
-            <select value={xCol} onChange={(e) => { setXCol(e.target.value); setPieBinNumeric(false); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={xCol} onChange={(e) => { setXCol(e.target.value); setPieBinNumeric(false); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("analysisView.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -541,14 +549,14 @@ export function PresentationView({
               <div className="flex flex-wrap gap-4">
                 <div>
                   <label className="block text-xs font-medium mb-1">{t("presentationView.numericColumnLabel")}</label>
-                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     <option value="">{t("analysisView.selectPlaceholder")}</option>
                     {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1">{t("presentationView.binCountLabel")}</label>
-                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
                     {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} {t("presentationView.binCountUnit")}</option>)}
                   </select>
                 </div>
@@ -560,14 +568,14 @@ export function PresentationView({
           <div className="mb-4 flex flex-wrap items-end gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.axisCategoryLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.sortAxisLabel")}</label>
-              <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="none">{t("presentationView.sortNone")}</option>
                 <option value="asc">{t("presentationView.sortAsc")}</option>
                 <option value="desc">{t("presentationView.sortDesc")}</option>
@@ -579,14 +587,14 @@ export function PresentationView({
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.groupVarXLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.numericVarYLabel")}</label>
-              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -597,7 +605,7 @@ export function PresentationView({
           <div className="mb-4 flex flex-wrap items-center gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.distributionColumnLabel")}</label>
-              <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -612,14 +620,14 @@ export function PresentationView({
           <div className="flex flex-wrap gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.densityGroupLabel")}</label>
-              <select value={densityGroupCol} onChange={(e) => setDensityGroupCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={densityGroupCol} onChange={(e) => setDensityGroupCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {cols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t("presentationView.densityValueLabel")}</label>
-              <select value={densityValueCol} onChange={(e) => setDensityValueCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <select value={densityValueCol} onChange={(e) => setDensityValueCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                 <option value="">{t("analysisView.selectPlaceholder")}</option>
                 {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -642,8 +650,8 @@ export function PresentationView({
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid />
-                  <XAxis dataKey="x" name={xCol} />
-                  <YAxis dataKey="y" name={yCol} />
+                  <XAxis dataKey="x" name={xCol} type="number" domain={["auto", "auto"]} label={{ value: xCol, position: "insideBottom", offset: -10 }} />
+                  <YAxis dataKey="y" name={yCol} type="number" domain={["auto", "auto"]} label={{ value: yCol, angle: -90, position: "insideLeft", offset: 0 }} />
                   <Tooltip cursor={{ strokeDasharray: "3 3" }} />
                   <Scatter data={chartData} fill="#0061bb" name={t("presentationView.scatterPointName")} />
                 </ScatterChart>
@@ -774,7 +782,7 @@ export function PresentationView({
                 <ComposedChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis domain={["auto", "auto"]} allowDataOverflow />
+                  <YAxis domain={boxYDomain} allowDataOverflow />
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length || !payload[0].payload) return null;
                     const b = payload[0].payload as { name: string; min: number; q1: number; median: number; q3: number; max: number; n: number };
@@ -785,14 +793,13 @@ export function PresentationView({
                       </div>
                     );
                   }} />
-                  {boxStats.map((b) => (
-                    <React.Fragment key={b.group}>
-                      <ReferenceArea x1={b.group} x2={b.group} y1={b.q1} y2={b.q3} fill="#0061bb" fillOpacity={0.5} stroke="#0061bb" strokeWidth={1} />
-                      <ReferenceLine x={b.group} y={b.median} stroke="#111" strokeWidth={2} />
-                      <ReferenceLine segment={[{ x: b.group, y: b.q3 }, { x: b.group, y: b.max }]} stroke="#333" strokeWidth={1} />
-                      <ReferenceLine segment={[{ x: b.group, y: b.q1 }, { x: b.group, y: b.min }]} stroke="#333" strokeWidth={1} />
-                    </React.Fragment>
-                  ))}
+                  <Bar dataKey="q1" stackId="box" fill="transparent" stroke="none" isAnimationActive={false} legendType="none">
+                    <ErrorBar dataKey="whiskerLow" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
+                  </Bar>
+                  <Bar dataKey="boxLower" stackId="box" fill="#0061bb" fillOpacity={0.55} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none" />
+                  <Bar dataKey="boxUpper" stackId="box" fill="#0061bb" fillOpacity={0.85} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none">
+                    <ErrorBar dataKey="whiskerHigh" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
+                  </Bar>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

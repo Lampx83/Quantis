@@ -75,6 +75,7 @@ export function useURLSync() {
       "factor",
       "ml",
       "bayesian",
+      "panel",
     ];
     if (at && analysisTabs.includes(at)) setAnalysisTab(at);
     const reproTabs: ReproducibilityTab[] = ["workflows", "versioning", "openscience"];

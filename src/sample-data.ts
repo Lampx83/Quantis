@@ -4,23 +4,24 @@
 
 import type { Dataset, Workflow, WorkflowStep } from "./types";
 import { generateId } from "./utils/helpers";
-import { SAMPLE_DATASETS, type SampleDatasetDef } from "./sampleDatasets";
 import { fetchSampleDatasetFull } from "./api";
 import { t } from "./i18n";
 
 const now = new Date().toISOString();
 
-/** Tạo Dataset từ định nghĩa mẫu tĩnh cục bộ (SAMPLE_DATASETS) */
-function datasetFromSampleDef(def: SampleDatasetDef): Dataset {
+/** Tạo Dataset từ một sample dataset (admin-curated, tải từ backend) theo id. Trả về null nếu không tải được. */
+async function datasetFromSampleId(sampleId: string): Promise<Dataset | null> {
+  const full = await fetchSampleDatasetFull(sampleId);
+  if (!full) return null;
   const id = generateId();
-  const raw = def.getData();
-  const headers = raw[0];
-  const dataRows = raw.slice(1);
-  const data = raw;
+  const headers = full.header ?? full.data?.[0] ?? [];
+  const dataRows = full.rows_data ?? (full.data ?? []).slice(1);
+  const data = full.data ?? [headers, ...dataRows];
+  if (!headers.length) return null;
   const preview = data.slice(0, 8);
   return {
     id,
-    name: def.name,
+    name: full.name,
     rows: dataRows.length,
     columns: headers.length,
     columnNames: headers,
@@ -30,43 +31,6 @@ function datasetFromSampleDef(def: SampleDatasetDef): Dataset {
     createdAt: now,
     updatedAt: now,
   };
-}
-
-/** Tạo Dataset từ một sample dataset (admin-curated, tải từ backend) theo id.
- * Tự động fallback về dữ liệu mẫu cục bộ nếu không tải được từ backend. */
-async function datasetFromSampleId(sampleId: string): Promise<Dataset | null> {
-  try {
-    const full = await fetchSampleDatasetFull(sampleId);
-    if (full) {
-      const id = generateId();
-      const headers = full.header ?? full.data?.[0] ?? [];
-      const dataRows = full.rows_data ?? (full.data ?? []).slice(1);
-      const data = full.data ?? [headers, ...dataRows];
-      if (!headers.length) return null;
-      const preview = data.slice(0, 8);
-      return {
-        id,
-        name: full.name,
-        rows: dataRows.length,
-        columns: headers.length,
-        columnNames: headers,
-        preview,
-        data,
-        sourceFormat: "csv",
-        createdAt: now,
-        updatedAt: now,
-      };
-    }
-  } catch {
-    // Backend không khả dụng, chuyển sang fallback
-  }
-
-  // Fallback về dữ liệu mẫu tĩnh cục bộ
-  const localDef = SAMPLE_DATASETS.find((d) => d.id === sampleId);
-  if (localDef) {
-    return datasetFromSampleDef(localDef);
-  }
-  return null;
 }
 
 /** Dataset 1: Điểm khảo sát (nhóm đối chứng vs can thiệp) — mở rộng 40 dòng */

@@ -17,7 +17,7 @@ export function DemoGalleryModal() {
       onClick={() => setShowDemoGallery(false)}
     >
       <div
-        className="bg-white dark:bg-neutral-800 rounded-2xl shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
@@ -27,7 +27,7 @@ export function DemoGalleryModal() {
           <button
             type="button"
             onClick={() => setShowDemoGallery(false)}
-            className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+            className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -51,7 +51,7 @@ export function DemoGalleryModal() {
                 setSelectedWorkflowStepId(null);
                 setShowDemoGallery(false);
               }}
-              className="text-left p-4 rounded-xl border-2 border-neutral-200 dark:border-neutral-600 hover:border-brand/50 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors"
+              className="text-left p-4 rounded-lg border-2 border-neutral-200 dark:border-neutral-600 hover:border-brand/50 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors"
             >
               <span className="text-xs font-semibold text-brand uppercase tracking-wider">{tpl.domain}</span>
               <p className="font-semibold text-neutral-800 dark:text-neutral-200 mt-1">{tpl.name}</p>

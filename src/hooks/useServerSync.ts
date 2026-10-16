@@ -101,7 +101,8 @@ export function useServerSync() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const triggerSync = () => {
       const { isOnline: online, useBackend: backend, authConfig: ac, authUser: au } = useSyncStore.getState();
-      const canSync = backend && (!ac?.authEnabled || !!au);
+      // Cùng điều kiện với nhánh kéo/lưu cục bộ: khách Portal (@local) không được ghi workspace lên server.
+      const canSync = checkCanSyncToServer({ useBackend: backend, authConfig: ac, authUser: au });
       if (!canSync || !online) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(async () => {

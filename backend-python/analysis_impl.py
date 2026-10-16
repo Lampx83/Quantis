@@ -19,7 +19,24 @@ def _rows_to_df(rows: list, max_rows: int = None) -> pd.DataFrame:
     headers = [str(h).strip() or f"col_{i}" for i, h in enumerate(rows[0])]
     data = rows[1:]
     df = pd.DataFrame(data, columns=headers)
+    # Ô trống / chỉ có khoảng trắng = giá trị thiếu (NaN), không phải chuỗi rỗng — nếu không cột số bị coi là
+    # "văn bản" (mean=None) và các phép tính ma trận (tương quan, hiệp phương sai) trả 400.
+    df = df.replace(r"^\s*$", np.nan, regex=True)
     return df
+
+
+def _numeric_frame(df: pd.DataFrame, min_valid: int = 3) -> pd.DataFrame:
+    """Các cột số của df (chuỗi số được ép kiểu; cột có giá trị không phải số bị loại; ô thiếu giữ NaN)."""
+    cols = {}
+    for c in df.columns:
+        s = df[c]
+        nn = s.dropna()
+        if len(nn) < min_valid:
+            continue
+        num = pd.to_numeric(nn, errors="coerce")
+        if num.notna().all():
+            cols[c] = pd.to_numeric(s, errors="coerce")
+    return pd.DataFrame(cols)
 
 
 def _semopy_cell_float(val, default: float = 0.0) -> float:
@@ -92,6 +109,9 @@ def run_descriptive(rows: list) -> list:
                     "max": float(valid.max()),
                     "q25": float(q.iloc[0]),
                     "q75": float(q.iloc[2]),
+                    "q10": float(valid.quantile(0.1)),
+                    "q90": float(valid.quantile(0.9)),
+                    **({"kurtosis": float(valid.kurt())} if len(valid) >= 4 and valid.std() > 0 else {}),
                 })
             else:
                 counts = s.astype(str).value_counts()
@@ -149,6 +169,7 @@ def run_chi2(rows: list, col1: str, col2: str):
     df = _rows_to_df(rows)
     if col1 not in df.columns or col2 not in df.columns:
         return None
+    df = df.dropna(subset=[col1, col2])
     ct = pd.crosstab(df[col1].astype(str).str.strip(), df[col2].astype(str).str.strip())
     if ct.size < 4:
         return None
@@ -168,11 +189,13 @@ def run_chi2(rows: list, col1: str, col2: str):
 
 def run_correlation(rows: list, method: str = "pearson"):
     df = _rows_to_df(rows)
-    numeric = df.select_dtypes(include=[np.number])
+    numeric = _numeric_frame(df)
     if numeric.shape[1] < 2 or len(numeric) < 3:
         return None
-    corr = numeric.corr(method=method if method == "spearman" else "pearson")
-    return {"matrix": corr.values.tolist(), "columnNames": corr.columns.tolist()}
+    m = method if method in ("spearman", "kendall") else "pearson"
+    corr = numeric.corr(method=m)  # pairwise-complete (bỏ ô thiếu theo từng cặp)
+    matrix = [[(None if pd.isna(v) else float(v)) for v in row] for row in corr.values.tolist()]
+    return {"matrix": matrix, "columnNames": [str(c) for c in corr.columns.tolist()]}
 
 
 def run_anova(rows: list, factor_col: str, value_col: str):
@@ -264,11 +287,19 @@ def run_ancova(rows: list, factor_col: str, value_col: str, covariate_cols: list
         model = ols(formula, data=df).fit()
         a = anova_lm(model, typ=2)
         group_means = []
+        cov_means = {c: float(df[c].mean()) for c in covariate_cols}
         for name, g in df.groupby(factor_col)[value_col]:
+            # Trung bình hiệu chỉnh (estimated marginal mean): giá trị dự đoán của mô hình khi covariate = trung bình chung.
+            try:
+                newd = pd.DataFrame({factor_col: [name], **{c: [cov_means[c]] for c in covariate_cols}})
+                adj = float(model.predict(newd).iloc[0])
+            except Exception:
+                adj = float(g.mean())
             group_means.append({
                 "group": str(name),
                 "n": int(len(g)),
-                "mean": float(g.mean()),
+                "mean": adj,
+                "rawMean": float(g.mean()),
                 "std": float(g.std()) if len(g) > 1 else 0.0,
             })
         # Hàng factor (C(factor))
@@ -301,6 +332,25 @@ def run_ancova(rows: list, factor_col: str, value_col: str, covariate_cols: list
         return None
 
 
+def _mv_factor_text(result, key: str) -> str:
+    """Chuyển bảng kiểm định đa biến (Wilks, Pillai, Hotelling-Lawley, Roy) của statsmodels thành một dòng dễ đọc."""
+    try:
+        stat = result.results[key]["stat"]
+        parts = []
+        for name in stat.index:
+            row = stat.loc[name]
+            val = float(row["Value"])
+            f = float(row["F Value"])
+            ndf = float(row["Num DF"])
+            ddf = float(row["Den DF"])
+            pv = float(row["Pr > F"])
+            ptxt = "< .001" if pv < 0.001 else f"= {pv:.4f}"
+            parts.append(f"{name} = {val:.4f}, F({ndf:g}, {ddf:g}) = {f:.3f}, p {ptxt}")
+        return "; ".join(parts)
+    except Exception:
+        return str(result.results[key])
+
+
 def run_manova(rows: list, factor_col: str, value_cols: list[str]):
     """MANOVA: Multivariate Analysis of Variance — nhiều biến phụ thuộc (DV), một nhân tố (IV)."""
     try:
@@ -330,7 +380,7 @@ def run_manova(rows: list, factor_col: str, value_cols: list[str]):
             if "Intercept" in r:
                 out["intercept"] = str(r["Intercept"])
             if "C(" + factor_col + ")" in r:
-                out["factorTest"] = str(r["C(" + factor_col + ")"])
+                out["factorTest"] = _mv_factor_text(result, "C(" + factor_col + ")")
             out["summary"] = str(result)
         else:
             out["summary"] = str(result)
@@ -374,7 +424,7 @@ def run_mancova(rows: list, factor_col: str, value_cols: list[str], covariate_co
             if "Intercept" in r:
                 out["intercept"] = str(r["Intercept"])
             if "C(" + factor_col + ")" in r:
-                out["factorTest"] = str(r["C(" + factor_col + ")"])
+                out["factorTest"] = _mv_factor_text(result, "C(" + factor_col + ")")
             out["summary"] = str(result)
         else:
             out["summary"] = str(result)
@@ -1108,18 +1158,27 @@ def run_kmeans(rows: list, column_names: list[str], k: int, max_iter: int = 100)
 
 
 # ---------- EFA (PCA extraction + varimax rotation) ----------
-def _varimax(loadings: np.ndarray, tol: float = 1e-8, max_iter: int = 100) -> np.ndarray:
+def _varimax(loadings: np.ndarray, tol: float = 1e-10, max_iter: int = 1000) -> np.ndarray:
+    """Varimax thô (không chuẩn hoá Kaiser). Gradient đúng: Λᵀ(Λ³ − Λ·diag(mean(Λ²))) — thuật toán SVD chuẩn.
+    Sau xoay: đổi dấu để tổng loading mỗi cột dương và sắp xếp nhân tố theo tổng bình phương loading giảm dần."""
     p, k = loadings.shape
     L = loadings.copy()
+    if k < 2:
+        return L
+    d_old = 0.0
     for _ in range(max_iter):
-        L_old = L.copy()
-        Lambda = L
-        u, s, vh = np.linalg.svd(Lambda.T @ (Lambda**2 - (Lambda**2).mean(axis=0)))
+        G = L**3 - L @ np.diag((L**2).sum(axis=0)) / p
+        u, s, vh = np.linalg.svd(loadings.T @ G)
         R = u @ vh
-        L = Lambda @ R
-        if np.abs(L - L_old).max() < tol:
+        L = loadings @ R
+        d = float(s.sum())
+        if d_old != 0.0 and d < d_old * (1 + tol):
             break
-    return L
+        d_old = d
+    signs = np.where(L.sum(axis=0) < 0, -1.0, 1.0)
+    L = L * signs
+    order = np.argsort(-(L**2).sum(axis=0), kind="stable")
+    return L[:, order]
 
 
 def run_efa(rows: list, column_names: list[str], n_factors: int = None):
@@ -1133,12 +1192,20 @@ def run_efa(rows: list, column_names: list[str], n_factors: int = None):
     data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
     if len(data) < 10:
         return None
-    X = StandardScaler().fit_transform(data)
+    # PCA trên MA TRẬN TƯƠNG QUAN (như SPSS/R): tổng eigenvalue = số biến. Trước đây StandardScaler (ddof=0) rồi PCA
+    # (ddof=1) làm mọi eigenvalue bị nhân n/(n−1).
+    R = np.corrcoef(data.values.T)
+    evals, evecs = np.linalg.eigh(R)
+    order = np.argsort(evals)[::-1]
+    evals = np.clip(evals[order], 0.0, None)
+    evecs = evecs[:, order]
+    # Quy ước dấu ổn định: thành phần lớn nhất của mỗi vector mang dấu dương
+    for j in range(evecs.shape[1]):
+        if evecs[np.argmax(np.abs(evecs[:, j])), j] < 0:
+            evecs[:, j] = -evecs[:, j]
     n_components = min(len(cols), len(data) - 1)
-    pca = PCA(n_components=n_components)
-    pca.fit(X)
-    eigenvalues = pca.explained_variance_.tolist()
-    loadings = pca.components_.T * np.sqrt(pca.explained_variance_)
+    eigenvalues = evals[:n_components].tolist()
+    loadings = evecs[:, :n_components] * np.sqrt(evals[:n_components])
     if n_factors is None:
         n_factors = max(1, sum(1 for e in eigenvalues if e > 1))
     n_factors = min(int(n_factors), loadings.shape[1])
@@ -1196,6 +1263,7 @@ def run_crosstab(rows: list, col1: str, col2: str) -> dict | None:
     df = _rows_to_df(rows)
     if col1 not in df.columns or col2 not in df.columns:
         return None
+    df = df.dropna(subset=[col1, col2])
     ct = pd.crosstab(
         df[col1].astype(str).str.strip(),
         df[col2].astype(str).str.strip(),
@@ -1316,9 +1384,9 @@ def run_beta_posterior(successes: int, n: int, prior_alpha: float = 1, prior_bet
     s = pa + pb
     mean = pa / s
     var = (pa * pb) / (s * s * (s + 1))
-    std = np.sqrt(var)
-    ci_low = max(0, mean - 1.96 * std)
-    ci_high = min(1, mean + 1.96 * std)
+    # Khoảng tin cậy (credible interval) 95% chính xác theo phân vị Beta (không dùng xấp xỉ chuẩn).
+    from scipy.stats import beta as _beta
+    ci_low, ci_high = _beta.ppf([0.025, 0.975], pa, pb)
     return {
         "postAlpha": float(pa),
         "postBeta": float(pb),
@@ -1355,7 +1423,7 @@ def run_text_stats(rows: list, col: str, top_n: int = 100) -> dict | None:
     df = _rows_to_df(rows)
     if col not in df.columns:
         return None
-    series = df[col].astype(str).str.strip()
+    series = df[col].fillna("").astype(str).str.strip()
     n_rows = len(series)
     n_empty = int(series.str.len().eq(0).sum())
     words_per_row = series.str.split().str.len()
@@ -1386,7 +1454,7 @@ def run_keyword_counts(rows: list, col: str, keywords: list[str]) -> dict | None
     df = _rows_to_df(rows)
     if col not in df.columns or not keywords:
         return None
-    series = df[col].astype(str).str.strip().str.lower()
+    series = df[col].fillna("").astype(str).str.strip().str.lower()
     result = []
     for kw in keywords:
         kw_clean = kw.strip().lower()
@@ -1404,7 +1472,7 @@ def run_ngram_freq(rows: list, col: str, n: int = 2, top_n: int = 50) -> dict | 
     if col not in df.columns or n < 1:
         return None
     from collections import Counter
-    series = df[col].astype(str).str.strip().str.lower()
+    series = df[col].fillna("").astype(str).str.strip().str.lower()
     ngrams: list[str] = []
     for s in series:
         if not s:
@@ -1423,8 +1491,8 @@ def run_cohens_kappa(rows: list, col1: str, col2: str) -> dict | None:
     if col1 not in df.columns or col2 not in df.columns:
         return None
     from collections import Counter
-    c1 = df[col1].astype(str).str.strip()
-    c2 = df[col2].astype(str).str.strip()
+    c1 = df[col1].fillna("").astype(str).str.strip()
+    c2 = df[col2].fillna("").astype(str).str.strip()
     pairs = list(zip(c1, c2))
     n = len(pairs)
     if n == 0:
@@ -1451,7 +1519,7 @@ def run_cohens_kappa(rows: list, col1: str, col2: str) -> dict | None:
 def run_covariance(rows: list, method: str = "population") -> dict | None:
     """Ma trận hiệp phương sai (Covariance). method: 'population' (N) hoặc 'sample' (N-1)."""
     df = _rows_to_df(rows)
-    numeric = df.select_dtypes(include=[np.number])
+    numeric = _numeric_frame(df, min_valid=2)
     if numeric.shape[1] < 2 or len(numeric) < 2:
         return None
     ddof = 0 if method == "population" else 1
@@ -1658,8 +1726,8 @@ def run_ttest_paired(rows: list, col1: str, col2: str) -> dict | None:
     n = len(diff)
     mean_diff = float(np.mean(diff))
     std_diff = float(np.std(diff, ddof=1)) if n > 1 else 0.0
-    pooled_std = float(np.std(np.concatenate([a, b]), ddof=1)) if len(a) + len(b) > 2 else 0.0
-    cohen_d = (mean_diff / pooled_std) if pooled_std > 0 else 0.0
+    # Cohen's d cho mẫu cặp = d_z = trung bình hiệu / SD hiệu (như SPSS/JASP/G*Power; khớp bản tính phía trình duyệt).
+    cohen_d = (mean_diff / std_diff) if std_diff > 0 else 0.0
     return {
         "t": float(t_stat),
         "df": n - 1,

@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import type { Dataset } from "@/types";
 import {
+  numCell,
   getDataRows,
   getUniqueValues,
   computeKMeans,
@@ -128,7 +129,7 @@ export function MLTab({
   const KMEANS_CLUSTER_COLORS = [
     "#2563eb",
     "#16a34a",
-    "#1f2937",
+    "#64748b",
     "#7c3aed",
     "#dc2626",
     "#0891b2",
@@ -144,7 +145,7 @@ export function MLTab({
     if (indices.length < 2) return null;
     const data: number[][] = [];
     for (let i = 1; i < rows.length; i++) {
-      const row = indices.map((ci) => Number(rows[i][ci]));
+      const row = indices.map((ci) => numCell(rows[i][ci]));
       if (row.every((v) => !Number.isNaN(v))) data.push(row);
     }
     if (data.length !== kmeansResult.assignments.length) return null;
@@ -188,7 +189,7 @@ export function MLTab({
         <button
           type="button"
           onClick={() => setMlSubTab("clustering")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${
+          className={`rounded-md px-3 py-1.5 text-sm ${
             mlSubTab === "clustering"
               ? "bg-brand text-white"
               : "border border-neutral-300 dark:border-neutral-600"
@@ -199,7 +200,7 @@ export function MLTab({
         <button
           type="button"
           onClick={() => setMlSubTab("classification")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${
+          className={`rounded-md px-3 py-1.5 text-sm ${
             mlSubTab === "classification"
               ? "bg-brand text-white"
               : "border border-neutral-300 dark:border-neutral-600"
@@ -210,7 +211,7 @@ export function MLTab({
         <button
           type="button"
           onClick={() => setMlSubTab("explainability")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${
+          className={`rounded-md px-3 py-1.5 text-sm ${
             mlSubTab === "explainability"
               ? "bg-brand text-white"
               : "border border-neutral-300 dark:border-neutral-600"
@@ -252,14 +253,14 @@ export function MLTab({
                       setK(Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 2)));
                       setKmeansResult(null);
                     }}
-                    className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20"
+                    className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={runKMeans}
                   disabled={kmeansLoading}
-                  className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
+                  className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   {kmeansLoading ? (
                     <>
@@ -422,7 +423,7 @@ export function MLTab({
                     setClassTargetCol(e.target.value);
                     setMulticlassResult(null);
                   }}
-                  className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                  className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
                 >
                   <option value="">{t("mlTab.selectLabelColPlaceholder")}</option>
                   {categoricalCols.map((c) => (
@@ -457,7 +458,7 @@ export function MLTab({
                 type="button"
                 onClick={runClassification}
                 disabled={!classTargetCol || classFeatureCols.length < 1}
-                className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50"
+                className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50"
               >
                 {t("mlTab.runClassification")}
               </button>
@@ -491,8 +492,8 @@ export function MLTab({
                       {t("mlTab.classificationReportLabel")}
                     </p>
                     <p className="p-2 text-neutral-600 dark:text-neutral-400">
-                      Accuracy: {(multiclassResult.metrics.accuracy * 100).toFixed(2)}% | Macro
-                      F1: {multiclassResult.metrics.macroF1.toFixed(4)} | Weighted F1:{" "}
+                      Accuracy: {(multiclassResult.metrics.accuracy * 100).toFixed(2)}% · Macro
+                      F1: {multiclassResult.metrics.macroF1.toFixed(4)} · Weighted F1:{" "}
                       {multiclassResult.metrics.weightedF1.toFixed(4)}
                     </p>
                     <table className="w-full">
@@ -661,12 +662,12 @@ export function MLTab({
                       );
                       setPermutationResult(null);
                     }}
-                    className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20"
+                    className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20"
                   />
                   <button
                     type="button"
                     onClick={runPermutationImportance}
-                    className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90"
+                    className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90"
                   >
                     {t("mlTab.runPermutationImportance")}
                   </button>

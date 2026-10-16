@@ -1,16 +1,33 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { X, Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows, computeDescriptive } from "@/utils/stats";
+import { numCell, getDataRows, computeDescriptive } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint } from "@/components/common/InfoHint";
 import {
   imputeListwise,
   imputeMeanMedianMode,
   imputeHotDeck,
 } from "@/utils/missing-imputation";
 import { analyzeMiceImputation, type MiceImputationResponse } from "@/api";
+import { ensureDatasetMetadata } from "@/utils/metadata";
+import {
+  renameColumn,
+  coerceColumns,
+  computeVariable,
+  logTransform,
+  removeOutliersIQR,
+  removeDuplicates,
+  type LogKind,
+  type PrepResult,
+} from "@/utils/dataPrep";
+
+type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
+const PREP_ACTIONS: PrepAction[] = ["rename", "coerce_numeric", "coerce_text", "compute", "log", "outlier_iqr", "dedupe"];
+const tpl = (s: string, vars: Record<string, string | number>) =>
+  Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(String(v)), s);
 
 export interface TransformTabProps {
   selectedDs: Dataset | null;
@@ -43,7 +60,15 @@ export function TransformTab({
     | "filter"
     | "sort"
     | "recode"
+    | PrepAction
   >("drop_missing");
+  const [renameFrom, setRenameFrom] = useState("");
+  const [renameTo, setRenameTo] = useState("");
+  const [computeName, setComputeName] = useState("");
+  const [computeFormula, setComputeFormula] = useState("");
+  const [logKind, setLogKind] = useState<LogKind>("ln");
+  const [iqrK, setIqrK] = useState("1.5");
+  const [prepNote, setPrepNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [filterCol, setFilterCol] = useState("");
   const [filterOp, setFilterOp] = useState<"==" | "!=" | ">" | "<" | ">=" | "<=" | "contains">("==");
   const [filterValue, setFilterValue] = useState("");
@@ -77,20 +102,59 @@ export function TransformTab({
   const header = dataRows[0] || [];
   const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode/hot-deck/MICE, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
 
+  const runPrep = (act: PrepAction): PrepResult => {
+    const cols2 = transformColsMultiple;
+    if (act === "rename") return renameColumn(dataRows, renameFrom, renameTo);
+    if (act === "coerce_numeric") return coerceColumns(dataRows, cols2, "numeric");
+    if (act === "coerce_text") return coerceColumns(dataRows, cols2, "text");
+    if (act === "compute") return computeVariable(dataRows, computeName, computeFormula);
+    if (act === "log") return logTransform(dataRows, cols2, logKind);
+    if (act === "outlier_iqr") {
+      const k = Number(iqrK.replace(",", "."));
+      return Number.isFinite(k) && k > 0 ? removeOutliersIQR(dataRows, cols2, k) : { rows: dataRows, error: "k phải là số dương." };
+    }
+    return removeDuplicates(dataRows, cols2);
+  };
+
+  /** Kiểm tra trước khi hỏi «ghi đè / tạo mới»: lỗi công thức, tên trùng… hiện ngay thay vì sau khi chọn. */
+  const requestApply = () => {
+    if ((PREP_ACTIONS as string[]).includes(transformAction)) {
+      const r = runPrep(transformAction as PrepAction);
+      if (r.error) {
+        setPrepNote({ ok: false, text: r.error });
+        return;
+      }
+    }
+    setPrepNote(null);
+    setShowTransformChoiceModal(true);
+  };
+
   const applyTransform = async (overwriteOriginal: boolean) => {
     setShowTransformChoiceModal(false);
     if (dataRows.length < 2) return;
     let newRows: string[][];
     let statsForMice: MiceImputationResponse["statistics"] | undefined = undefined;
-
-    if (transformAction === "filter") {
+    let prepSuffix: string | null = null;
+    if ((PREP_ACTIONS as string[]).includes(transformAction)) {
+      const act = transformAction as PrepAction;
+      const r = runPrep(act);
+      if (r.error) {
+        setPrepNote({ ok: false, text: r.error });
+        return;
+      }
+      const st = r.stats ?? {};
+      const msgKey = { rename: "resultRename", coerce_numeric: "resultCoerce", coerce_text: "resultCoerce", compute: "resultCompute", log: "resultLog", outlier_iqr: "resultOutlier", dedupe: "resultDedupe" }[act];
+      setPrepNote({ ok: true, text: tpl(t(`transformTab.${msgKey}`), st) });
+      newRows = r.rows;
+      prepSuffix = t(`transformTab.${{ rename: "suffixRename", coerce_numeric: "suffixCoerce", coerce_text: "suffixCoerce", compute: "suffixCompute", log: "suffixLog", outlier_iqr: "suffixOutlier", dedupe: "suffixDedupe" }[act]}`);
+    } else if (transformAction === "filter") {
       if (!filterCol || header.indexOf(filterCol) === -1) return;
       const ci = header.indexOf(filterCol);
       const val = filterValue.trim();
       const op = filterOp;
       newRows = [header, ...dataRows.slice(1).filter((r) => {
         const cell = (r[ci] ?? "").toString().trim();
-        const num = Number(cell);
+        const num = numCell(cell);
         const vNum = Number(val);
         if (op === "==") return cell === val;
         if (op === "!=") return cell !== val;
@@ -201,7 +265,8 @@ export function TransformTab({
 
     const now = new Date().toISOString();
     const suffix =
-      transformAction === "filter"
+      prepSuffix ??
+      (transformAction === "filter"
         ? t("transformTab.suffixFilter")
         : transformAction === "sort"
         ? t("transformTab.suffixSort")
@@ -215,7 +280,7 @@ export function TransformTab({
         ? " (hot-deck)"
         : transformAction === "fill_mice"
         ? " (MICE)"
-        : t("transformTab.suffixDefault");
+        : t("transformTab.suffixDefault"));
 
     const beforeSnapshot = dataRows.map((r) => [...r]);
     setLastTransformResult({
@@ -225,35 +290,76 @@ export function TransformTab({
       stats: statsForMice,
     });
 
+    const newHeader = newRows[0];
+    let baseVariables = selectedDs.variables ? { ...selectedDs.variables } : undefined;
+    if (baseVariables) {
+      if (transformAction === "rename" && renameFrom && renameTo && baseVariables[renameFrom]) {
+        baseVariables[renameTo] = {
+          ...baseVariables[renameFrom],
+          name: renameTo,
+        };
+        delete baseVariables[renameFrom];
+      } else if (transformAction === "coerce_numeric") {
+        transformColsMultiple.forEach((col) => {
+          if (baseVariables && baseVariables[col]) {
+            baseVariables[col] = {
+              ...baseVariables[col],
+              type: "numeric",
+              measure: baseVariables[col].measure === "nominal" ? "scale" : baseVariables[col].measure,
+            };
+          }
+        });
+      } else if (transformAction === "coerce_text") {
+        transformColsMultiple.forEach((col) => {
+          if (baseVariables && baseVariables[col]) {
+            baseVariables[col] = {
+              ...baseVariables[col],
+              type: "string",
+              measure: "nominal",
+            };
+          }
+        });
+      } else if (transformAction === "compute" && computeName) {
+        baseVariables[computeName] = {
+          name: computeName,
+          type: "numeric",
+          measure: "scale",
+          label: computeFormula,
+          decimals: 2,
+          align: "right",
+        };
+      }
+    }
+
     if (overwriteOriginal) {
-      const updatedDs: Dataset = {
+      const updatedDs: Dataset = ensureDatasetMetadata({
         ...selectedDs,
         name: `${selectedDs.name}${suffix}`,
         rows: newRows.length - 1,
-        columns: header.length,
-        columnNames: header,
+        columns: newHeader.length,
+        columnNames: newHeader,
         preview: newRows.slice(0, 6),
         data: newRows,
-        variables: selectedDs.variables ? { ...selectedDs.variables } : undefined,
+        variables: baseVariables,
         updatedAt: now,
-      };
+      });
       setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
       setShowTransformChoiceModal(false);
     } else {
       const id = generateId();
-      const newDs: Dataset = {
+      const newDs: Dataset = ensureDatasetMetadata({
         id,
         name: `${selectedDs.name}${suffix}`,
         rows: newRows.length - 1,
-        columns: header.length,
-        columnNames: header,
+        columns: newHeader.length,
+        columnNames: newHeader,
         preview: newRows.slice(0, 6),
         data: newRows,
-        variables: selectedDs.variables ? { ...selectedDs.variables } : undefined,
+        variables: baseVariables,
         sourceFormat: selectedDs.sourceFormat,
         createdAt: now,
         updatedAt: now,
-      };
+      });
       setDatasets((prev) => [...prev, newDs]);
       onSelectDataset(id);
       onWorkflowDatasetAdd?.(id);
@@ -277,7 +383,7 @@ export function TransformTab({
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("transformTab.description")}</p>
       <div>
         <label className="block text-sm font-medium mb-1">{t("transformTab.actionLabel")}</label>
-        <select value={transformAction} onChange={(e) => setTransformAction(e.target.value as typeof transformAction)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 mb-3">
+        <select value={transformAction} onChange={(e) => setTransformAction(e.target.value as typeof transformAction)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 mb-3">
           <option value="drop_missing">{t("transformTab.actionDropMissing")}</option>
           <option value="fill_mean">{t("transformTab.actionFillMean")}</option>
           <option value="fill_median">{t("transformTab.actionFillMedian")}</option>
@@ -289,9 +395,68 @@ export function TransformTab({
           <option value="filter">{t("transformTab.actionFilter")}</option>
           <option value="sort">{t("transformTab.actionSort")}</option>
           <option value="recode">{t("transformTab.actionRecode")}</option>
+          <option value="rename">{t("transformTab.actionRename")}</option>
+          <option value="coerce_numeric">{t("transformTab.actionCoerceNumeric")}</option>
+          <option value="coerce_text">{t("transformTab.actionCoerceText")}</option>
+          <option value="compute">{t("transformTab.actionCompute")}</option>
+          <option value="log">{t("transformTab.actionLog")}</option>
+          <option value="outlier_iqr">{t("transformTab.actionOutlierIqr")}</option>
+          <option value="dedupe">{t("transformTab.actionDedupe")}</option>
         </select>
+        {transformAction === "z_score" && <InfoHint term="zScore" className="mb-3" />}
+        {transformAction === "outlier_iqr" && <InfoHint term="iqr" className="mb-3" />}
       </div>
-      {(["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max"].includes(transformAction)) && (
+      {transformAction === "rename" && (
+        <div className="flex flex-wrap gap-4 items-end mb-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.renameFrom")}</label>
+            <select value={renameFrom} onChange={(e) => setRenameFrom(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+              <option value="">{t("transformTab.selectPlaceholder")}</option>
+              {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.renameTo")}</label>
+            <input type="text" value={renameTo} onChange={(e) => setRenameTo(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
+          </div>
+        </div>
+      )}
+      {transformAction === "compute" && (
+        <div className="mb-3 space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.computeName")}</label>
+            <input type="text" value={computeName} onChange={(e) => setComputeName(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-full max-w-md" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">{t("transformTab.computeFormula")}</label>
+            <input type="text" value={computeFormula} onChange={(e) => setComputeFormula(e.target.value)} placeholder="([x1] + [x2]) / 2" className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-full max-w-xl font-mono text-sm" />
+            <p className="text-xs text-neutral-500 mt-1 max-w-xl">{t("transformTab.computeHint")}</p>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {cols.map((c) => (
+                <button key={c} type="button" onClick={() => setComputeFormula((f) => `${f}${f && !/[\s(]$/.test(f) ? " " : ""}[${c}]`)} className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-700">{c}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {transformAction === "log" && (
+        <div className="mb-3">
+          <label className="block text-sm font-medium mb-1">{t("transformTab.logKind")}</label>
+          <select value={logKind} onChange={(e) => setLogKind(e.target.value as LogKind)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <option value="ln">{t("transformTab.logLn")}</option>
+            <option value="log10">{t("transformTab.logLog10")}</option>
+            <option value="log1p">{t("transformTab.logLog1p")}</option>
+          </select>
+        </div>
+      )}
+      {transformAction === "outlier_iqr" && (
+        <div className="mb-3">
+          <label className="block text-sm font-medium mb-1">{t("transformTab.iqrK")}</label>
+          <input type="text" inputMode="decimal" value={iqrK} onChange={(e) => setIqrK(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+        </div>
+      )}
+      {transformAction === "dedupe" && <p className="text-sm text-neutral-500 mb-2">{t("transformTab.dedupeHint")}</p>}
+      {(["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max", "coerce_numeric", "coerce_text", "log", "outlier_iqr", "dedupe"].includes(transformAction)) && (
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.columnsMultiLabel")}</label>
@@ -342,14 +507,14 @@ export function TransformTab({
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.columnLabel")}</label>
-            <select value={filterCol} onChange={(e) => setFilterCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={filterCol} onChange={(e) => setFilterCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.conditionLabel")}</label>
-            <select value={filterOp} onChange={(e) => setFilterOp(e.target.value as typeof filterOp)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={filterOp} onChange={(e) => setFilterOp(e.target.value as typeof filterOp)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="==">{t("transformTab.opEquals")}</option>
               <option value="!=">{t("transformTab.opNotEquals")}</option>
               <option value=">">&gt;</option>
@@ -361,7 +526,7 @@ export function TransformTab({
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.valueLabel")}</label>
-            <input type="text" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={t("transformTab.valuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
+            <input type="text" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={t("transformTab.valuePlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2" />
           </div>
         </div>
       )}
@@ -369,14 +534,14 @@ export function TransformTab({
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.sortByColumnLabel")}</label>
-            <select value={sortCol} onChange={(e) => setSortCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={sortCol} onChange={(e) => setSortCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("transformTab.orderLabel")}</label>
-            <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="asc">{t("transformTab.orderAsc")}</option>
               <option value="desc">{t("transformTab.orderDesc")}</option>
             </select>
@@ -387,7 +552,7 @@ export function TransformTab({
         <div className="mb-3">
           <div className="mb-2">
             <label className="block text-sm font-medium mb-1">{t("transformTab.recodeColumnLabel")}</label>
-            <select value={recodeCol} onChange={(e) => setRecodeCol(e.target.value)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+            <select value={recodeCol} onChange={(e) => setRecodeCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
               <option value="">{t("transformTab.selectPlaceholder")}</option>
               {cols.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -395,9 +560,9 @@ export function TransformTab({
           <p className="text-sm text-neutral-500 mb-2">{t("transformTab.recodeRuleHint")}</p>
           {recodeRules.map((r, i) => (
             <div key={i} className="flex gap-2 items-center mb-2">
-              <input type="text" value={r.from} onChange={(e) => setRecodeRule(i, "from", e.target.value)} placeholder={t("transformTab.oldValuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
+              <input type="text" value={r.from} onChange={(e) => setRecodeRule(i, "from", e.target.value)} placeholder={t("transformTab.oldValuePlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
               <span className="text-neutral-500" aria-hidden="true">→</span>
-              <input type="text" value={r.to} onChange={(e) => setRecodeRule(i, "to", e.target.value)} placeholder={t("transformTab.newValuePlaceholder")} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
+              <input type="text" value={r.to} onChange={(e) => setRecodeRule(i, "to", e.target.value)} placeholder={t("transformTab.newValuePlaceholder")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-2 py-1.5 text-sm w-32" />
             </div>
           ))}
           <button type="button" onClick={addRecodeRule} className="text-sm text-brand hover:underline">{t("transformTab.addRuleButton")}</button>
@@ -405,13 +570,15 @@ export function TransformTab({
       )}
       <button
         type="button"
-        onClick={() => setShowTransformChoiceModal(true)}
+        onClick={requestApply}
         disabled={
           isMiceLoading ||
-          (["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max"].includes(transformAction) &&
-            transformColsMultiple.length === 0)
+          (["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max", "coerce_numeric", "coerce_text", "log", "outlier_iqr"].includes(transformAction) &&
+            transformColsMultiple.length === 0) ||
+          (transformAction === "rename" && (!renameFrom || !renameTo.trim())) ||
+          (transformAction === "compute" && (!computeName.trim() || !computeFormula.trim()))
         }
-        className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50"
+        className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50"
       >
         {isMiceLoading ? (
           <span className="flex items-center gap-2">
@@ -422,25 +589,28 @@ export function TransformTab({
           t("transformTab.applyButton")
         )}
       </button>
+      {prepNote && (
+        <p role="status" className={`mt-3 text-sm ${prepNote.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{prepNote.text}</p>
+      )}
       {showTransformChoiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowTransformChoiceModal(false)}>
-          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-lg max-w-md w-full flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
               <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t("transformTab.modalTitle")}</h3>
-              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("transformTab.closeAriaLabel")}>
+              <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700" aria-label={t("transformTab.closeAriaLabel")}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <p className="text-neutral-600 dark:text-neutral-400">{t("transformTab.modalQuestion")}</p>
               <div className="flex flex-col gap-2">
-                <button type="button" onClick={() => applyTransform(true)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
+                <button type="button" onClick={() => applyTransform(true)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
                   {t("transformTab.overwriteOriginalButton")}
                 </button>
-                <button type="button" onClick={() => applyTransform(false)} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
+                <button type="button" onClick={() => applyTransform(false)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
                   {t("transformTab.createNewButton")}
                 </button>
-                <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-lg px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
+                <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-md px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                   {t("transformTab.cancelButton")}
                 </button>
               </div>
@@ -449,7 +619,7 @@ export function TransformTab({
         </div>
       )}
       {lastTransformResult && (
-        <div className="mt-6 space-y-4 rounded-xl border border-neutral-200 dark:border-neutral-600 bg-neutral-50/50 dark:bg-neutral-800/50 p-4">
+        <div className="mt-6 space-y-4 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-neutral-50/50 dark:bg-neutral-800/50 p-4">
           <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-200">{t("transformTab.transformResultTitle")} {lastTransformResult.actionLabel}</h3>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">
             {t("transformTab.beforeLabel")} <strong>{lastTransformResult.before.length - 1}</strong> {t("transformTab.rowsUnit")} × <strong>{lastTransformResult.before[0]?.length ?? 0}</strong> {t("transformTab.columnsUnit")}

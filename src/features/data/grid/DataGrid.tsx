@@ -458,7 +458,7 @@ export function DataGrid({
 
   return (
     <div
-      className="flex flex-col h-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg overflow-hidden shadow-xs focus:outline-hidden select-none"
+      className="flex flex-col h-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-md overflow-hidden shadow-xs focus:outline-hidden select-none"
       onKeyDown={(e) => {
         if (editingCell || renamingCol) return;
         if (!activeCell) return;

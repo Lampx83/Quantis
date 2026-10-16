@@ -52,7 +52,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setDataTab("preview")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
               dataTab === "preview"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -63,7 +63,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setDataTab("profiling")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
               dataTab === "profiling"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -74,7 +74,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setDataTab("descriptive")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
               dataTab === "descriptive"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -85,7 +85,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setDataTab("transform")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
               dataTab === "transform"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -106,7 +106,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("correlation")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "correlation"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -117,7 +117,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("hypothesis")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "hypothesis"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -128,7 +128,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("reliability")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "reliability"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -139,7 +139,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("regression")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "regression"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -150,7 +150,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("factor")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "factor"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -161,7 +161,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("sem")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "sem"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -172,7 +172,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("ml")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "ml"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -183,13 +183,24 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setAnalysisTab("bayesian")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap shrink-0 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
               analysisTab === "bayesian"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
             }`}
           >
             <Sigma className="w-4 h-4 shrink-0" /> Bayesian
+          </button>
+          <button
+            type="button"
+            onClick={() => setAnalysisTab("panel")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${
+              analysisTab === "panel"
+                ? "bg-brand text-white"
+                : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
+            }`}
+          >
+            <Layers className="w-4 h-4 shrink-0" /> {t("app.analysisTab.panel")}
           </button>
         </div>
       )}
@@ -204,7 +215,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("bar")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "bar"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -219,7 +230,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("line")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "line"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -234,7 +245,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("scatter")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "scatter"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -249,7 +260,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("histogram")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "histogram"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -264,7 +275,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("box")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "box"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -279,7 +290,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("heatmap")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "heatmap"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -294,7 +305,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("pie")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "pie"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -309,7 +320,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("stackedBar")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "stackedBar"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -324,7 +335,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("barH")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "barH"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -339,7 +350,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("area")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "area"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -354,7 +365,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("donut")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "donut"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -369,7 +380,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("density")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "density"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -384,7 +395,7 @@ export function AppToolbar() {
           <button
             type="button"
             onClick={() => setPresentationChartType("radar")}
-            className={`relative group flex items-center justify-center p-2 rounded-lg text-sm shrink-0 ${
+            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
               presentationChartType === "radar"
                 ? "bg-brand text-white"
                 : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -415,7 +426,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setDataTab("preview")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     dataTab === "preview"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -426,7 +437,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setDataTab("profiling")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     dataTab === "profiling"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -437,7 +448,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setDataTab("transform")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     dataTab === "transform"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -452,7 +463,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setDataTab("transform")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     dataTab === "transform"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -463,7 +474,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setDataTab("preview")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     dataTab === "preview"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -478,7 +489,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("correlation")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "correlation"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -489,7 +500,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("hypothesis")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "hypothesis"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -500,7 +511,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("reliability")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "reliability"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -511,7 +522,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("regression")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "regression"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -522,7 +533,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("factor")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "factor"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -533,7 +544,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("sem")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "sem"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -544,7 +555,7 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("ml")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "ml"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
@@ -555,13 +566,24 @@ export function AppToolbar() {
                 <button
                   type="button"
                   onClick={() => setAnalysisTab("bayesian")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
                     analysisTab === "bayesian"
                       ? "bg-brand text-white"
                       : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
                   }`}
                 >
                   <Sigma className="w-4 h-4 shrink-0" /> Bayesian
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAnalysisTab("panel")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap ${
+                    analysisTab === "panel"
+                      ? "bg-brand text-white"
+                      : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
+                  }`}
+                >
+                  <Layers className="w-4 h-4 shrink-0" /> {t("app.analysisTab.panel")}
                 </button>
               </>
             )}

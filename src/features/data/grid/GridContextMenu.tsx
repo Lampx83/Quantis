@@ -79,7 +79,7 @@ export function GridContextMenu({
       }}
       onClick={(e) => e.stopPropagation()}
       role="menu"
-      className="z-50 w-52 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200"
+      className="z-50 w-52 rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200"
     >
       {menu.type === "column" ? (
         <>

@@ -231,9 +231,9 @@ describe("Missing Data Imputation Utilities", () => {
         ["D", "25", "2", ""], // Missing SALARY, should borrow from A or B (closest)
       ];
       const vars: Record<string, VariableMetadata> = {
-        AGE: { name: "AGE", type: "numeric", measure: "scale", decimals: 0, align: "right" },
-        EXPERIENCE: { name: "EXPERIENCE", type: "numeric", measure: "scale", decimals: 0, align: "right" },
-        SALARY: { name: "SALARY", type: "numeric", measure: "scale", decimals: 0, align: "right" },
+        AGE: { name: "AGE", label: "Age", type: "numeric", measure: "scale", decimals: 0, align: "right" },
+        EXPERIENCE: { name: "EXPERIENCE", label: "Experience", type: "numeric", measure: "scale", decimals: 0, align: "right" },
+        SALARY: { name: "SALARY", label: "Salary", type: "numeric", measure: "scale", decimals: 0, align: "right" },
       };
 
       const result = imputeHotDeck(testData, ["SALARY"], vars);
@@ -250,9 +250,10 @@ describe("Missing Data Imputation Utilities", () => {
         ["3", "10", ""],   // Missing SCORE2 -> should borrow from row 1, not row 2
       ];
       const vars: Record<string, VariableMetadata> = {
-        SCORE1: { name: "SCORE1", type: "numeric", measure: "scale", decimals: 0, align: "right" },
+        SCORE1: { name: "SCORE1", label: "Score 1", type: "numeric", measure: "scale", decimals: 0, align: "right" },
         SCORE2: {
           name: "SCORE2",
+          label: "Score 2",
           type: "numeric",
           measure: "scale",
           decimals: 0,

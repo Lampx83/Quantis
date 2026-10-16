@@ -58,7 +58,7 @@ export function GuideModal({
       role="presentation"
     >
       <div
-        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[min(90dvh,44rem)] overflow-hidden border border-neutral-200/80 dark:border-neutral-700"
+        className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-2xl w-full flex flex-col max-h-[min(90dvh,44rem)] overflow-hidden border border-neutral-200/80 dark:border-neutral-700"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -69,7 +69,7 @@ export function GuideModal({
             <BookOpen className="w-5 h-5 text-brand shrink-0" />
             <span className="truncate">{t("guideModal.title")}</span>
           </h3>
-          <button type="button" onClick={close} className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label={t("app.close")}>
+          <button type="button" onClick={close} className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 shrink-0" aria-label={t("app.close")}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -81,7 +81,7 @@ export function GuideModal({
                 key={gt.id}
                 type="button"
                 onClick={() => setHelpTab(gt.id)}
-                className={`snap-start shrink-0 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-900 ${
+                className={`snap-start shrink-0 rounded-md px-2.5 py-1.5 text-xs sm:text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-900 ${
                   helpTab === gt.id
                     ? "bg-brand text-white"
                     : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200/80 dark:hover:bg-neutral-700/80"
@@ -100,15 +100,15 @@ export function GuideModal({
                 <strong className="text-neutral-800 dark:text-neutral-200">Quantis</strong> {t("guideModal.overview.introSuffix")}
               </p>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={openSettings} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 dark:hover:bg-brand/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                <button type="button" onClick={openSettings} className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 dark:hover:bg-brand/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                   <Server className="w-4 h-4 shrink-0" />
                   {t("guideModal.overview.openSettingsButton")}
                 </button>
-                <button type="button" onClick={() => goRepro("workflows")} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                <button type="button" onClick={() => goRepro("workflows")} className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                   <GitBranch className="w-4 h-4 shrink-0" />
                   {t("guideModal.overview.goWorkflowsButton")}
                 </button>
-                <button type="button" onClick={() => goRepro("openscience")} className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                <button type="button" onClick={() => goRepro("openscience")} className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                   <FileText className="w-4 h-4 shrink-0" />
                   {t("openScience.title")}
                 </button>
@@ -227,7 +227,7 @@ export function GuideModal({
                   {t("guideModal.sync.portalEmbedText")}
                 </p>
               </section>
-              <button type="button" onClick={openSettings} className="inline-flex items-center gap-1.5 rounded-lg bg-brand text-white px-3 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
+              <button type="button" onClick={openSettings} className="inline-flex items-center gap-1.5 rounded-md bg-brand text-white px-3 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
                 <Settings className="w-4 h-4 shrink-0" />
                 {t("guideModal.sync.resetButton")}
               </button>
@@ -255,7 +255,7 @@ export function GuideModal({
                 <p className="font-semibold text-amber-900 dark:text-amber-200 mb-1">{t("guideModal.ai.timeoutHeading")}</p>
                 <p>{t("guideModal.ai.timeoutText")}</p>
               </section>
-              <button type="button" onClick={openSettings} className="inline-flex items-center gap-1.5 rounded-lg border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+              <button type="button" onClick={openSettings} className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 dark:bg-brand/20 px-3 py-2 text-sm font-medium text-brand hover:bg-brand/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand">
                 <Server className="w-4 h-4 shrink-0" />
                 {t("guideModal.ai.checkBackendButton")}
               </button>
@@ -284,7 +284,7 @@ export function GuideModal({
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             {t("guideModal.escPrefix")} <kbd className="px-1 py-0.5 rounded bg-neutral-200 dark:bg-neutral-700 text-[0.65rem] font-mono">Esc</kbd> {t("guideModal.escSuffix")}
           </p>
-          <button type="button" onClick={close} className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
+          <button type="button" onClick={close} className="rounded-md bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-800">
             {t("app.close")}
           </button>
         </div>

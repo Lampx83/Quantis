@@ -55,11 +55,36 @@ export const AI_MARKDOWN_COMPONENTS: Components = {
   },
 };
 
+/**
+ * Model hay bọc biểu thức toán trong $...$ (LaTeX) nhưng giao diện không dựng LaTeX → hiện nguyên dấu "$".
+ * Bỏ dấu $ quanh các biểu thức ngắn (một dòng, không có khoảng trắng sát dấu) và đổi vài lệnh LaTeX thường gặp.
+ */
+export function stripInlineLatex(text: string): string {
+  return text
+    .replace(/\$([^$\n]{1,120}?)\$/g, (m, inner: string) => {
+      if (/^\s|\s$/.test(inner)) return m; // "$5 và $10" (tiền tệ) → giữ nguyên
+      return inner
+        .replace(/\\text\{([^}]*)\}/g, "$1")
+        .replace(/\\(?:times|cdot)\b/g, "×")
+        .replace(/\\(?:leq?|le)\b/g, "≤")
+        .replace(/\\(?:geq?|ge)\b/g, "≥")
+        .replace(/\\chi\^?2/g, "χ²")
+        .replace(/\\eta\^?2/g, "η²")
+        .replace(/\\alpha\b/g, "α")
+        .replace(/\\beta\b/g, "β")
+        .replace(/\\mu\b/g, "μ")
+        .replace(/\\sigma\b/g, "σ")
+        .replace(/\\pm\b/g, "±")
+        .replace(/\\bar\{([^}]*)\}/g, "$1̄")
+        .replace(/\\/g, "");
+    });
+}
+
 export function AiMarkdown({ content, className }: { content: string; className?: string }) {
   return (
     <div className={className}>
       <ReactMarkdown remarkPlugins={AI_REMARK_PLUGINS} components={AI_MARKDOWN_COMPONENTS}>
-        {content}
+        {stripInlineLatex(content)}
       </ReactMarkdown>
     </div>
   );

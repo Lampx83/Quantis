@@ -35,7 +35,7 @@ export function SampleAdminModal() {
       onClick={handleClose}
     >
       <div
-        className="bg-white dark:bg-neutral-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700">
@@ -45,7 +45,7 @@ export function SampleAdminModal() {
           <button
             type="button"
             onClick={handleClose}
-            className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+            className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
           >
             <X className="w-5 h-5" />
           </button>
@@ -68,7 +68,7 @@ export function SampleAdminModal() {
                     csv: "col1,col2\nvalue1,value2",
                   });
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90"
               >
                 <Plus className="w-4 h-4" /> {t("app.addNew")}
               </button>
@@ -116,7 +116,7 @@ export function SampleAdminModal() {
                           csv,
                         });
                       }}
-                      className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+                      className="p-2 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
@@ -137,7 +137,7 @@ export function SampleAdminModal() {
                           },
                         });
                       }}
-                      className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="p-2 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -159,7 +159,7 @@ export function SampleAdminModal() {
                 type="text"
                 value={sampleAdminForm.name}
                 onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, name: e.target.value } : f))}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -171,7 +171,7 @@ export function SampleAdminModal() {
                   type="text"
                   value={sampleAdminForm.domain}
                   onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, domain: e.target.value } : f))}
-                  className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
                 />
               </div>
               <div>
@@ -183,7 +183,7 @@ export function SampleAdminModal() {
                   value={sampleAdminForm.tags}
                   onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, tags: e.target.value } : f))}
                   placeholder="t-test, ANOVA, ..."
-                  className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
                 />
               </div>
             </div>
@@ -197,7 +197,7 @@ export function SampleAdminModal() {
                   setSampleAdminForm((f) => (f ? { ...f, description: e.target.value } : f))
                 }
                 rows={2}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -209,7 +209,7 @@ export function SampleAdminModal() {
                 onChange={(e) => setSampleAdminForm((f) => (f ? { ...f, csv: e.target.value } : f))}
                 rows={10}
                 spellCheck={false}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm font-mono"
               />
               <p className="text-xs text-neutral-400 mt-1">{t("app.sampleFormCsvHint")}</p>
             </div>
@@ -220,7 +220,7 @@ export function SampleAdminModal() {
                   setSampleAdminForm(null);
                   setSampleAdminError(null);
                 }}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
+                className="px-3 py-1.5 rounded-md text-sm font-medium bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 dark:hover:bg-neutral-600"
               >
                 {t("app.cancel")}
               </button>
@@ -270,7 +270,7 @@ export function SampleAdminModal() {
                   setSampleAdminForm(null);
                   await refreshSampleDatasets();
                 }}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-white hover:opacity-90 disabled:opacity-60"
+                className="px-3 py-1.5 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90 disabled:opacity-60"
               >
                 {sampleAdminSaving ? t("app.saving") : t("app.save")}
               </button>

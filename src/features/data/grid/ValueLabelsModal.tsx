@@ -213,7 +213,7 @@ export function ValueLabelsModal({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl max-w-2xl w-full border border-neutral-200 dark:border-neutral-700 flex flex-col overflow-hidden"
+        className="bg-white dark:bg-neutral-900 rounded-md shadow-2xl max-w-2xl w-full border border-neutral-200 dark:border-neutral-700 flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -222,7 +222,7 @@ export function ValueLabelsModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-800/50">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-brand/10 text-brand">
+            <div className="p-1.5 rounded-md bg-brand/10 text-brand">
               <Tag className="w-4 h-4" />
             </div>
             <div>
@@ -241,7 +241,7 @@ export function ValueLabelsModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-500 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors"
+            className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors"
             aria-label={t("variableView.closeBanner")}
           >
             <X className="w-4 h-4" />
@@ -305,7 +305,7 @@ export function ValueLabelsModal({
                   if (error) setError(null);
                 }}
                 placeholder={t("valueLabelsModal.valuePlaceholder")}
-                className="w-full px-3 py-1.5 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-3 py-1.5 text-sm rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
 
@@ -321,7 +321,7 @@ export function ValueLabelsModal({
                   if (error) setError(null);
                 }}
                 placeholder={t("valueLabelsModal.labelPlaceholder")}
-                className="w-full px-3 py-1.5 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
+                className="w-full px-3 py-1.5 text-sm rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
 
@@ -334,7 +334,7 @@ export function ValueLabelsModal({
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="submit"
-                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
               >
                 <Plus className="w-3.5 h-3.5" />
                 {inputValue.trim() && labels[inputValue.trim()] !== undefined
@@ -345,7 +345,7 @@ export function ValueLabelsModal({
                 <button
                   type="button"
                   onClick={() => handleRemoveKey(selectedKey)}
-                  className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
+                  className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   {t("valueLabelsModal.removeButton")}
@@ -365,7 +365,7 @@ export function ValueLabelsModal({
               </span>
             </div>
 
-            <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg bg-neutral-50/50 dark:bg-neutral-950/40 h-56 overflow-y-auto divide-y divide-neutral-200/70 dark:divide-neutral-800">
+            <div className="border border-neutral-200 dark:border-neutral-700 rounded-md bg-neutral-50/50 dark:bg-neutral-950/40 h-56 overflow-y-auto divide-y divide-neutral-200/70 dark:divide-neutral-800">
               {sortedEntries.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-xs text-neutral-400 p-4 text-center">
                   {t("valueLabelsModal.emptyList")}
@@ -414,14 +414,14 @@ export function ValueLabelsModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+            className="px-3.5 py-1.5 rounded-md text-xs font-medium bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
           >
             {t("valueLabelsModal.cancelButton")}
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
           >
             <Check className="w-3.5 h-3.5" />
             {t("valueLabelsModal.saveButton")}

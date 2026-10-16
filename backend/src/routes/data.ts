@@ -5,6 +5,7 @@
 import { Request, Response } from "express"
 import { query, withTransaction, withSchema } from "../db.js"
 import { AUTH_ENABLED, AUTH_REQUIRED } from "../env.js"
+import { sanitizeJson } from "../lib/sanitize.js"
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -51,7 +52,8 @@ async function ensureUserExistsBeforeTransaction(userId: string, req: Request): 
 /** Khách Portal (email "guest@local", id ngẫu nhiên mỗi request) không được lưu workspace lên DB. */
 function isGuestRequest(req: Request): boolean {
   const email = ((req.headers["x-user-email"] as string) ?? "").trim().toLowerCase()
-  return !email || email.endsWith("@local")
+  // Portal gửi khách là "guest@portal.local" (không chỉ "guest@local") → nhận cả tiền tố "guest@".
+  return !email || email.endsWith("@local") || email.startsWith("guest@")
 }
 
 function mustHaveUserForEmbedded(userId: string | null, res: Response): userId is string {
@@ -124,8 +126,9 @@ export async function postData(req: Request, res: Response): Promise<void> {
       res.status(400).json({ error: "Body phải là object" })
       return
     }
-    const datasets = Array.isArray(body.datasets) ? body.datasets : []
-    const workflows = Array.isArray(body.workflows) ? body.workflows : []
+    // Bỏ \u0000 / surrogate đơn lẻ / ký tự điều khiển: Postgres jsonb báo "unsupported Unicode escape sequence".
+    const datasets = sanitizeJson(Array.isArray(body.datasets) ? body.datasets : [])
+    const workflows = sanitizeJson(Array.isArray(body.workflows) ? body.workflows : [])
     const payload = JSON.stringify({ datasets, workflows })
     if (payload.length > MAX_JSON_CHARS) {
       res.status(400).json({ error: "Payload quá lớn" })

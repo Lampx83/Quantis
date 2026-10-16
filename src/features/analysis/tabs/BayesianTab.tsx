@@ -55,21 +55,21 @@ export function BayesianTab({
         <div className="flex flex-wrap gap-4 items-end mb-3">
           <div>
             <label className="block text-sm font-medium mb-1">{t("bayesianTab.successesLabel")}</label>
-            <input type="number" min={0} value={successes} onChange={(e) => { setSuccesses(Math.max(0, parseInt(e.target.value, 10) || 0)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+            <input type="number" min={0} value={successes} onChange={(e) => { setSuccesses(Math.max(0, parseInt(e.target.value, 10) || 0)); setResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("bayesianTab.totalNLabel")}</label>
-            <input type="number" min={1} value={n} onChange={(e) => { setN(Math.max(1, parseInt(e.target.value, 10) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
+            <input type="number" min={1} value={n} onChange={(e) => { setN(Math.max(1, parseInt(e.target.value, 10) || 1)); setResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-24" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("bayesianTab.priorAlphaLabel")}</label>
-            <input type="number" min={0.01} step={0.5} value={priorAlpha} onChange={(e) => { setPriorAlpha(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+            <input type="number" min={0.01} step={0.5} value={priorAlpha} onChange={(e) => { setPriorAlpha(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t("bayesianTab.priorBetaLabel")}</label>
-            <input type="number" min={0.01} step={0.5} value={priorBeta} onChange={(e) => { setPriorBeta(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
+            <input type="number" min={0.01} step={0.5} value={priorBeta} onChange={(e) => { setPriorBeta(Math.max(0.01, parseFloat(e.target.value) || 1)); setResult(null); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-20" />
           </div>
-          <button type="button" onClick={runBeta} disabled={bayesianLoading} className="rounded-lg bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
+          <button type="button" onClick={runBeta} disabled={bayesianLoading} className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2">
             {bayesianLoading ? <><Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden /> {t("bayesianTab.processing")}</> : t("bayesianTab.computePosterior")}
           </button>
         </div>

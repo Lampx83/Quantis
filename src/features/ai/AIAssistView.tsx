@@ -100,7 +100,7 @@ export function AIAssistView({ selectedDataset, compact = false }: AIAssistViewP
 
   return (
     <div className="w-full max-w-2xl flex flex-col min-h-[min(520px,calc(100dvh-10rem))] h-[min(640px,calc(100dvh-10rem))] sm:min-h-[420px] sm:h-[calc(100vh-8rem)]">
-      <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
+      <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
       <div className="shrink-0 p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
         <h2 className="text-lg sm:text-xl font-semibold mb-1 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-amber-500 shrink-0" /> {t("aiAssistView.title")}
@@ -124,7 +124,7 @@ export function AIAssistView({ selectedDataset, compact = false }: AIAssistViewP
               type="button"
               onClick={() => sendMessage(p.userMessage)}
               disabled={loading}
-              className="rounded-lg px-3 py-2.5 min-h-[44px] text-center text-xs sm:text-sm leading-snug border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-400 dark:hover:border-amber-600 text-neutral-700 dark:text-neutral-300 disabled:opacity-50"
+              className="rounded-md px-3 py-2.5 min-h-[44px] text-center text-xs sm:text-sm leading-snug border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-400 dark:hover:border-amber-600 text-neutral-700 dark:text-neutral-300 disabled:opacity-50"
             >
               {p.label}
             </button>
@@ -155,7 +155,7 @@ export function AIAssistView({ selectedDataset, compact = false }: AIAssistViewP
               className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[85%] rounded-xl px-4 py-2.5 text-sm ${
+                className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm ${
                   m.role === "user"
                     ? "bg-brand text-white"
                     : "bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200"
@@ -173,7 +173,7 @@ export function AIAssistView({ selectedDataset, compact = false }: AIAssistViewP
           ))}
           {loading && (
             <div className="flex justify-start">
-              <div className="rounded-xl px-4 py-2.5 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 text-neutral-500">
+              <div className="rounded-lg px-4 py-2.5 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-600 text-neutral-500">
                 <Loader2 className="w-5 h-5 animate-spin inline-block" />
                 <span className="ml-2 text-sm">{t("aiAssistView.answeringLabel")}</span>
               </div>
@@ -193,13 +193,13 @@ export function AIAssistView({ selectedDataset, compact = false }: AIAssistViewP
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); sendMessage(input); } }}
             placeholder={t("aiAssistView.inputPlaceholder")}
-            className="flex-1 h-11 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+            className="flex-1 h-11 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
             disabled={loading}
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="shrink-0 rounded-lg bg-brand text-white px-4 py-2 h-11 font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="shrink-0 rounded-md bg-brand text-white px-4 py-2 h-11 font-medium text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t("aiAssistPanel.sendButton")}
           </button>

@@ -135,7 +135,7 @@ export function MissingValuesModal({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl max-w-md w-full border border-neutral-200 dark:border-neutral-700 flex flex-col overflow-hidden"
+        className="bg-white dark:bg-neutral-900 rounded-md shadow-2xl max-w-md w-full border border-neutral-200 dark:border-neutral-700 flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -144,7 +144,7 @@ export function MissingValuesModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-800/50">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
               <AlertCircle className="w-4 h-4" />
             </div>
             <div>
@@ -163,7 +163,7 @@ export function MissingValuesModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-500 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors"
+            className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors"
             aria-label={t("variableView.closeBanner")}
           >
             <X className="w-4 h-4" />
@@ -174,7 +174,7 @@ export function MissingValuesModal({
         <form onSubmit={handleSave} className="p-5 flex flex-col gap-4">
           {/* Option 1: No missing values */}
           <label
-            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+            className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
               mode === "none"
                 ? "border-brand bg-brand/5 dark:bg-brand/10"
                 : "border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
@@ -202,7 +202,7 @@ export function MissingValuesModal({
 
           {/* Option 2: Discrete missing values */}
           <div
-            className={`p-3 rounded-lg border transition-colors ${
+            className={`p-3 rounded-md border transition-colors ${
               mode === "discrete"
                 ? "border-brand bg-brand/5 dark:bg-brand/10"
                 : "border-neutral-200 dark:border-neutral-700"
@@ -275,13 +275,13 @@ export function MissingValuesModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+              className="px-3.5 py-1.5 rounded-md text-xs font-medium bg-neutral-200/80 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
             >
               {t("missingValuesModal.cancelButton")}
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium bg-brand text-white hover:opacity-90 transition-opacity"
             >
               <Check className="w-3.5 h-3.5" />
               {t("missingValuesModal.saveButton")}

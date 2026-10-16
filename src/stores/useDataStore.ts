@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Dataset, VariableMetadata } from "@/types";
 import { ensureDatasetMetadata } from "@/utils/metadata";
-import { useSyncStore, canSyncToServer } from "./useSyncStore";
+import { useSyncStore, canSyncToServer, persistsWorkspaceLocally } from "./useSyncStore";
 
 export interface DataState {
   // --- State ---
@@ -518,3 +518,12 @@ export const useDataStore = create<DataState>()(
     }
   )
 );
+
+// Khi chuyển từ "ghi lên server" sang "lưu cục bộ" (server từ chối, mất mạng, khách…) phải ghi lại bản đầy đủ xuống
+// localStorage — nếu không chỉ còn bản lưu nhẹ (danh sách rỗng) và dữ liệu mất khi tải lại trang.
+let wasPersistingLocally = persistsWorkspaceLocally(useSyncStore.getState());
+useSyncStore.subscribe((state) => {
+  const now = persistsWorkspaceLocally(state);
+  if (now && !wasPersistingLocally) useDataStore.setState({});
+  wasPersistingLocally = now;
+});

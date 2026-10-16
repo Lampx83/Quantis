@@ -56,12 +56,12 @@ const ADMIN_EMAILS = new Set(
 const PORTAL_ADMIN_STATUS_URL =
   process.env.PORTAL_ADMIN_STATUS_URL || "http://10.2.13.54:3001/api/quantis/auth/admin-status";
 
-async function isAdminViaPortal(req) {
+async function isAdminViaPortal(req, timeoutMs = 4000) {
   const cookie = req.headers.cookie;
   if (!cookie) return false;
   try {
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 4000);
+    const t = setTimeout(() => controller.abort(), timeoutMs);
     const resp = await fetch(PORTAL_ADMIN_STATUS_URL, {
       headers: { cookie },
       signal: controller.signal,
@@ -496,14 +496,27 @@ function handleGetData(req, res) {
   }
 }
 
+// Bỏ \u0000 / surrogate đơn lẻ / ký tự điều khiển (cùng quy tắc với backend/src/lib/sanitize.ts).
+const BAD_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+function sanitizeJson(v) {
+  if (typeof v === "string") return v.replace(BAD_CHARS_RE, "");
+  if (Array.isArray(v)) return v.map(sanitizeJson);
+  if (v !== null && typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[k.replace(BAD_CHARS_RE, "")] = sanitizeJson(x);
+    return o;
+  }
+  return v;
+}
+
 function handlePostData(req, res) {
   try {
     if (authActive() && QUANTIS_AUTH_REQUIRED && !safeUserId(req.session?.userId)) {
       res.status(401).json({ error: "Cần đăng nhập" });
       return;
     }
-    const datasets = Array.isArray(req.body?.datasets) ? req.body.datasets : [];
-    const workflows = Array.isArray(req.body?.workflows) ? req.body.workflows : [];
+    const datasets = sanitizeJson(Array.isArray(req.body?.datasets) ? req.body.datasets : []);
+    const workflows = sanitizeJson(Array.isArray(req.body?.workflows) ? req.body.workflows : []);
     const ctx = resolveDataForRequest(req);
     if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
       res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
@@ -521,10 +534,22 @@ function handlePostData(req, res) {
   }
 }
 
-function handleGetSettings(req, res) {
+/** Trường chứa địa chỉ nội bộ (gateway/upstream) — chỉ trả cho quản trị viên Portal. */
+const INTERNAL_SETTING_KEYS = ["aiApiUrl", "ollamaUpstreamUrl"];
+
+async function handleGetSettings(req, res) {
   try {
     const { ollamaSeckey, ...safe } = readSettings();
-    res.json({ ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" });
+    const out = { ...safe, ollamaSeckeySet: String(ollamaSeckey ?? "").trim() !== "" };
+    out.ollamaUpstreamSet = String(out.ollamaUpstreamUrl ?? "").trim() !== "";
+    const hasInternal = INTERNAL_SETTING_KEYS.some((k) => out[k] != null && String(out[k]).trim() !== "");
+    // Endpoint này công khai (nginx chuyển thẳng, không qua Portal): người không phải quản trị viên
+    // không được thấy địa chỉ nội bộ. Hỏi Portal (cookie phiên) với thời hạn ngắn để không làm chậm tải trang.
+    if (hasInternal && !(await isAdminViaPortal(req, 2000))) {
+      for (const k of INTERNAL_SETTING_KEYS) out[k] = null;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.json(out);
   } catch (e) {
     console.error("GET settings:", e);
     res.status(500).json({ error: e.message });
@@ -618,6 +643,10 @@ app.use("/api/quantis/analyze", async (req, res) => {
   const headers = { ...req.headers, host: new URL(ANALYZE_PYTHON_URL).host };
   delete headers["origin"];
   delete headers["referer"];
+  // Body được express.json() parse rồi JSON.stringify lại → độ dài khác bản gốc (vd 79.0 → 79); giữ content-length cũ
+  // làm fetch (undici) lỗi "fetch failed" → 502. Để fetch tự tính.
+  delete headers["content-length"];
+  delete headers["transfer-encoding"];
   try {
     const opt = { method: req.method, headers, redirect: "follow" };
     if (req.method !== "GET" && req.method !== "HEAD") {

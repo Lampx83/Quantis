@@ -64,7 +64,8 @@ export default function App() {
 
   // Clear dataset selection if it no longer exists
   useEffect(() => {
-    if (selectedDatasetId && !datasets.some((d) => d.id === selectedDatasetId)) {
+    // Danh sách rỗng = chưa nạp xong (đang kéo workspace từ server) → giữ lựa chọn đã lưu, đừng xoá.
+    if (datasets.length > 0 && selectedDatasetId && !datasets.some((d) => d.id === selectedDatasetId)) {
       setSelectedDatasetId(null);
     }
   }, [datasets, selectedDatasetId, setSelectedDatasetId]);

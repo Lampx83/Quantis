@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type { AuthConfig, AuthUser, SampleDatasetListItem } from "@/api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
 import * as quantisApi from "@/api";
-import { SAMPLE_DATASETS } from "@/sampleDatasets";
 
 export interface SyncState {
   // Connection
@@ -101,33 +100,9 @@ export const useSyncStore = create<SyncState>((set) => ({
   refreshSampleDatasets: async () => {
     set({ sampleDatasetsLoading: true });
     try {
+      // Danh sách mẫu do admin quản lý trên server; rỗng nghĩa là admin chưa có/đã xoá mẫu — không rơi về bundle tĩnh.
       const list = await quantisApi.fetchSampleDatasetsList();
-      if (list && list.length > 0) {
-        set({ sampleDatasetsList: list });
-      } else {
-        // Fallback về SAMPLE_DATASETS tĩnh cục bộ nếu API trả về rỗng
-        const fallbackList: SampleDatasetListItem[] = SAMPLE_DATASETS.map((d) => ({
-          id: d.id,
-          name: d.name,
-          domain: d.domain,
-          description: d.description,
-          tags: d.tags,
-          rows: d.rows,
-          columns: d.columns,
-        }));
-        set({ sampleDatasetsList: fallbackList });
-      }
-    } catch {
-      const fallbackList: SampleDatasetListItem[] = SAMPLE_DATASETS.map((d) => ({
-        id: d.id,
-        name: d.name,
-        domain: d.domain,
-        description: d.description,
-        tags: d.tags,
-        rows: d.rows,
-        columns: d.columns,
-      }));
-      set({ sampleDatasetsList: fallbackList });
+      set({ sampleDatasetsList: list });
     } finally {
       set({ sampleDatasetsLoading: false });
     }
@@ -167,6 +142,20 @@ export const useSyncStore = create<SyncState>((set) => ({
   setArchiveDownloadingFileId: (archiveDownloadingFileId) => set({ archiveDownloadingFileId }),
 }));
 
+/** Id cố định Portal gán cho khách chưa đăng nhập (email "guest@portal.local", tên "Khách"). */
+const PORTAL_GUEST_ID = "11111111-1111-1111-1111-111111111111";
+
+/**
+ * Khách Portal: không có workspace trên server → dữ liệu chỉ được giữ ở trình duyệt.
+ * Nhận diện theo id cố định, email "guest@…" hoặc đuôi "@local" (trước đây chỉ kiểm tra "@local" nên
+ * "guest@portal.local" bị coi là tài khoản thật: không lưu cục bộ, tải lại là mất dataset).
+ */
+export function isPortalGuestUser(u: { id?: string; email?: string } | null | undefined): boolean {
+  if (!u) return false;
+  const email = (u.email ?? "").trim().toLowerCase();
+  return u.id === PORTAL_GUEST_ID || email.startsWith("guest@") || email.endsWith("@local");
+}
+
 /**
  * Kiểm tra xem client có đủ điều kiện đồng bộ workspace lên server không.
  * - Embed + backend PostgreSQL: `/auth/config` trả authEnabled=false — luôn sync khi có backend.
@@ -181,7 +170,17 @@ export function canSyncToServer(syncState: {
   if (!syncState.useBackend) return false;
   if (quantisApi.isPortalEmbed()) {
     const email = (syncState.authUser?.email ?? "").trim().toLowerCase();
-    return !!syncState.authUser && !!email && !email.endsWith("@local");
+    return !!syncState.authUser && !!email && !isPortalGuestUser(syncState.authUser);
   }
   return !syncState.authConfig?.authEnabled || !!syncState.authUser;
+}
+
+/** true khi workspace phải được lưu đầy đủ ở localStorage (không đồng bộ server hoặc đang offline). */
+export function persistsWorkspaceLocally(s: {
+  useBackend: boolean;
+  authConfig: AuthConfig | null;
+  authUser: AuthUser | null;
+  isOnline: boolean;
+}): boolean {
+  return !canSyncToServer(s) || !s.isOnline;
 }

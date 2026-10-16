@@ -102,7 +102,7 @@ export function AppModals() {
           aria-live="polite"
           aria-busy="true"
         >
-          <div className="flex items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-5 py-4 shadow-xl max-w-sm">
+          <div className="flex items-center gap-3 rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-5 py-4 shadow-xl max-w-sm">
             <Loader2 className="w-8 h-8 shrink-0 animate-spin text-brand" aria-hidden />
             <div>
               <p className="font-medium text-neutral-900 dark:text-neutral-100">{t("app.readingFileOnServer")}</p>

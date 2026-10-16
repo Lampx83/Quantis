@@ -20,6 +20,8 @@ type ServerSettings = {
 }
 
 export async function getSettings(_req: Request, res: Response): Promise<void> {
+  // Địa chỉ gateway/upstream nội bộ chỉ hiện cho quản trị viên.
+  const showInternal = isAdminRequest(_req)
   try {
     const r = await query<{ settings: unknown }>(
       withSchema(`SELECT settings FROM __SCHEMA__.app_settings WHERE id = 1`)
@@ -30,8 +32,8 @@ export async function getSettings(_req: Request, res: Response): Promise<void> {
       backendApiUrl: s.backendApiUrl ?? null,
       archiveUrl: s.archiveUrl ?? null,
       archiveFileUrl: s.archiveFileUrl ?? null,
-      aiApiUrl: s.aiApiUrl ?? null,
-      ollamaUpstreamUrl: s.ollamaUpstreamUrl ?? null,
+      aiApiUrl: showInternal ? (s.aiApiUrl ?? null) : null,
+      ollamaUpstreamUrl: showInternal ? (s.ollamaUpstreamUrl ?? null) : null,
       ollamaSeckeySet: String(s.ollamaSeckey ?? "").trim() !== "",
       defaultAiModel: s.defaultAiModel ?? null,
     })

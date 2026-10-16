@@ -98,7 +98,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
         <button
           type="button"
           onClick={refresh}
-          className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700"
+          className="rounded-md border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700"
         >
           {t("openScience.reload")}
         </button>
@@ -117,7 +117,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
         <select
           value={selectedId ?? ""}
           onChange={(e) => setSelectedId(e.target.value || null)}
-          className="w-full max-w-md rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full max-w-md rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
         >
           {blobs.map((b) => (
             <option key={b.id} value={b.id}>
@@ -137,7 +137,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
                 value={pr.hypotheses}
                 onChange={(e) => updateSelected({ prereg: { ...pr, hypotheses: e.target.value } })}
                 rows={3}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
                 placeholder="H1, H2…"
               />
             </div>
@@ -147,7 +147,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
                 value={pr.design}
                 onChange={(e) => updateSelected({ prereg: { ...pr, design: e.target.value } })}
                 rows={2}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -156,7 +156,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
                 type="text"
                 value={pr.sampleSize}
                 onChange={(e) => updateSelected({ prereg: { ...pr, sampleSize: e.target.value } })}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -165,7 +165,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
                 value={pr.analysisPlan}
                 onChange={(e) => updateSelected({ prereg: { ...pr, analysisPlan: e.target.value } })}
                 rows={3}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -174,7 +174,7 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
                 type="text"
                 value={pr.primaryOutcome}
                 onChange={(e) => updateSelected({ prereg: { ...pr, primaryOutcome: e.target.value } })}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -183,13 +183,13 @@ export function OpenScienceProtocolPanel({ showToast }: { showToast: (msg: strin
                 value={pr.exclusionCriteria}
                 onChange={(e) => updateSelected({ prereg: { ...pr, exclusionCriteria: e.target.value } })}
                 rows={2}
-                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
               />
             </div>
             <button
               type="button"
               onClick={exportPreregHtml}
-              className="inline-flex items-center gap-2 rounded-lg bg-brand text-white px-4 py-2 text-sm hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-md bg-brand text-white px-4 py-2 text-sm hover:opacity-90"
             >
               <Download className="h-4 w-4" /> {t("openScience.exportDraftHtml")}
             </button>
