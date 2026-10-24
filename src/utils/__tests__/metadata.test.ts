@@ -17,12 +17,21 @@ describe("Metadata Utilities", () => {
       expect(validateVariableName("_temp_var").valid).toBe(true);
     });
 
+    it("should accept Vietnamese (Unicode letter) variable names, composed or decomposed", () => {
+      expect(validateVariableName("Biến_1").valid).toBe(true);
+      expect(validateVariableName("Tuổi").valid).toBe(true);
+      expect(validateVariableName("Giới_tính").valid).toBe(true);
+      expect(validateVariableName("Tuổi".normalize("NFD")).valid).toBe(true);
+      expect(validateVariableName("1Tuổi").valid).toBe(false);
+    });
+
     it("should reject invalid variable names", () => {
       expect(validateVariableName("").valid).toBe(false);
       expect(validateVariableName("1VAR").valid).toBe(false); // starts with number
       expect(validateVariableName("VAR NAME").valid).toBe(false); // has space
       expect(validateVariableName("VAR-NAME").valid).toBe(false); // has dash
-      expect(validateVariableName("Biến_1").valid).toBe(false); // has non-ascii characters
+      expect(validateVariableName("VAR!").valid).toBe(false); // has punctuation
+      expect(validateVariableName("Tuổi cao").valid).toBe(false); // has space
     });
 
     it("should reject duplicate variable names", () => {

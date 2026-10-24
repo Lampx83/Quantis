@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Loader2, Cpu } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
-  getDataRows,
+  getAnalysisRows,
   computeMediation,
   computeModeration,
   type MediationResult,
@@ -24,7 +24,7 @@ export function SEMTab({
   showToast,
 }: SEMTabProps) {
   const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
-  const rows = selectedDataset ? getDataRows(selectedDataset) : [];
+  const rows = selectedDataset ? getAnalysisRows(selectedDataset) : [];
   const numericCols =
     rows.length >= 2
       ? (selectedDataset?.columnNames ?? []).filter((c) => {

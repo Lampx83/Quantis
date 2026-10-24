@@ -2,7 +2,9 @@ import React, { useState, useEffect } from "react";
 import { X, AlertCircle, Check } from "lucide-react";
 import { t } from "../../../i18n";
 
-export type MissingValuesMode = "none" | "discrete";
+export type MissingValuesMode = "none" | "discrete" | "range";
+
+export type MissingRange = { min: number; max: number };
 
 export function parseAndValidateDiscreteMissing(inputs: string[]): {
   valid: boolean;
@@ -34,16 +36,47 @@ export function parseAndValidateDiscreteMissing(inputs: string[]): {
   };
 }
 
-export function formatMissingValuesSummary(missingValues?: string[]): string {
-  if (!missingValues || missingValues.length === 0) return t("variableView.noneValue");
-  return missingValues.join(", ");
+/**
+ * Kiểm tra khoảng khuyết (kiểu SPSS): hai biên là số hữu hạn và min <= max;
+ * kèm tối đa 1 mã rời rạc (SPSS: «khoảng + 1 mã rời rạc»).
+ */
+export function parseAndValidateRangeMissing(
+  minInput: string,
+  maxInput: string,
+  extraCodes: string[]
+): { valid: boolean; range?: MissingRange; values: string[]; error?: string } {
+  const toNum = (v: string) => (v.trim() === "" ? NaN : Number(v.trim().replace(",", ".")));
+  const min = toNum(minInput);
+  const max = toNum(maxInput);
+  const values = extraCodes.map((v) => v.trim()).filter((v) => v !== "");
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+    return { valid: false, values, error: t("missingValuesModal.errorRangeInvalid") };
+  }
+  if (values.length > 1) {
+    return { valid: false, values: values.slice(0, 1), error: t("missingValuesModal.errorRangeOneCode") };
+  }
+  return { valid: true, range: { min, max }, values };
+}
+
+export function formatMissingValuesSummary(
+  missingValues?: string[],
+  missingRange?: MissingRange
+): string {
+  const parts: string[] = [];
+  if (missingRange) parts.push(`${missingRange.min} – ${missingRange.max}`);
+  if (missingValues && missingValues.length > 0) parts.push(...missingValues);
+  if (parts.length === 0) return t("variableView.noneValue");
+  return parts.join(", ");
 }
 
 export interface MissingValuesModalProps {
   isOpen: boolean;
   variableName: string;
   initialMissingValues?: string[];
-  onSave: (missingValues: string[]) => void;
+  /** Khoảng khuyết hiện có (SPSS: tối đa 1 khoảng + 1 mã rời rạc). */
+  initialMissingRange?: MissingRange;
+  /** `missingRange` là undefined khi người dùng không dùng khoảng (xóa khoảng cũ nếu có). */
+  onSave: (missingValues: string[], missingRange?: MissingRange) => void;
   onClose: () => void;
 }
 
@@ -51,12 +84,22 @@ export function MissingValuesModal({
   isOpen,
   variableName,
   initialMissingValues,
+  initialMissingRange,
   onSave,
   onClose,
 }: MissingValuesModalProps) {
-  const hasInitial = Boolean(initialMissingValues && initialMissingValues.length > 0);
+  const initialMode = (
+    vals?: string[],
+    range?: MissingRange
+  ): MissingValuesMode => (range ? "range" : vals && vals.length > 0 ? "discrete" : "none");
   const [mode, setMode] = useState<MissingValuesMode>(
-    hasInitial ? "discrete" : "none"
+    initialMode(initialMissingValues, initialMissingRange)
+  );
+  const [rangeMin, setRangeMin] = useState(initialMissingRange ? String(initialMissingRange.min) : "");
+  const [rangeMax, setRangeMax] = useState(initialMissingRange ? String(initialMissingRange.max) : "");
+  // Mã rời rạc đi kèm khoảng (SPSS: tối đa 1) — tách riêng khỏi 3 ô của chế độ «rời rạc».
+  const [rangeExtra, setRangeExtra] = useState(
+    initialMissingRange ? (initialMissingValues?.[0] ?? "") : ""
   );
   const [slots, setSlots] = useState<[string, string, string]>(() => [
     initialMissingValues?.[0] ?? "",
@@ -67,18 +110,15 @@ export function MissingValuesModal({
 
   useEffect(() => {
     if (isOpen) {
-      const hasVals = Boolean(
-        initialMissingValues && initialMissingValues.length > 0
-      );
-      setMode(hasVals ? "discrete" : "none");
-      setSlots([
-        initialMissingValues?.[0] ?? "",
-        initialMissingValues?.[1] ?? "",
-        initialMissingValues?.[2] ?? "",
-      ]);
+      setMode(initialMode(initialMissingValues, initialMissingRange));
+      setRangeMin(initialMissingRange ? String(initialMissingRange.min) : "");
+      setRangeMax(initialMissingRange ? String(initialMissingRange.max) : "");
+      setRangeExtra(initialMissingRange ? (initialMissingValues?.[0] ?? "") : "");
+      const discreteInit = initialMissingRange ? [] : (initialMissingValues ?? []);
+      setSlots([discreteInit[0] ?? "", discreteInit[1] ?? "", discreteInit[2] ?? ""]);
       setError(null);
     }
-  }, [isOpen, initialMissingValues, variableName]);
+  }, [isOpen, initialMissingValues, initialMissingRange, variableName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,7 +152,18 @@ export function MissingValuesModal({
   const handleSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (mode === "none") {
-      onSave([]);
+      onSave([], undefined);
+      onClose();
+      return;
+    }
+
+    if (mode === "range") {
+      const rv = parseAndValidateRangeMissing(rangeMin, rangeMax, [rangeExtra]);
+      if (!rv.valid) {
+        setError(rv.error ?? t("missingValuesModal.errorInvalidValue"));
+        return;
+      }
+      onSave(rv.values, rv.range);
       onClose();
       return;
     }
@@ -123,7 +174,7 @@ export function MissingValuesModal({
       return;
     }
 
-    onSave(validation.values);
+    onSave(validation.values, undefined);
     onClose();
   };
 
@@ -260,6 +311,91 @@ export function MissingValuesModal({
                 >
                   99, 999, -1
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Option 3: Range (+ 1 discrete) */}
+          <div
+            className={`p-3 rounded-md border transition-colors ${
+              mode === "range"
+                ? "border-brand bg-brand/5 dark:bg-brand/10"
+                : "border-neutral-200 dark:border-neutral-700"
+            }`}
+          >
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="missingMode"
+                checked={mode === "range"}
+                onChange={() => {
+                  setMode("range");
+                  setError(null);
+                }}
+                className="mt-0.5 accent-brand"
+              />
+              <div>
+                <div className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
+                  {t("missingValuesModal.optionRangeTitle")}
+                </div>
+                <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  {t("missingValuesModal.optionRangeDesc")}
+                </div>
+              </div>
+            </label>
+            <div className="mt-3 pl-6 grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[11px] text-neutral-500 dark:text-neutral-400 mb-1">
+                  {t("missingValuesModal.rangeMin")}
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={rangeMin}
+                  onChange={(e) => {
+                    setRangeMin(e.target.value);
+                    setMode("range");
+                    if (error) setError(null);
+                  }}
+                  placeholder="98"
+                  aria-label={t("missingValuesModal.rangeMin")}
+                  className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-neutral-500 dark:text-neutral-400 mb-1">
+                  {t("missingValuesModal.rangeMax")}
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={rangeMax}
+                  onChange={(e) => {
+                    setRangeMax(e.target.value);
+                    setMode("range");
+                    if (error) setError(null);
+                  }}
+                  placeholder="99"
+                  aria-label={t("missingValuesModal.rangeMax")}
+                  className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-neutral-500 dark:text-neutral-400 mb-1">
+                  {t("missingValuesModal.rangeExtraCode")}
+                </label>
+                <input
+                  type="text"
+                  value={rangeExtra}
+                  onChange={(e) => {
+                    setRangeExtra(e.target.value);
+                    setMode("range");
+                    if (error) setError(null);
+                  }}
+                  placeholder="-1"
+                  aria-label={t("missingValuesModal.rangeExtraCode")}
+                  className="w-full px-2.5 py-1.5 text-xs font-mono rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand"
+                />
               </div>
             </div>
           </div>

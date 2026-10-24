@@ -12,6 +12,13 @@ import {
 } from "@/utils/missing-imputation";
 import type { Dataset } from "@/types";
 
+// Test tự chứa: base URL backend do mock cấp, KHÔNG phụ thuộc file .env của máy chạy test
+// (getBase đọc loadBackendApiUrl() rồi mới tới VITE_QUANTIS_API_URL).
+vi.mock("@/utils/storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/utils/storage")>();
+  return { ...actual, loadBackendApiUrl: () => "http://localhost:3001" };
+});
+
 const sampleDatasetWithMissing: Dataset = {
   id: "ds_transform_test",
   name: "Survey Data",

@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Table2, SlidersHorizontal } from "lucide-react";
 import type { Dataset } from "@/types";
 import { useUIStore, type DataTab } from "@/stores";
-import { type DescriptiveRow, getDataRows, computeProfileWithOutliers } from "@/utils/stats";
+import { type DescriptiveRow, getAnalysisRows, computeProfileWithOutliers } from "@/utils/stats";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { DataGrid } from "./grid/DataGrid";
@@ -128,7 +128,7 @@ export function DataView({
   if (tab === "profiling") {
     let rows: string[][] = [];
     try {
-      rows = getDataRows(selectedDs ?? undefined);
+      rows = getAnalysisRows(selectedDs ?? undefined);
     } catch {
       rows = [];
     }

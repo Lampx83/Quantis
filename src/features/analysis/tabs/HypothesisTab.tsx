@@ -4,7 +4,7 @@ import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import type { Dataset } from "@/types";
 import {
   numCell,
-  getDataRows,
+  getAnalysisRows,
   getUniqueValues,
   computeTTest,
   computeTTestFromColumns,
@@ -79,7 +79,7 @@ export function HypothesisTab({
   showToast,
 }: HypothesisTabProps) {
   const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
-  const rows = getDataRows(selectedDataset);
+  const rows = getAnalysisRows(selectedDataset);
   const [testKind, setTestKind] = useState<"ttest" | "chisquare" | "anova" | "ancova" | "manova" | "mancova" | "kruskal" | "nonparametric" | "normality" | "power" | "paired" | "wilcoxon_paired" | "friedman" | "levene" | "mcnemar" | "fisher" | "onesample_ttest" | "binomial" | "twoprop" | "sign_test" | "ftest" | "ztest_means">("ttest");
   const [groupCol, setGroupCol] = useState("");
   const [groupVal1, setGroupVal1] = useState("");

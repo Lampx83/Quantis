@@ -72,6 +72,8 @@ export function setLocale(locale: Locale): void {
 
 if (typeof window !== "undefined") {
   window.addEventListener("message", (e: MessageEvent) => {
+    // Chỉ nhận từ cửa sổ cha/đỉnh (Portal nhúng app trong iframe) hoặc chính nó — không nhận từ cửa sổ lạ.
+    if (e.source !== window.parent && e.source !== window.top && e.source !== window) return
     const d = e.data as { type?: string; locale?: string } | null
     if (d?.type === "portal-locale" && typeof d.locale === "string") {
       const raw = d.locale.toLowerCase().split(/[-_]/)[0]
@@ -1687,6 +1689,13 @@ const messages: Record<Locale, Record<string, string>> = {
   "missingValuesModal.errorMaxCodes": "Maximum of 3 discrete missing codes allowed.",
   "missingValuesModal.errorDuplicateCodes": "Discrete missing codes must not contain duplicate values.",
   "missingValuesModal.errorInvalidValue": "Invalid missing code value.",
+  "missingValuesModal.optionRangeTitle": "Range of missing values",
+  "missingValuesModal.optionRangeDesc": "A numeric range, both ends included (e.g. 98 to 99), plus at most one discrete code.",
+  "missingValuesModal.rangeMin": "From",
+  "missingValuesModal.rangeMax": "To",
+  "missingValuesModal.rangeExtraCode": "Extra code",
+  "missingValuesModal.errorRangeInvalid": "Enter two valid numbers for the range, with From not greater than To.",
+  "missingValuesModal.errorRangeOneCode": "A range can be combined with at most 1 discrete code.",
   "gridContextMenu.colHeader": "Variable: {name}",
   "gridContextMenu.sortAsc": "Sort Ascending (Asc)",
   "gridContextMenu.sortDesc": "Sort Descending (Desc)",
@@ -1698,7 +1707,11 @@ const messages: Record<Locale, Record<string, string>> = {
   "gridContextMenu.insertRowBelow": "Insert row below",
   "gridContextMenu.deleteRow": "Delete row #{row}",
   "transformTab.mice.maxIterLabel": "Maximum iterations (max_iter)",
-  "transformTab.mice.description": "The MICE (Multiple Imputation by Chained Equations) algorithm uses Bayesian Ridge regression via the Python backend to forecast and impute multivariate missing data, respecting discrete missing codes.",
+  "transformTab.mice.description": "Chained-equations imputation (MICE-style) with Bayesian Ridge regression on the Python backend; it fills one deterministic completed dataset (not several random imputations), so standard errors computed afterwards can be slightly too small. Imputed values stay within each column's observed min–max, and declared missing codes are respected.",
+  "transformTab.modeFallbackHint": "Column(s) {cols} are not scale variables, so they will be filled with the mode instead of the {strategy} (a mean would create values that do not exist on the scale).",
+  "transformTab.modeFallbackDone": "Filled with the mode instead of the {strategy} (non-scale variable): {cols}.",
+  "transformTab.strategyMean": "mean",
+  "transformTab.strategyMedian": "median",
   "transformTab.mice.loading": "Executing MICE imputation via Python backend...",
   "transformTab.mice.errEmptyResponse": "No result data returned from MICE backend",
   "transformTab.mice.errFailed": "Error connecting to MICE backend",
@@ -3317,6 +3330,13 @@ const messages: Record<Locale, Record<string, string>> = {
   "missingValuesModal.errorMaxCodes": "Chỉ cho phép tối đa 3 mã khuyết thiếu rời rạc.",
   "missingValuesModal.errorDuplicateCodes": "Các mã khuyết thiếu rời rạc không được trùng lặp nhau.",
   "missingValuesModal.errorInvalidValue": "Giá trị không hợp lệ.",
+  "missingValuesModal.optionRangeTitle": "Khoảng mã khuyết thiếu (Range)",
+  "missingValuesModal.optionRangeDesc": "Một khoảng số, gồm cả hai đầu (VD: 98 đến 99), kèm tối đa 1 mã rời rạc.",
+  "missingValuesModal.rangeMin": "Từ",
+  "missingValuesModal.rangeMax": "Đến",
+  "missingValuesModal.rangeExtraCode": "Mã bổ sung",
+  "missingValuesModal.errorRangeInvalid": "Nhập hai số hợp lệ cho khoảng, với «Từ» không lớn hơn «Đến».",
+  "missingValuesModal.errorRangeOneCode": "Khoảng chỉ kết hợp được với tối đa 1 mã rời rạc.",
   "gridContextMenu.colHeader": "Biến: {name}",
   "gridContextMenu.sortAsc": "Sắp xếp tăng dần (Asc)",
   "gridContextMenu.sortDesc": "Sắp xếp giảm dần (Desc)",
@@ -3328,7 +3348,11 @@ const messages: Record<Locale, Record<string, string>> = {
   "gridContextMenu.insertRowBelow": "Chèn dòng phía dưới",
   "gridContextMenu.deleteRow": "Xóa dòng #{row}",
   "transformTab.mice.maxIterLabel": "Số vòng lặp tối đa (max_iter)",
-  "transformTab.mice.description": "Thuật toán MICE (Multiple Imputation by Chained Equations) sử dụng mô hình hồi quy Bayesian Ridge qua Python backend để dự báo và điền giá trị khuyết thiếu đa biến, tôn trọng mã missing quy ước.",
+  "transformTab.mice.description": "Điền khuyết theo phương trình chuỗi (kiểu MICE) bằng hồi quy Bayesian Ridge trên Python backend; tạo MỘT bộ dữ liệu đã điền mang tính tất định (không phải nhiều lần điền ngẫu nhiên) nên sai số chuẩn tính sau đó có thể hơi nhỏ. Giá trị điền luôn nằm trong khoảng min–max quan sát của cột và tôn trọng mã khuyết đã khai báo.",
+  "transformTab.modeFallbackHint": "Cột {cols} không phải biến thang đo (scale) nên sẽ được điền bằng giá trị mốt thay vì {strategy} (trung bình sẽ tạo ra giá trị không tồn tại trên thang).",
+  "transformTab.modeFallbackDone": "Đã điền bằng giá trị mốt thay vì {strategy} (biến không phải scale): {cols}.",
+  "transformTab.strategyMean": "trung bình",
+  "transformTab.strategyMedian": "trung vị",
   "transformTab.mice.loading": "Đang thực thi nội suy MICE qua Python backend...",
   "transformTab.mice.errEmptyResponse": "Không nhận được dữ liệu kết quả từ MICE backend",
   "transformTab.mice.errFailed": "Lỗi khi gọi MICE backend",

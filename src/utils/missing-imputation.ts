@@ -158,6 +158,31 @@ export function imputeMeanMedianMode(
 }
 
 /**
+ * Các cột sẽ bị đổi từ trung bình/trung vị sang MỐT: chỉ biến thang đo `scale` mới được điền mean/median
+ * (điền trung bình lên thang thứ bậc/danh định tạo ra mã không tồn tại, vd 3,4 trên thang Likert).
+ * `imputeMeanMedianMode` vẫn áp quy tắc này; hàm này để giao diện CẢNH BÁO người dùng thay vì đổi âm thầm.
+ */
+export function getModeFallbackColumns(
+  data: string[][],
+  selectedColumns: string[] | undefined,
+  variables: Record<string, VariableMetadata> | undefined,
+  strategy: ImputationStrategy
+): string[] {
+  if (strategy === "mode" || !data || data.length <= 1) return [];
+  const header = data[0];
+  const targetCols = selectedColumns && selectedColumns.length > 0 ? selectedColumns : header;
+  const out: string[] = [];
+  for (const col of targetCols) {
+    const ci = header.indexOf(col);
+    if (ci === -1) continue;
+    const meta =
+      variables?.[col] ?? inferVariableMetadata(col, data.slice(1).map((r) => r[ci] ?? ""));
+    if (meta.measure !== "scale") out.push(col);
+  }
+  return out;
+}
+
+/**
  * Pairwise Deletion:
  * Filters valid observation pairs between colA and colB for correlation or covariance,
  * without discarding rows due to missingness in unrelated variables.
@@ -202,10 +227,23 @@ export function imputePairwise(
   return [[colA, colB], ...validRows.map((r) => [r[ciA], r[ciB]])];
 }
 
+/** Số ứng viên cho tối đa xét cho MỖI ô khuyết (giữ thời gian ~ tuyến tính theo số dòng). */
+export const HOT_DECK_MAX_DONOR_CANDIDATES = 1000;
+
+const isBlankOrNan = (cell: unknown): boolean => {
+  const s = String(cell ?? "").trim();
+  return s === "" || s.toLowerCase() === "nan";
+};
+
 /**
  * Hot-deck Imputation (Nearest Neighbor):
  * For each row missing a value in a target column, finds the most similar donor row
  * using normalized Euclidean distance over other valid variables and borrows the donor's value.
+ *
+ * Hiệu năng: mỗi ô được giải mã MỘT lần vào mảng số (Float64Array/Int32Array) rồi vòng khoảng cách chỉ
+ * làm phép tính trên mảng; khi số người cho > HOT_DECK_MAX_DONOR_CANDIDATES thì mỗi người nhận chỉ xét một
+ * tập con người cho cách đều nhau (lệch pha theo chỉ số dòng, nên tất định và không dồn vào cùng một nhóm).
+ * Dưới ngưỡng đó kết quả giống hệt bản duyệt toàn bộ.
  */
 export function imputeHotDeck(
   data: string[][],
@@ -216,6 +254,8 @@ export function imputeHotDeck(
 
   const header = data[0];
   const dataRows = data.slice(1);
+  const nRows = dataRows.length;
+  const nCols = header.length;
   const targetCols =
     selectedColumns && selectedColumns.length > 0 ? selectedColumns : header;
 
@@ -225,103 +265,96 @@ export function imputeHotDeck(
 
   if (targetColIndices.length === 0) return data.map((r) => [...r]);
 
-  // Compute min-max range for all numeric columns to normalize Euclidean distance
-  const ranges: Record<number, number> = {};
-  header.forEach((col, ci) => {
-    const meta = variables?.[col];
-    const isNumeric = meta ? meta.type === "numeric" : true;
-    if (isNumeric) {
-      const nums = dataRows
-        .map((r) => r[ci])
-        .filter(
-          (v) =>
-            !isMissingValue(v, meta) &&
-            String(v).trim() !== "" &&
-            !Number.isNaN(Number(v))
-        )
-        .map(Number);
-      if (nums.length > 1) {
-        const min = Math.min(...nums);
-        const max = Math.max(...nums);
-        ranges[ci] = max > min ? max - min : 1;
-      } else {
-        ranges[ci] = 1;
+  // Giải mã mỗi ô một lần: present (không khuyết) / số / mã danh mục.
+  const present: Uint8Array[] = [];
+  const nums: Float64Array[] = [];
+  const cats: Int32Array[] = [];
+  const colIsNumeric: (boolean | null)[] = []; // null = không có metadata -> quyết định theo từng ô
+  const ranges: number[] = [];
+  const catIds = new Map<string, number>();
+  for (let c = 0; c < nCols; c++) {
+    const meta = variables?.[header[c]];
+    colIsNumeric.push(meta ? meta.type === "numeric" : null);
+    const pres = new Uint8Array(nRows);
+    const nv = new Float64Array(nRows).fill(NaN);
+    const cv = new Int32Array(nRows).fill(-1);
+    let min = Infinity;
+    let max = -Infinity;
+    let count = 0;
+    for (let i = 0; i < nRows; i++) {
+      const cell = dataRows[i][c];
+      if (isMissingValue(cell, meta) || isBlankOrNan(cell)) continue;
+      pres[i] = 1;
+      const n = Number(cell);
+      nv[i] = Number.isNaN(n) ? NaN : n;
+      if (!Number.isNaN(n)) {
+        // Vòng lặp thay cho Math.min(...nums): spread tràn ngăn xếp từ ~100.000 phần tử.
+        if (n < min) min = n;
+        if (n > max) max = n;
+        count++;
       }
+      const key = String(cell);
+      let id = catIds.get(key);
+      if (id === undefined) {
+        id = catIds.size;
+        catIds.set(key, id);
+      }
+      cv[i] = id;
     }
-  });
+    present.push(pres);
+    nums.push(nv);
+    cats.push(cv);
+    const isNumericCol = meta ? meta.type === "numeric" : true;
+    ranges.push(isNumericCol && count > 1 && max > min ? max - min : 1);
+  }
 
   const outputRows: string[][] = [
     [...header],
     ...dataRows.map((r) => [...r]),
   ];
 
-  targetColIndices.forEach(({ col, ci }) => {
-    const meta = variables?.[col];
-
+  targetColIndices.forEach(({ ci }) => {
     // Find donor pool: rows where this column is NOT missing
-    const donorRowIndices: number[] = [];
-    for (let i = 0; i < dataRows.length; i++) {
-      const cell = dataRows[i][ci];
-      const isMiss =
-        isMissingValue(cell, meta) ||
-        String(cell ?? "").trim() === "" ||
-        String(cell ?? "").trim().toLowerCase() === "nan";
-      if (!isMiss) {
-        donorRowIndices.push(i);
-      }
+    const donors: number[] = [];
+    for (let i = 0; i < nRows; i++) {
+      if (present[ci][i]) donors.push(i);
     }
+    if (donors.length === 0) return; // No donor available
 
-    if (donorRowIndices.length === 0) return; // No donor available
+    const cap = HOT_DECK_MAX_DONOR_CANDIDATES;
+    const stride = donors.length > cap ? Math.ceil(donors.length / cap) : 1;
 
     // Impute recipients
-    for (let i = 0; i < dataRows.length; i++) {
-      const cell = outputRows[i + 1][ci];
-      const isMiss =
-        isMissingValue(cell, meta) ||
-        String(cell ?? "").trim() === "" ||
-        String(cell ?? "").trim().toLowerCase() === "nan";
-
-      if (!isMiss) continue;
+    for (let i = 0; i < nRows; i++) {
+      if (present[ci][i]) continue;
 
       let bestDonorIdx = -1;
       let minDistance = Infinity;
+      const offset = stride > 1 ? i % stride : 0;
 
-      for (const donorIdx of donorRowIndices) {
+      for (let k = offset; k < donors.length; k += stride) {
+        const donorIdx = donors[k];
         if (donorIdx === i) continue;
 
         let sumSqDist = 0;
         let matchingCount = 0;
 
-        for (let c = 0; c < header.length; c++) {
+        for (let c = 0; c < nCols; c++) {
           if (c === ci) continue; // Don't compare the column being imputed
-
-          const colMeta = variables?.[header[c]];
-          const valRec = dataRows[i][c];
-          const valDon = dataRows[donorIdx][c];
-
-          const missRec =
-            isMissingValue(valRec, colMeta) ||
-            String(valRec ?? "").trim() === "" ||
-            String(valRec ?? "").trim().toLowerCase() === "nan";
-          const missDon =
-            isMissingValue(valDon, colMeta) ||
-            String(valDon ?? "").trim() === "" ||
-            String(valDon ?? "").trim().toLowerCase() === "nan";
-
-          if (missRec || missDon) continue; // Skip attributes missing in either
+          if (!present[c][i] || !present[c][donorIdx]) continue; // Skip attributes missing in either
 
           matchingCount++;
-          const isNum = colMeta ? colMeta.type === "numeric" : !Number.isNaN(Number(valRec));
+          const numRec = nums[c][i];
+          const isNum = colIsNumeric[c] ?? !Number.isNaN(numRec);
 
           if (isNum) {
-            const numRec = Number(valRec);
-            const numDon = Number(valDon);
+            const numDon = nums[c][donorIdx];
             if (!Number.isNaN(numRec) && !Number.isNaN(numDon)) {
               const diff = (numRec - numDon) / (ranges[c] || 1);
               sumSqDist += diff * diff;
             }
           } else {
-            sumSqDist += valRec === valDon ? 0 : 1;
+            sumSqDist += cats[c][i] === cats[c][donorIdx] ? 0 : 1;
           }
         }
 
@@ -335,8 +368,8 @@ export function imputeHotDeck(
 
       if (bestDonorIdx !== -1) {
         outputRows[i + 1][ci] = dataRows[bestDonorIdx][ci];
-      } else if (donorRowIndices.length > 0) {
-        outputRows[i + 1][ci] = dataRows[donorRowIndices[0]][ci];
+      } else {
+        outputRows[i + 1][ci] = dataRows[donors[0]][ci];
       }
     }
   });

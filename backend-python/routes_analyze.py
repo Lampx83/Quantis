@@ -1191,7 +1191,7 @@ async def analyze_impute_mice(body: MiceImputeBody):
             rows=body.rows,
             columns=body.columns,
             variables=body.variables,
-            max_iter=body.maxIter or 10,
+            max_iter=body.maxIter if body.maxIter is not None else 10,
         )
         if result is None:
             raise HTTPException(status_code=400, detail="Không thể thực hiện nội suy MICE")

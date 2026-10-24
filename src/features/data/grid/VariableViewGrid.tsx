@@ -427,7 +427,8 @@ export function VariableViewGrid({
                 meta.valueLabels
               );
               const missingSummary = formatMissingValuesSummary(
-                meta.missingValues
+                meta.missingValues,
+                meta.missingRange
               );
               const effectiveMeasure: VariableMeasure =
                 meta.type === "string" && meta.measure === "scale"
@@ -758,11 +759,12 @@ export function VariableViewGrid({
         isOpen={Boolean(missingValuesTarget && activeMissingValuesMeta)}
         variableName={missingValuesTarget ?? ""}
         initialMissingValues={activeMissingValuesMeta?.missingValues}
-        onSave={(newMissing) => {
+        initialMissingRange={activeMissingValuesMeta?.missingRange}
+        onSave={(newMissing, newRange) => {
           if (missingValuesTarget) {
             updateVariableMetadata(
               missingValuesTarget,
-              { missingValues: newMissing },
+              { missingValues: newMissing, missingRange: newRange },
               activeDataset.id
             );
           }

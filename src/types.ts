@@ -15,6 +15,11 @@ export interface VariableMetadata {
   measure: VariableMeasure;
   /** Danh sách các mã số quy ước khuyết dữ liệu (vd: ["99", "999", "-1"]) */
   missingValues?: string[];
+  /**
+   * Khoảng mã khuyết kiểu SPSS (vd: 98–99) — chỉ áp dụng cho giá trị số, bao gồm cả hai đầu mút.
+   * Có thể dùng kèm tối đa 1 mã rời rạc trong `missingValues` (giống hộp thoại Missing Values của SPSS).
+   */
+  missingRange?: { min: number; max: number };
   /** Số chữ số sau dấu phẩy hiển thị (mặc định: 0) */
   decimals: number;
   /** Căn lề hiển thị (numeric: right; string: left; nominal/ordinal: center/left) */

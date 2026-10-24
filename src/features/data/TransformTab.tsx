@@ -1,7 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { X, Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { numCell, getDataRows, computeDescriptive } from "@/utils/stats";
+import { numCell, getDataRows, getAnalysisRows, computeDescriptive } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -10,8 +10,9 @@ import {
   imputeListwise,
   imputeMeanMedianMode,
   imputeHotDeck,
+  getModeFallbackColumns,
 } from "@/utils/missing-imputation";
-import { analyzeMiceImputation, type MiceImputationResponse } from "@/api";
+import { analyzeMiceImputation, clampMiceIterations, MICE_MIN_ITER, MICE_MAX_ITER, type MiceImputationResponse } from "@/api";
 import { ensureDatasetMetadata } from "@/utils/metadata";
 import {
   renameColumn,
@@ -97,21 +98,37 @@ export function TransformTab({
     );
   }
 
+  // dataRows: dữ liệu gốc (giữ nguyên mã khuyết như 99 để lọc/sắp xếp/recode/đổi tên còn thấy mã).
+  // analysisRows: cùng dữ liệu nhưng mã khuyết người dùng khai báo đã thành ô trống — dùng cho mọi phép
+  // tính số (log, biến tính toán, z-score/min-max, loại ngoại lai) để mã như 99 không lọt vào trung bình/độ lệch chuẩn.
   const dataRows = getDataRows(selectedDs);
+  const analysisRows = getAnalysisRows(selectedDs);
   const cols = selectedDs.columnNames || [];
   const header = dataRows[0] || [];
   const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode/hot-deck/MICE, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
+
+  // Điền trung bình/trung vị lên cột không phải scale (thứ bậc/danh định) sẽ tự đổi sang MỐT: báo trước cho người dùng.
+  const fillStrategy = transformAction === "fill_mean" ? "mean" : transformAction === "fill_median" ? "median" : null;
+  const modeFallbackCols = fillStrategy
+    ? getModeFallbackColumns(
+        dataRows,
+        transformColsMultiple.length > 0 ? transformColsMultiple : transformCol ? [transformCol] : [],
+        selectedDs.variables,
+        fillStrategy
+      )
+    : [];
+  const strategyLabel = fillStrategy === "median" ? t("transformTab.strategyMedian") : t("transformTab.strategyMean");
 
   const runPrep = (act: PrepAction): PrepResult => {
     const cols2 = transformColsMultiple;
     if (act === "rename") return renameColumn(dataRows, renameFrom, renameTo);
     if (act === "coerce_numeric") return coerceColumns(dataRows, cols2, "numeric");
     if (act === "coerce_text") return coerceColumns(dataRows, cols2, "text");
-    if (act === "compute") return computeVariable(dataRows, computeName, computeFormula);
-    if (act === "log") return logTransform(dataRows, cols2, logKind);
+    if (act === "compute") return computeVariable(analysisRows, computeName, computeFormula);
+    if (act === "log") return logTransform(analysisRows, cols2, logKind);
     if (act === "outlier_iqr") {
       const k = Number(iqrK.replace(",", "."));
-      return Number.isFinite(k) && k > 0 ? removeOutliersIQR(dataRows, cols2, k) : { rows: dataRows, error: "k phải là số dương." };
+      return Number.isFinite(k) && k > 0 ? removeOutliersIQR(analysisRows, cols2, k) : { rows: dataRows, error: "k phải là số dương." };
     }
     return removeDuplicates(dataRows, cols2);
   };
@@ -199,10 +216,24 @@ export function TransformTab({
 
       if (transformAction === "drop_missing") {
         newRows = imputeListwise(dataRows, columnsToApply, selectedDs.variables);
-      } else if (transformAction === "fill_mean") {
-        newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "mean");
-      } else if (transformAction === "fill_median") {
-        newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "median");
+      } else if (transformAction === "fill_mean" || transformAction === "fill_median") {
+        newRows = imputeMeanMedianMode(
+          dataRows,
+          columnsToApply,
+          selectedDs.variables,
+          transformAction === "fill_mean" ? "mean" : "median"
+        );
+        const switched = getModeFallbackColumns(
+          dataRows,
+          columnsToApply,
+          selectedDs.variables,
+          transformAction === "fill_mean" ? "mean" : "median"
+        );
+        setPrepNote(
+          switched.length > 0
+            ? { ok: true, text: t("transformTab.modeFallbackDone", { cols: switched.join(", "), strategy: strategyLabel }) }
+            : null
+        );
       } else if (transformAction === "fill_mode") {
         newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "mode");
       } else if (transformAction === "fill_hot_deck") {
@@ -215,7 +246,7 @@ export function TransformTab({
             dataRows,
             columnsToApply,
             selectedDs.variables,
-            miceMaxIter
+            clampMiceIterations(miceMaxIter)
           );
           if (!res || !res.rows) {
             throw new Error(t("transformTab.mice.errEmptyResponse"));
@@ -233,8 +264,14 @@ export function TransformTab({
           setIsMiceLoading(false);
         }
       } else if (transformAction === "z_score" || transformAction === "min_max") {
-        const desc = computeDescriptive(dataRows);
-        const numericRows = dataRows.slice(1).map((r) => r.map((v) => (v ?? "").trim()));
+        const desc = computeDescriptive(analysisRows);
+        const numericRows = analysisRows.slice(1).map((r, ri) =>
+          r.map((v, ci) => {
+            const cell = (v ?? "").trim();
+            // Cột không được chuẩn hóa: giữ nguyên giá trị gốc (kể cả mã khuyết) thay vì làm trống.
+            return columnsToApply.includes(header[ci]) ? cell : (dataRows[ri + 1]?.[ci] ?? "").trim();
+          })
+        );
         newRows = [header, ...numericRows.map((r) => {
           const out = [...r];
           for (const col of columnsToApply) {
@@ -472,6 +509,11 @@ export function TransformTab({
           </div>
         </div>
       )}
+      {modeFallbackCols.length > 0 && (
+        <p role="status" className="mb-3 text-sm text-amber-700 dark:text-amber-400 max-w-2xl">
+          {t("transformTab.modeFallbackHint", { cols: modeFallbackCols.join(", "), strategy: strategyLabel })}
+        </p>
+      )}
       {transformAction === "fill_mice" && (
         <div className="flex flex-wrap gap-4 items-center mb-4 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20">
           <div>
@@ -480,10 +522,10 @@ export function TransformTab({
             </label>
             <input
               type="number"
-              min={1}
-              max={100}
+              min={MICE_MIN_ITER}
+              max={MICE_MAX_ITER}
               value={miceMaxIter}
-              onChange={(e) => setMiceMaxIter(Math.max(1, parseInt(e.target.value) || 10))}
+              onChange={(e) => setMiceMaxIter(clampMiceIterations(parseInt(e.target.value, 10), 10))}
               className="rounded-lg border border-sky-300 dark:border-sky-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm w-28 font-mono"
             />
           </div>

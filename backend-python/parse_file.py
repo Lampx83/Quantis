@@ -61,6 +61,32 @@ def _format_val_key(val: Any) -> str:
     return str(val).strip()
 
 
+def _numeric_decimals(series: pd.Series) -> int:
+    """0 nếu mọi giá trị của cột số đều là số nguyên (id, tuổi, đếm…); 2 nếu có giá trị lẻ."""
+    try:
+        non_null = pd.to_numeric(series.dropna(), errors="coerce").dropna()
+        if len(non_null) == 0:
+            return 0
+        return 2 if bool((non_null % 1 != 0).any()) else 0
+    except (ValueError, TypeError):
+        return 0
+
+
+_RANGE_BOUND_LIMIT = 1e300
+
+
+def _range_bound(val: Any) -> int | float | None:
+    """Chuẩn hóa biên khoảng khuyết thành số JSON hợp lệ (±inf của SPSS LO/HI -> ±1e300)."""
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return None
+    if f != f:  # NaN
+        return None
+    f = max(-_RANGE_BOUND_LIMIT, min(_RANGE_BOUND_LIMIT, f))
+    return int(f) if f.is_integer() and abs(f) < 1e15 else f
+
+
 def _extract_pyreadstat_metadata(meta: Any, df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     """
     Trích xuất metadata học thuật từ PyreadstatMetaData:
@@ -130,28 +156,29 @@ def _extract_pyreadstat_metadata(meta: Any, df: pd.DataFrame) -> dict[str, dict[
                 formatted_mv = _format_val_key(mv)
                 if formatted_mv:
                     missing_vals.append(formatted_mv)
+        missing_range: dict[str, Any] | None = None
         if col in missing_ranges and isinstance(missing_ranges[col], (list, tuple)):
             for mr in missing_ranges[col]:
-                if isinstance(mr, dict):
-                    lo = mr.get("lo")
-                    hi = mr.get("hi")
-                    if lo is not None and lo == hi:
-                        formatted_lo = _format_val_key(lo)
-                        if formatted_lo:
-                            missing_vals.append(formatted_lo)
+                if not isinstance(mr, dict):
+                    continue
+                lo = mr.get("lo")
+                hi = mr.get("hi")
+                if lo is None or hi is None:
+                    continue
+                if lo == hi:
+                    # Mã rời rạc (pyreadstat biểu diễn là khoảng lo == hi)
+                    formatted_lo = _format_val_key(lo)
+                    if formatted_lo:
+                        missing_vals.append(formatted_lo)
+                elif missing_range is None:
+                    # Khoảng thật (vd 98–99): SPSS cho tối đa 1 khoảng (+ 1 mã rời rạc)
+                    b_lo, b_hi = _range_bound(lo), _range_bound(hi)
+                    if b_lo is not None and b_hi is not None:
+                        missing_range = {"min": min(b_lo, b_hi), "max": max(b_lo, b_hi)}
 
-        # 6. Decimals
-        if var_type == "numeric":
-            decimals = 2 if measure == "scale" else 0
-            if col in df.columns:
-                non_null = df[col].dropna()
-                try:
-                    for v in non_null.head(100):
-                        if float(v) != int(float(v)):
-                            decimals = 2
-                            break
-                except (ValueError, TypeError):
-                    pass
+        # 6. Decimals: biến số nguyên (id, tuổi, đếm, Likert…) hiển thị 0 chữ số; chỉ 2 khi có giá trị lẻ
+        if var_type == "numeric" and col in df.columns:
+            decimals = _numeric_decimals(df[col])
         else:
             decimals = 0
 
@@ -179,6 +206,8 @@ def _extract_pyreadstat_metadata(meta: Any, df: pd.DataFrame) -> dict[str, dict[
             "width": pixel_width,
             "missingValues": list(dict.fromkeys(missing_vals)),
         }
+        if missing_range is not None:
+            var_entry["missingRange"] = missing_range
         if value_labels:
             var_entry["valueLabels"] = value_labels
 
@@ -199,7 +228,7 @@ def _infer_dataframe_metadata(df: pd.DataFrame) -> dict[str, dict[str, Any]]:
             var_type = "numeric"
             unique_cnt = series.nunique()
             measure = "ordinal" if unique_cnt <= 7 else "scale"
-            decimals = 2 if measure == "scale" else 0
+            decimals = _numeric_decimals(series)
             align = "right"
         elif pd.api.types.is_datetime64_any_dtype(series):
             var_type = "date"

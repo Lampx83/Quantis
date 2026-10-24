@@ -4,6 +4,8 @@ import {
   imputeMeanMedianMode,
   imputePairwise,
   imputeHotDeck,
+  getModeFallbackColumns,
+  HOT_DECK_MAX_DONOR_CANDIDATES,
 } from "../missing-imputation";
 import { VariableMetadata } from "../../types";
 
@@ -265,5 +267,103 @@ describe("Missing Data Imputation Utilities", () => {
       const result = imputeHotDeck(testData, ["SCORE2"], vars);
       expect(result[3][2]).toBe("100");
     });
+  });
+});
+
+
+describe("imputeHotDeck: hiệu năng & tính đúng sau tối ưu", () => {
+  /** Bản duyệt toàn bộ (tham chiếu) — kết quả phải giống hệt khi số người cho <= ngưỡng. */
+  function bruteForceHotDeck(data: string[][], col: string): string[][] {
+    const header = data[0];
+    const rows = data.slice(1);
+    const ci = header.indexOf(col);
+    const isMiss = (v: string) => String(v ?? "").trim() === "";
+    const ranges = header.map((_, c) => {
+      const nums = rows.map((r) => r[c]).filter((v) => !isMiss(v) && !Number.isNaN(Number(v))).map(Number);
+      if (nums.length < 2) return 1;
+      let mn = Infinity, mx = -Infinity;
+      for (const n of nums) { if (n < mn) mn = n; if (n > mx) mx = n; }
+      return mx > mn ? mx - mn : 1;
+    });
+    const out = data.map((r) => [...r]);
+    rows.forEach((rec, i) => {
+      if (!isMiss(rec[ci])) return;
+      let best = -1, bestD = Infinity;
+      rows.forEach((don, j) => {
+        if (isMiss(don[ci]) || j === i) return;
+        let ss = 0, cnt = 0;
+        for (let c = 0; c < header.length; c++) {
+          if (c === ci || isMiss(rec[c]) || isMiss(don[c])) continue;
+          cnt++;
+          const a = Number(rec[c]), b = Number(don[c]);
+          if (!Number.isNaN(a) && !Number.isNaN(b)) ss += ((a - b) / ranges[c]) ** 2;
+          else if (Number.isNaN(a)) ss += rec[c] === don[c] ? 0 : 1;
+        }
+        const d = cnt > 0 ? Math.sqrt(ss / cnt) : Infinity;
+        if (d < bestD) { bestD = d; best = j; }
+      });
+      if (best !== -1) out[i + 1][ci] = rows[best][ci];
+    });
+    return out;
+  }
+
+  function synth(n: number, missEvery: number): string[][] {
+    let seed = 12345;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+    const rows: string[][] = [["age", "income", "grp", "q1"]];
+    for (let i = 0; i < n; i++) {
+      const age = 18 + Math.floor(rnd() * 50);
+      rows.push([String(age), (age * 100 + Math.floor(rnd() * 500)).toFixed(0), rnd() < 0.5 ? "A" : "B",
+        i % missEvery === 0 ? "" : String(1 + Math.floor(rnd() * 5))]);
+    }
+    return rows;
+  }
+
+  it("giống hệt bản duyệt toàn bộ khi số người cho <= ngưỡng", () => {
+    const data = synth(400, 9);
+    expect(imputeHotDeck(data, ["q1"])).toEqual(bruteForceHotDeck(data, "q1"));
+  });
+
+  it("20.000 dòng, 1 cột khuyết (~10%) xong trong vài giây (trước tối ưu: ~17 giây)", () => {
+    const data = synth(20_000, 10);
+    const t0 = performance.now();
+    const out = imputeHotDeck(data, ["q1"]);
+    const ms = performance.now() - t0;
+    expect(out.slice(1).every((r) => r[3] !== "")).toBe(true);
+    expect(ms).toBeLessThan(5000);
+    // giá trị điền luôn là giá trị có thật trong thang 1–5
+    expect(new Set(out.slice(1).map((r) => r[3]))).toEqual(new Set(["1", "2", "3", "4", "5"]));
+    expect(HOT_DECK_MAX_DONOR_CANDIDATES).toBeGreaterThan(0);
+  });
+
+  it("150.000 dòng không tràn ngăn xếp (Math.min(...nums))", () => {
+    const n = 150_000;
+    const data: string[][] = [["x", "y"]];
+    for (let i = 0; i < n; i++) data.push([String(i % 977), i % 5000 === 0 ? "" : String(i % 13)]);
+    expect(() => imputeHotDeck(data, ["y"])).not.toThrow();
+  });
+});
+
+describe("getModeFallbackColumns: điền mean/median lên cột không phải scale phải được báo", () => {
+  const data = [
+    ["likert", "age", "gender"],
+    ["1", "20", "a"], ["2", "30", "b"], ["", "40", "a"], ["4", "", "b"],
+  ];
+  const vars: Record<string, VariableMetadata> = {
+    likert: { name: "likert", type: "numeric", label: "l", measure: "ordinal", decimals: 0, align: "right" },
+    age: { name: "age", type: "numeric", label: "a", measure: "scale", decimals: 0, align: "right" },
+    gender: { name: "gender", type: "string", label: "g", measure: "nominal", decimals: 0, align: "left" },
+  };
+
+  it("liệt kê cột ordinal/nominal sẽ bị đổi sang mốt", () => {
+    expect(getModeFallbackColumns(data, ["likert", "age", "gender"], vars, "mean")).toEqual(["likert", "gender"]);
+    expect(getModeFallbackColumns(data, ["age"], vars, "median")).toEqual([]);
+    expect(getModeFallbackColumns(data, ["likert"], vars, "mode")).toEqual([]);
+  });
+
+  it("khớp với hành vi thực của imputeMeanMedianMode (mốt, không phải trung bình)", () => {
+    const out = imputeMeanMedianMode(data, ["likert"], vars, "mean");
+    // mean(1,2,4)=2.33 sẽ là giá trị không có trên thang; thực tế điền mốt (giá trị có thật)
+    expect(["1", "2", "4"]).toContain(out[3][0]);
   });
 });

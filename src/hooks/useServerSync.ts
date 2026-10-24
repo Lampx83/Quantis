@@ -9,7 +9,7 @@ import {
 } from "@/stores";
 import * as quantisApi from "@/api";
 import { clearWorkspaceLocalData, setServerSettings } from "@/utils/storage";
-import { getDataRows } from "@/utils/stats";
+import { getAnalysisRows } from "@/utils/stats";
 
 export function useServerSync() {
   const { setDatasets, selectedDatasetId, datasets } = useDataStore();
@@ -130,7 +130,7 @@ export function useServerSync() {
       setDescriptiveBackendResult(null);
       return;
     }
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     if (rows.length < 2) {
       setDescriptiveBackendResult(null);
       return;
@@ -145,7 +145,7 @@ export function useServerSync() {
       setCorrelationLoading(false);
       return;
     }
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     if (rows.length < 3 || correlationMethod === "kendall") {
       setCorrelationBackendResult(null);
       setCorrelationLoading(false);

@@ -18,6 +18,7 @@ import {
   ensureDatasetMetadata,
   formatCellValueWithLabels,
   isMissingValue,
+  hasMissingRule,
   validateVariableName,
 } from "@/utils/metadata";
 import { useDataStore } from "@/stores/useDataStore";
@@ -122,8 +123,7 @@ export function formatDisplayCellValue(
   const trimmed = raw.trim();
   const isMissingCode = Boolean(
     trimmed !== "" &&
-      meta?.missingValues &&
-      meta.missingValues.length > 0 &&
+      hasMissingRule(meta) &&
       isMissingValue(trimmed, meta)
   );
 

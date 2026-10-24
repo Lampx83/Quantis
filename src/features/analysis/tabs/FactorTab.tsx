@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";
+import { getAnalysisRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -18,7 +18,7 @@ export function FactorTab({
   analysisBackendAvailable = false,
   showToast: _showToast,
 }: FactorTabProps) {
-  const rows = getDataRows(selectedDataset);
+  const rows = getAnalysisRows(selectedDataset);
   const cols = selectedDataset.columnNames ?? [];
   const numericCols =
     rows.length >= 2

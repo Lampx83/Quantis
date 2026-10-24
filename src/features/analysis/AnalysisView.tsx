@@ -10,7 +10,7 @@ import type {
   MannWhitneyResult,
 } from "@/utils/stats";
 import {
-  getDataRows,
+  getAnalysisRows,
   computeCorrelationMatrix,
   computePartialCorrelation,
   computeCorrelationCI,
@@ -117,7 +117,7 @@ export function AnalysisView({
   const [covarianceLoading, setCovarianceLoading] = useState(false);
 
   if (effectiveTab === "correlation" && selectedDataset) {
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     const corr =
       (analysisBackendAvailable ? correlationBackendResult : null) ??
       computeCorrelationMatrix(rows, correlationMethod);
@@ -514,7 +514,7 @@ export function AnalysisView({
   }
 
   if (effectiveTab === "reliability" && selectedDataset) {
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
     const numericCols =
       rows.length >= 2

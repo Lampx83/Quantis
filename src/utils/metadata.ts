@@ -3,7 +3,8 @@ import { t } from "../i18n";
 
 /**
  * Validate variable name according to academic standard (SPSS-like identifier)
- * Regex: ^[a-zA-Z_][a-zA-Z0-9_]*$
+ * Regex: ^[\p{L}_][\p{L}\p{M}\p{N}_]*$ (chữ cái Unicode, kể cả tiếng Việt có dấu; số/dấu gạch dưới;
+ * không bắt đầu bằng số, không khoảng trắng). Nhập CSV vốn đã cho tên cột tiếng Việt nên đổi tên cũng phải cho phép.
  */
 export function validateVariableName(
   name: string,
@@ -14,7 +15,7 @@ export function validateVariableName(
   if (!trimmed) {
     return { valid: false, error: t("metadata.validation.empty") };
   }
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)) {
+  if (!/^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u.test(trimmed)) {
     return {
       valid: false,
       error: t("metadata.validation.invalidChars"),
@@ -198,8 +199,74 @@ export function formatCellValueWithLabels(
   return value;
 }
 
+/** Chuẩn hóa mã để so khớp: bỏ khoảng trắng, "99.0" -> "99". */
+function normalizeCode(v: string): string {
+  const trimmed = String(v).trim();
+  return trimmed.endsWith(".0") ? trimmed.slice(0, -2) : trimmed;
+}
+
+/** Biến có khai báo mã khuyết (rời rạc hoặc khoảng) hay không. */
+export function hasMissingRule(metadata?: VariableMetadata): boolean {
+  return Boolean(
+    (metadata?.missingValues && metadata.missingValues.length > 0) || metadata?.missingRange
+  );
+}
+
+/** Chuỗi định danh quy tắc khuyết của một biến — dùng làm khóa cache/so sánh. */
+export function missingRuleSignature(metadata?: VariableMetadata): string {
+  if (!hasMissingRule(metadata)) return "";
+  const r = metadata?.missingRange;
+  return `${(metadata?.missingValues ?? []).join("|")}#${r ? `${r.min}..${r.max}` : ""}#${metadata?.type ?? ""}`;
+}
+
 /**
- * Checks whether a given cell value represents a missing value (empty string, null, or user-defined missing code).
+ * Tạo hàm kiểm tra «ô này có phải mã khuyết người dùng khai báo» cho một biến (biên dịch một lần,
+ * dùng cho cả cột hàng chục nghìn dòng). Trả về `null` nếu biến không khai báo mã khuyết nào.
+ * Chỉ xét mã khai báo; ô trống/null xử lý riêng ở `isMissingValue`.
+ */
+export function buildMissingMatcher(
+  metadata?: VariableMetadata
+): ((trimmed: string) => boolean) | null {
+  if (!hasMissingRule(metadata)) return null;
+  const isString = metadata?.type === "string";
+  const codes = new Set<string>();
+  const numericCodes = new Set<number>();
+  for (const mv of metadata?.missingValues ?? []) {
+    const norm = normalizeCode(mv);
+    if (norm === "") continue;
+    codes.add(norm);
+    if (!isString) {
+      const n = Number(norm);
+      if (Number.isFinite(n)) numericCodes.add(n);
+    }
+  }
+  const range = metadata?.missingRange;
+  const lo = range ? Math.min(range.min, range.max) : NaN;
+  const hi = range ? Math.max(range.min, range.max) : NaN;
+  const hasRange = Number.isFinite(lo) && Number.isFinite(hi) && !isString;
+  if (codes.size === 0 && !hasRange) return null;
+  return (trimmed: string) => {
+    if (codes.has(trimmed) || codes.has(normalizeCode(trimmed))) return true;
+    if (numericCodes.size > 0 || hasRange) {
+      const n = Number(trimmed);
+      if (Number.isFinite(n)) {
+        if (numericCodes.has(n)) return true;
+        if (hasRange && n >= lo && n <= hi) return true;
+      }
+    }
+    return false;
+  };
+}
+
+/** Cache hàm so khớp theo đối tượng metadata (tránh dựng lại Set cho từng ô). */
+const matcherCache = new WeakMap<
+  VariableMetadata,
+  { sig: string; matcher: ((trimmed: string) => boolean) | null }
+>();
+
+/**
+ * Checks whether a given cell value represents a missing value (empty string, null,
+ * or a user-defined missing code: discrete codes and/or a numeric range like SPSS).
  */
 export function isMissingValue(
   value: string | undefined | null,
@@ -208,15 +275,14 @@ export function isMissingValue(
   if (value === undefined || value === null) return true;
   const trimmed = String(value).trim();
   if (trimmed === "") return true;
-
-  if (metadata?.missingValues && metadata.missingValues.length > 0) {
-    const normalizedTrimmed = trimmed.endsWith(".0") ? trimmed.slice(0, -2) : trimmed;
-    return metadata.missingValues.some((mv) => {
-      const normalizedMv = mv.endsWith(".0") ? mv.slice(0, -2) : mv;
-      return mv === trimmed || normalizedMv === normalizedTrimmed;
-    });
+  if (!metadata || !hasMissingRule(metadata)) return false;
+  const sig = missingRuleSignature(metadata);
+  let cached = matcherCache.get(metadata);
+  if (!cached || cached.sig !== sig) {
+    cached = { sig, matcher: buildMissingMatcher(metadata) };
+    matcherCache.set(metadata, cached);
   }
-  return false;
+  return cached.matcher ? cached.matcher(trimmed) : false;
 }
 
 /**

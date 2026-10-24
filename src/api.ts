@@ -2034,6 +2034,16 @@ export interface MiceImputationResponse {
   iterations: number;
 }
 
+/** Số vòng lặp MICE hợp lệ (khớp backend `MICE_MAX_ITER_LIMIT`). */
+export const MICE_MIN_ITER = 1;
+export const MICE_MAX_ITER = 50;
+
+export function clampMiceIterations(value: number | undefined | null, fallback = 10): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MICE_MAX_ITER, Math.max(MICE_MIN_ITER, n));
+}
+
 /**
  * Multiple Imputation by Chained Equations (MICE) via Python backend.
  */
@@ -2055,7 +2065,7 @@ export async function analyzeMiceImputation(
       rows,
       columns: columns && columns.length > 0 ? columns : undefined,
       variables,
-      maxIter: maxIter ?? 10,
+      maxIter: clampMiceIterations(maxIter),
     }),
   });
   if (!res.ok) {

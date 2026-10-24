@@ -14,6 +14,7 @@ import {
   MissingValuesModal,
   parseAndValidateDiscreteMissing,
   formatMissingValuesSummary,
+  parseAndValidateRangeMissing,
 } from "../MissingValuesModal";
 
 describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
@@ -132,6 +133,39 @@ describe("Task 4: ValueLabelsModal & MissingValuesModal", () => {
       const tooMany = parseAndValidateDiscreteMissing(["99", "999", "-1", "-9"]);
       expect(tooMany.valid).toBe(false);
       expect(tooMany.error).toBeDefined();
+    });
+
+    it("validates a missing range (+ at most 1 discrete code) and shows it in the summary", () => {
+      const ok = parseAndValidateRangeMissing("98", "99", ["-1"]);
+      expect(ok).toMatchObject({ valid: true, range: { min: 98, max: 99 }, values: ["-1"] });
+      expect(parseAndValidateRangeMissing("0,5", "2", []).range).toEqual({ min: 0.5, max: 2 });
+      expect(parseAndValidateRangeMissing("99", "98", []).valid).toBe(false); // từ > đến
+      expect(parseAndValidateRangeMissing("", "98", []).valid).toBe(false);
+      expect(parseAndValidateRangeMissing("a", "98", []).valid).toBe(false);
+      expect(parseAndValidateRangeMissing("1", "2", ["7", "8"]).valid).toBe(false); // chỉ 1 mã đi kèm
+
+      setLocale("en");
+      expect(formatMissingValuesSummary([], { min: 98, max: 99 })).toBe("98 – 99");
+      expect(formatMissingValuesSummary(["-1"], { min: 98, max: 99 })).toBe("98 – 99, -1");
+      expect(formatMissingValuesSummary(undefined, undefined)).toBe("None");
+    });
+
+    it("opens in range mode with the existing range prefilled", () => {
+      setLocale("en");
+      const html = renderToStaticMarkup(
+        <MissingValuesModal
+          isOpen={true}
+          variableName="q1"
+          initialMissingValues={["97"]}
+          initialMissingRange={{ min: 98, max: 99 }}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      );
+      expect(html).toContain("Range of missing values");
+      expect(html).toContain('value="98"');
+      expect(html).toContain('value="99"');
+      expect(html).toContain('value="97"');
     });
 
     it("formats missing values summary for grid display in active locale", () => {

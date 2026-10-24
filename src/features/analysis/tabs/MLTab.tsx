@@ -15,7 +15,7 @@ import {
 import type { Dataset } from "@/types";
 import {
   numCell,
-  getDataRows,
+  getAnalysisRows,
   getUniqueValues,
   computeKMeans,
   computeMulticlassLogisticOneVsRest,
@@ -41,7 +41,7 @@ export function MLTab({
   analysisBackendAvailable = false,
   showToast: _showToast,
 }: MLTabProps) {
-  const rows = getDataRows(selectedDataset);
+  const rows = getAnalysisRows(selectedDataset);
   const cols = selectedDataset.columnNames ?? [];
   const numericCols =
     rows.length >= 2
