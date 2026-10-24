@@ -345,6 +345,13 @@ export function isValidNumericValue(val: string | undefined | null): boolean {
   return STRICT_NUMERIC_REGEX.test(trimmed);
 }
 
+/** Tên các cột được khai báo kiểu Numeric (gửi cho backend để tách ô không phải số). */
+export function numericColumnNames(variables?: Record<string, VariableMetadata>): string[] {
+  return Object.entries(variables ?? {})
+    .filter(([, v]) => v?.type === "numeric")
+    .map(([name]) => name);
+}
+
 /**
  * Kiểm tra xem ô dữ liệu có phải là giá trị số không hợp lệ trong một biến numeric hay không.
  * Trả về false nếu biến không phải numeric, hoặc ô trống, hoặc ô là mã khuyết đã khai báo.

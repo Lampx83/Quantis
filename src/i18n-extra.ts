@@ -50,6 +50,8 @@ export const EXTRA_VI: Record<string, string> = {
   "glossary.iqr.title": "IQR (khoảng tứ phân vị)",
   "glossary.iqr.text": "IQR = Q3 − Q1. Theo quy tắc Tukey, giá trị nằm ngoài [Q1 − 1,5·IQR ; Q3 + 1,5·IQR] được coi là ngoại lai.",
   "glossary.hintBarLabel": "Giải thích thuật ngữ:",
+  "glossary.nonNumeric.title": "Không phải số (ô sai kiểu)",
+  "glossary.nonNumeric.text": "Ô nằm trong cột số nhưng không phải số hợp lệ: chữ như «bốn», «N/A», hoặc số viết bằng dấu phẩy («3,5»). Ô này bị bỏ qua khi tính và KHÔNG được tính vào Missing (Missing chỉ gồm ô trống và mã khuyết đã khai báo). Tìm ô vàng ⚠ ở Xem dữ liệu rồi sửa ô, dùng Recode, hoặc để trống nếu không biết giá trị đúng.",
 
   // ---- Chuẩn bị dữ liệu thứ cấp --------------------------------------------------------------------
   "transformTab.actionRename": "Đổi tên biến (cột)",
@@ -189,6 +191,8 @@ export const EXTRA_EN: Record<string, string> = {
   "glossary.iqr.title": "IQR (interquartile range)",
   "glossary.iqr.text": "IQR = Q3 − Q1. By Tukey's rule, values outside [Q1 − 1.5·IQR ; Q3 + 1.5·IQR] are treated as outliers.",
   "glossary.hintBarLabel": "Term help:",
+  "glossary.nonNumeric.title": "Non-numeric (wrong-type cell)",
+  "glossary.nonNumeric.text": "A cell inside a numeric column that is not a valid number: text such as \"four\" or \"N/A\", or a number typed with a decimal comma (\"3,5\"). It is skipped in the calculations and is NOT counted in Missing (Missing covers only empty cells and declared missing codes). Find the yellow ⚠ cells in the data view and fix them, use Recode, or leave them empty if the true value is unknown.",
 
   "transformTab.actionRename": "Rename variable (column)",
   "transformTab.actionCoerceNumeric": "Change type: text → number",

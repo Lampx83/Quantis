@@ -4,7 +4,7 @@
 
 import type { DataProfile, VariableMetadata } from "../types";
 import { t } from "../i18n";
-import { buildMissingMatcher, missingRuleSignature } from "./metadata";
+import { buildMissingMatcher, missingRuleSignature, isValidNumericValue } from "./metadata";
 
 const MAX_ROWS_STORED = 50000;
 
@@ -330,8 +330,24 @@ function toNum(val: unknown): number {
   return Number(s);
 }
 
-/** Compute data profile for each column. */
-export function computeProfile(rows: string[][]): DataProfile[] {
+/**
+ * Cột nào được coi là «cột số» khi thống kê: theo kiểu người dùng/Quantis đã khai ở Variable View (`type === "numeric"`),
+ * nếu không có thông tin thì suy từ dữ liệu (mọi ô không trống đều là số). Với cột số KHAI BÁO, ô không phải số hợp lệ
+ * (chữ «bốn», «N/A», dấu phẩy thập phân «3,5») không làm cột thành chữ: chúng bị bỏ qua khi tính và được đếm riêng ở `nonNumeric`.
+ */
+function isDeclaredNumeric(variables: Record<string, VariableMetadata> | undefined, column: string): boolean {
+  return variables?.[String(column)]?.type === "numeric";
+}
+
+/** Tách các ô không trống của cột số khai báo thành (số hợp lệ, số ô không phải số). */
+function splitDeclaredNumeric(nonEmpty: string[]): { nums: number[]; nonNumeric: number } {
+  const nums: number[] = [];
+  for (const v of nonEmpty) if (isValidNumericValue(v)) nums.push(toNum(v));
+  return { nums, nonNumeric: nonEmpty.length - nums.length };
+}
+
+/** Compute data profile for each column. `variables` (tuỳ chọn): đếm riêng ô không phải số của các cột số đã khai báo. */
+export function computeProfile(rows: string[][], variables?: Record<string, VariableMetadata>): DataProfile[] {
   if (!rows || !Array.isArray(rows) || rows.length === 0) return [];
   const headers = rows[0];
   if (!headers || !Array.isArray(headers)) return [];
@@ -341,8 +357,17 @@ export function computeProfile(rows: string[][]): DataProfile[] {
     const nonEmpty = values.filter((v) => v !== "");
     const missing = values.length - nonEmpty.length;
     const unique = new Set(nonEmpty).size;
-    const nums = nonEmpty.filter(isNumeric).map(toNum);
-    const type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    const declared = isDeclaredNumeric(variables, col);
+    let nums: number[];
+    let nonNumeric: number | undefined;
+    let type: string;
+    if (declared) {
+      ({ nums, nonNumeric } = splitDeclaredNumeric(nonEmpty));
+      type = "numeric";
+    } else {
+      nums = nonEmpty.filter(isNumeric).map(toNum);
+      type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    }
     const profile: DataProfile = {
       column: col,
       type,
@@ -350,6 +375,7 @@ export function computeProfile(rows: string[][]): DataProfile[] {
       missingPct: values.length ? (missing / values.length) * 100 : 0,
       unique,
     };
+    if (nonNumeric !== undefined) profile.nonNumeric = nonNumeric;
     if (nums.length > 0) {
       const n = nums.length;
       const sum = nums.reduce((a, b) => a + b, 0);
@@ -374,6 +400,8 @@ export interface DescriptiveRow {
   type: string;
   n: number;
   missing: number;
+  /** Cột số khai báo: số ô không trống nhưng không phải số hợp lệ (bỏ qua khi tính, KHÔNG tính vào `missing`). */
+  nonNumeric?: number;
   mean?: number;
   median?: number;
   std?: number;
@@ -387,8 +415,8 @@ export interface DescriptiveRow {
   freq?: { value: string; count: number }[];
 }
 
-/** Descriptive statistics per column. */
-export function computeDescriptive(rows: string[][]): DescriptiveRow[] {
+/** Descriptive statistics per column. `variables` (tuỳ chọn): cột số khai báo giữ kiểu số, ô sai kiểu đếm ở `nonNumeric`. */
+export function computeDescriptive(rows: string[][], variables?: Record<string, VariableMetadata>): DescriptiveRow[] {
   if (rows.length === 0) return [];
   const headers = rows[0];
   const dataRows = rows.slice(1);
@@ -396,9 +424,18 @@ export function computeDescriptive(rows: string[][]): DescriptiveRow[] {
     const values = dataRows.map((r) => (r[ci] !== undefined ? String(r[ci]).trim() : ""));
     const nonEmpty = values.filter((v) => v !== "");
     const missing = values.length - nonEmpty.length;
-    const nums = nonEmpty.filter(isNumeric).map(toNum);
-    const type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    let nums: number[];
+    let nonNumeric: number | undefined;
+    let type: string;
+    if (isDeclaredNumeric(variables, col)) {
+      ({ nums, nonNumeric } = splitDeclaredNumeric(nonEmpty));
+      type = nums.length > 0 ? "numeric" : "categorical";
+    } else {
+      nums = nonEmpty.filter(isNumeric).map(toNum);
+      type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    }
     const row: DescriptiveRow = { column: col, type, n: values.length, missing };
+    if (nonNumeric !== undefined) row.nonNumeric = nonNumeric;
     if (type === "numeric" && nums.length > 0) {
       const sorted = [...nums].sort((a, b) => a - b);
       const n = sorted.length;
@@ -2303,16 +2340,19 @@ export function computeOutlierIqr(values: number[]): { outlierCount: number; q1:
 }
 
 /** Add outlier counts and skew to profiling: returns profile with optional outlierCount. */
-export function computeProfileWithOutliers(rows: string[][]): (DataProfile & { outlierCount?: number })[] {
+export function computeProfileWithOutliers(
+  rows: string[][],
+  variables?: Record<string, VariableMetadata>
+): (DataProfile & { outlierCount?: number })[] {
   if (!rows || !Array.isArray(rows) || rows.length === 0) return [];
-  const profiles = computeProfile(rows);
+  const profiles = computeProfile(rows, variables);
   if (rows.length < 2) return profiles;
   const headers = rows[0];
   if (!headers || !Array.isArray(headers)) return profiles;
   const dataRows = rows.slice(1);
   return profiles.map((p, ci) => {
     const values = dataRows.map((r) => (r[ci] !== undefined ? String(r[ci]).trim() : ""));
-    const nums = values.filter((v) => v !== "" && isNumeric(v)).map(toNum);
+    const nums = values.filter((v) => v !== "" && (isDeclaredNumeric(variables, p.column) ? isValidNumericValue(v) : isNumeric(v))).map(toNum);
     const outlierCount = nums.length >= 4 ? getOutlierCountIQR(nums) : undefined;
     return { ...p, outlierCount };
   });

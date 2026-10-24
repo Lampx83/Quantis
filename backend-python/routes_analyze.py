@@ -77,6 +77,11 @@ class RowsBody(BaseModel):
     rows: list[list[str]]
 
 
+class DescriptiveBody(BaseModel):
+    rows: list[list[str]]
+    numericColumns: list[str] = []  # cột khai báo kiểu số (Variable View) — để đếm riêng ô không phải số
+
+
 class TTestBody(BaseModel):
     rows: list[list[str]]
     groupCol: str
@@ -398,9 +403,9 @@ async def analyze_health():
 
 
 @router.post("/descriptive")
-async def analyze_descriptive(body: RowsBody):
+async def analyze_descriptive(body: DescriptiveBody):
     try:
-        result = run_descriptive(body.rows)
+        result = run_descriptive(body.rows, body.numericColumns)
         return {"result": result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -26,6 +26,7 @@ import {
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint } from "@/components/common/InfoHint";
 
 export interface DescriptiveStatsViewProps {
   selectedDataset: Dataset | undefined;
@@ -69,7 +70,8 @@ export function DescriptiveStatsView({
   const [bootstrapCICol, setBootstrapCICol] = useState("");
   const [bootstrapCIResult, setBootstrapCIResult] = useState<{ mean: number; ciLower: number; ciUpper: number; n: number } | null>(null);
 
-  const stats = (analysisBackendAvailable ? descriptiveBackendResult : null) ?? (rows.length >= 2 ? computeDescriptive(rows) : []);
+  const stats = (analysisBackendAvailable ? descriptiveBackendResult : null) ?? (rows.length >= 2 ? computeDescriptive(rows, selectedDataset?.variables) : []);
+  const validN = (s: DescriptiveRow) => s.n - s.missing - (s.nonNumeric ?? 0); // N hợp lệ: không gồm ô thiếu và ô không phải số
   const numericColsDesc = stats.filter((s) => s.mean != null).map((s) => s.column);
   const categorical = stats.filter((s) => s.freq && s.freq.length > 0);
   const chartCol = categorical[0];
@@ -77,13 +79,14 @@ export function DescriptiveStatsView({
 
   const copyDescriptiveTsv = useCallback(() => {
     if (stats.length === 0) return;
-    const headers = [t("descriptiveStats.table.column"), t("descriptiveStats.table.type"), "N", "Missing", "Mean", "Median", "Std", "Q25", "Q75", "P10", "P90", "Min", "Max", "Kurtosis"];
+    const headers = [t("descriptiveStats.table.column"), t("descriptiveStats.table.type"), "N", "Missing", t("dataView.profiling.table.nonNumeric"), "Mean", "Median", "Std", "Q25", "Q75", "P10", "P90", "Min", "Max", "Kurtosis"];
     const na = "\u2014";
     const tsvRows = stats.map((s) => [
       s.column,
       s.type,
-      String(s.n - s.missing), // N hợp lệ (không gồm ô thiếu) — cột Missing là số ô thiếu; N + Missing = tổng số dòng
+      String(validN(s)), // N hợp lệ (không gồm ô thiếu và ô không phải số); N + Missing + Không phải số = tổng số dòng
       String(s.missing),
+      s.nonNumeric != null ? String(s.nonNumeric) : na,
       s.mean != null ? s.mean.toFixed(4) : na,
       s.median != null ? s.median.toFixed(4) : na,
       s.std != null ? s.std.toFixed(4) : na,
@@ -100,7 +103,7 @@ export function DescriptiveStatsView({
   }, [stats]);
 
   const aiContextDescriptive = stats.length > 0
-    ? stats.map((s) => `Cột ${s.column}: N=${s.n - s.missing}, missing=${s.missing}, mean=${s.mean != null ? s.mean.toFixed(2) : "—"}, median=${s.median != null ? s.median.toFixed(2) : "—"}, std=${s.std != null ? s.std.toFixed(2) : "—"}, min=${s.min != null ? s.min.toFixed(2) : "—"}, max=${s.max != null ? s.max.toFixed(2) : "—"}`).join("\n")
+    ? stats.map((s) => `Cột ${s.column}: N=${validN(s)}, missing=${s.missing}, ${s.nonNumeric != null ? `không phải số=${s.nonNumeric}, ` : ""}mean=${s.mean != null ? s.mean.toFixed(2) : "—"}, median=${s.median != null ? s.median.toFixed(2) : "—"}, std=${s.std != null ? s.std.toFixed(2) : "—"}, min=${s.min != null ? s.min.toFixed(2) : "—"}, max=${s.max != null ? s.max.toFixed(2) : "—"}`).join("\n")
     : "";
 
   return (
@@ -133,6 +136,7 @@ export function DescriptiveStatsView({
                   <th className="text-left p-2">{t("descriptiveStats.table.type")}</th>
                   <th className="text-right p-2">N</th>
                   <th className="text-right p-2">Missing</th>
+                  <th className="text-right p-2">{t("dataView.profiling.table.nonNumeric")}<InfoHint term="nonNumeric" /></th>
                   <th className="text-right p-2">Mean</th>
                   <th className="text-right p-2">Median</th>
                   <th className="text-right p-2">Std</th>
@@ -150,8 +154,9 @@ export function DescriptiveStatsView({
                   <tr key={s.column} className="border-b border-neutral-100 dark:border-neutral-700/50">
                     <td className="p-2 font-medium">{s.column}</td>
                     <td className="p-2">{s.type}</td>
-                    <td className="p-2 text-right">{s.n - s.missing}</td>
+                    <td className="p-2 text-right">{validN(s)}</td>
                     <td className="p-2 text-right">{s.missing}</td>
+                    <td className={`p-2 text-right ${(s.nonNumeric ?? 0) > 0 ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`} title={s.nonNumeric == null ? t("dataView.profiling.naCellTooltip") : undefined} data-testid={`desc-nonnumeric-${s.column}`}>{s.nonNumeric != null ? s.nonNumeric : "—"}</td>
                     <td className="p-2 text-right">{s.mean != null ? s.mean.toFixed(2) : "—"}</td>
                     <td className="p-2 text-right">{s.median != null ? s.median.toFixed(2) : "—"}</td>
                     <td className="p-2 text-right">{s.std != null ? s.std.toFixed(2) : "—"}</td>
@@ -167,6 +172,11 @@ export function DescriptiveStatsView({
               </tbody>
             </table>
           </div>
+          {stats.some((s) => (s.nonNumeric ?? 0) > 0) && (
+            <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" data-testid="desc-nonnumeric-note">
+              {t("dataView.profiling.nonNumericNote", { n: stats.filter((s) => (s.nonNumeric ?? 0) > 0).length, cols: stats.filter((s) => (s.nonNumeric ?? 0) > 0).map((s) => s.column).join(", ") })}
+            </p>
+          )}
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 p-4 mb-4">
             <p className="text-sm font-medium mb-2">{t("descriptiveStats.bootstrapTitle")}</p>
             <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">{t("descriptiveStats.bootstrapDesc")}</p>
