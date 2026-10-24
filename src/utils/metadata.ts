@@ -297,3 +297,32 @@ export function maskMissingValues(
   }
   return String(value);
 }
+
+const STRICT_NUMERIC_REGEX = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+/**
+ * Kiểm tra xem một chuỗi có phải là định dạng số chuẩn quốc tế hay không (dấu chấm thập phân).
+ * Ô trống/khoảng trắng được coi là hợp lệ (ô khuyết).
+ */
+export function isValidNumericValue(val: string | undefined | null): boolean {
+  if (val === undefined || val === null) return true;
+  const trimmed = String(val).trim();
+  if (trimmed === "") return true;
+  return STRICT_NUMERIC_REGEX.test(trimmed);
+}
+
+/**
+ * Kiểm tra xem ô dữ liệu có phải là giá trị số không hợp lệ trong một biến numeric hay không.
+ * Trả về false nếu biến không phải numeric, hoặc ô trống, hoặc ô là mã khuyết đã khai báo.
+ */
+export function isInvalidNumericCell(
+  val: string | undefined | null,
+  metadata?: VariableMetadata
+): boolean {
+  if (metadata?.type !== "numeric") return false;
+  if (val === undefined || val === null) return false;
+  const trimmed = String(val).trim();
+  if (trimmed === "") return false;
+  if (isMissingValue(trimmed, metadata)) return false;
+  return !isValidNumericValue(trimmed);
+}

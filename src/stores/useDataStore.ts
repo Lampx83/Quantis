@@ -39,11 +39,14 @@ export const useDataStore = create<DataState>()(
           datasets: typeof datasets === "function" ? datasets(s.datasets) : datasets,
         })),
       addDataset: (dataset) =>
-        set((s) => ({
-          datasets: s.datasets.some((d) => d.id === dataset.id)
-            ? s.datasets.map((d) => (d.id === dataset.id ? dataset : d))
-            : [...s.datasets, dataset],
-        })),
+        set((s) => {
+          const ensured = dataset.variables ? dataset : ensureDatasetMetadata(dataset);
+          return {
+            datasets: s.datasets.some((d) => d.id === ensured.id)
+              ? s.datasets.map((d) => (d.id === ensured.id ? ensured : d))
+              : [...s.datasets, ensured],
+          };
+        }),
       removeDataset: (id) =>
         set((s) => ({
           datasets: s.datasets.filter((d) => d.id !== id),
@@ -66,6 +69,7 @@ export const useDataStore = create<DataState>()(
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
+              const ensured = d.variables ? d : ensureDatasetMetadata(d);
               const now = new Date().toISOString();
               let newData = d.data;
               if (d.data && d.data.length > 0) {
@@ -94,7 +98,7 @@ export const useDataStore = create<DataState>()(
                 }
               }
               return {
-                ...d,
+                ...ensured,
                 data: newData,
                 preview: newPreview,
                 updatedAt: now,
@@ -142,8 +146,9 @@ export const useDataStore = create<DataState>()(
                   }
                 }
               }
+              const ensured = d.variables ? d : ensureDatasetMetadata(d);
               return {
-                ...d,
+                ...ensured,
                 data: newData,
                 preview: newPreview ?? d.preview,
                 updatedAt: now,
@@ -461,7 +466,13 @@ export const useDataStore = create<DataState>()(
           try {
             const newData = localStorage.getItem(name);
             if (newData) {
-              return JSON.parse(newData);
+              const parsed = JSON.parse(newData);
+              if (parsed?.state?.datasets && Array.isArray(parsed.state.datasets)) {
+                parsed.state.datasets = parsed.state.datasets.map((ds: Dataset) =>
+                  ds.variables ? ds : ensureDatasetMetadata(ds)
+                );
+              }
+              return parsed;
             }
 
             // Fallback: migration từ keys cũ

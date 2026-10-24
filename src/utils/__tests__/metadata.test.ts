@@ -6,6 +6,8 @@ import {
   maskMissingValues,
   isMissingValue,
   validateVariableName,
+  isValidNumericValue,
+  isInvalidNumericCell,
 } from "../metadata";
 import { Dataset } from "../../types";
 
@@ -247,6 +249,78 @@ describe("Metadata Utilities", () => {
       expect(maskMissingValues("-1", meta)).toBeNull();
       expect(maskMissingValues("", meta)).toBeNull();
       expect(maskMissingValues("4", meta)).toBe("4");
+    });
+  });
+
+  describe("isValidNumericValue & isInvalidNumericCell", () => {
+    it("should treat empty, null, and undefined as valid numeric (representing missing cells)", () => {
+      expect(isValidNumericValue("")).toBe(true);
+      expect(isValidNumericValue("   ")).toBe(true);
+      expect(isValidNumericValue(null)).toBe(true);
+      expect(isValidNumericValue(undefined)).toBe(true);
+    });
+
+    it("should accept valid international numeric formats (integer, float with dot, scientific notation)", () => {
+      expect(isValidNumericValue("0")).toBe(true);
+      expect(isValidNumericValue("123")).toBe(true);
+      expect(isValidNumericValue("-45.67")).toBe(true);
+      expect(isValidNumericValue("+3.1415")).toBe(true);
+      expect(isValidNumericValue(".5")).toBe(true);
+      expect(isValidNumericValue("-.5")).toBe(true);
+      expect(isValidNumericValue("1e5")).toBe(true);
+      expect(isValidNumericValue("2.5E-3")).toBe(true);
+      expect(isValidNumericValue("  85.5  ")).toBe(true);
+    });
+
+    it("should reject non-numeric strings, letters, and comma decimals", () => {
+      expect(isValidNumericValue("abc")).toBe(false);
+      expect(isValidNumericValue("12a")).toBe(false);
+      expect(isValidNumericValue("12,5")).toBe(false); // Comma rejected per international standard
+      expect(isValidNumericValue("++1")).toBe(false);
+      expect(isValidNumericValue("1.2.3")).toBe(false);
+      expect(isValidNumericValue("NaN")).toBe(false);
+      expect(isValidNumericValue("Infinity")).toBe(false);
+    });
+
+    it("should correctly identify invalid numeric cells for numeric metadata", () => {
+      const numMeta = {
+        name: "AGE",
+        type: "numeric" as const,
+        label: "Age",
+        align: "right" as const,
+        measure: "scale" as const,
+        decimals: 0,
+        missingValues: ["99"],
+      };
+
+      // Valid number
+      expect(isInvalidNumericCell("25", numMeta)).toBe(false);
+      expect(isInvalidNumericCell("25.5", numMeta)).toBe(false);
+      // Empty / missing cell is valid
+      expect(isInvalidNumericCell("", numMeta)).toBe(false);
+      expect(isInvalidNumericCell("   ", numMeta)).toBe(false);
+      // Declared missing code is valid (handled by missing system)
+      expect(isInvalidNumericCell("99", numMeta)).toBe(false);
+
+      // Invalid text in numeric column
+      expect(isInvalidNumericCell("abc", numMeta)).toBe(true);
+      expect(isInvalidNumericCell("12,5", numMeta)).toBe(true);
+      expect(isInvalidNumericCell("N/A", numMeta)).toBe(true);
+    });
+
+    it("should return false for string variables even when text is present", () => {
+      const strMeta = {
+        name: "NAME",
+        type: "string" as const,
+        label: "Name",
+        align: "left" as const,
+        measure: "nominal" as const,
+        decimals: 0,
+      };
+
+      expect(isInvalidNumericCell("John Doe", strMeta)).toBe(false);
+      expect(isInvalidNumericCell("12,5", strMeta)).toBe(false);
+      expect(isInvalidNumericCell("", strMeta)).toBe(false);
     });
   });
 });
