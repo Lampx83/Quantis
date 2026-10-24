@@ -6,6 +6,7 @@ type Listener = (event: any) => void;
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
+  static throwOnPost = false;
   listeners = new Map<string, Set<Listener>>();
   posted: any[] = [];
   terminated = false;
@@ -24,6 +25,7 @@ class FakeWorker {
   }
 
   postMessage(message: any) {
+    if (FakeWorker.throwOnPost) throw new Error("data could not be cloned");
     this.posted.push(message);
   }
 
@@ -52,6 +54,7 @@ function enableWorker() {
 afterEach(() => {
   vi.unstubAllGlobals();
   FakeWorker.instances = [];
+  FakeWorker.throwOnPost = false;
 });
 
 describe("mergeColumnPatches", () => {
@@ -147,5 +150,15 @@ describe("runHotDeckImputation", () => {
 
     await expect(promise).resolves.toEqual(imputeHotDeck(data, ["score"]));
     expect(worker.terminated).toBe(true);
+  });
+
+  it("terminates the worker and falls back when postMessage throws", async () => {
+    enableWorker();
+    FakeWorker.throwOnPost = true;
+
+    await expect(runHotDeckImputation(data, ["score"])).resolves.toEqual(
+      imputeHotDeck(data, ["score"])
+    );
+    expect(FakeWorker.instances[0].terminated).toBe(true);
   });
 });

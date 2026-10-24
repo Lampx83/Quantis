@@ -115,11 +115,17 @@ export async function runHotDeckImputation(
         return;
       }
 
-      worker.postMessage({
-        id,
-        type: "hot_deck",
-        payload: { data, selectedColumns, variables },
-      } satisfies HotDeckWorkerRequest);
+      try {
+        worker.postMessage({
+          id,
+          type: "hot_deck",
+          payload: { data, selectedColumns, variables },
+        } satisfies HotDeckWorkerRequest);
+      } catch (err) {
+        cleanup();
+        worker.terminate();
+        reject(err);
+      }
     });
 
     return mergeColumnPatches(data, columnPatches);
