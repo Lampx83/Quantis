@@ -18,10 +18,10 @@
 ## Bảng (schema `quantis`)
 
 - **`users`** — tài khoản standalone + bản ghi shadow cho user Portal (khi sync data).
-- **`workspaces`** — một dòng / user: `datasets`, `workflows` (JSONB).
+- **`workspaces`** — một dòng / user: `datasets`, `workflows` (JSONB). Metadata biến (Variable View: kiểu, nhãn, nhãn giá trị, mã khuyết, thang đo…) nằm ngay trong từng dataset (`variables`), không có bảng riêng. Trước khi ghi, backend lọc `\u0000`, surrogate đơn lẻ và ký tự điều khiển (`backend/src/lib/sanitize.ts`, `sanitizeJson`) vì `jsonb` của PostgreSQL không nhận; payload tối đa ~48 triệu ký tự (body Express 50 MB), mỗi dataset giữ tối đa 50.000 dòng khi nhập.
 - **`global_workspace`** — một dòng `id=1`: dữ liệu chung khi standalone không bắt buộc đăng nhập.
-- **`app_settings`** — một dòng `id=1`: cấu hình chung (Archive URL, upstream vLLM, model AI, …). Khóa gateway (`ollamaSeckey`) chỉ ghi, GET `/settings` chỉ trả cờ `ollamaSeckeySet`.
-- **`sample_datasets`** — các bộ dữ liệu mẫu do quản trị viên quản lý (nút *Thêm dataset mẫu*); file `002_sample_datasets.sql`, dữ liệu gieo `003_sample_datasets_seed.sql`.
+- **`app_settings`** — một dòng `id=1`: cấu hình chung (Archive URL, upstream vLLM, model AI, …). Khóa gateway (`ollamaSeckey`) chỉ ghi, GET `/settings` chỉ trả cờ `ollamaSeckeySet`; `aiApiUrl` và `ollamaUpstreamUrl` chỉ trả cho quản trị viên (header `X-User-Is-Admin` do Portal gắn), người dùng thường nhận `null`; PUT `/settings` chỉ quản trị viên (khi `RUN_MODE=embedded`).
+- **`sample_datasets`** — các bộ dữ liệu mẫu do quản trị viên quản lý (nút *Thêm dataset mẫu*; API `/sample-datasets`, ghi chỉ quản trị viên); bảng có trong `schema.sql` và `002_sample_datasets.sql`, dữ liệu gieo `003_sample_datasets_seed.sql`.
 
 File SQL: `backend/schema/schema.sql` (placeholder `__SCHEMA__` → tên schema khi apply).
 

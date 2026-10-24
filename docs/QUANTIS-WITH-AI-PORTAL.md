@@ -2,10 +2,13 @@
 
 Ứng dụng Quantis khi cài lên AI Portal (pack → cài từ Admin) chỉ gồm **frontend**. Để dùng lưu data, phân tích Python, Archive NEU và trợ lý AI (vLLM), bạn cần chạy **backend Quantis** (Node, và tùy chọn backend Python) rồi cấu hình địa chỉ đó trong Quantis.
 
-> **Cập nhật 12/10/2026 — hiện trạng trên research.neu.edu.vn.** Công cụ có tên tiếng Việt **Phân tích định lượng** (alias `quantis`, `/embed/quantis`). Có **hai** thành phần backend, đừng nhầm:
+> **Cập nhật 25/10/2026 — hiện trạng trên research.neu.edu.vn** (đối chiếu `main`, commit `a646810`). Công cụ có tên tiếng Việt **Phân tích định lượng** (alias `quantis`, `/embed/quantis`). Có **hai** thành phần backend, đừng nhầm:
 > 1. **Router nhúng trong Portal** (`/api/apps/quantis/…`, PostgreSQL schema `quantis`): lưu workspace (datasets + workflows) theo từng tài khoản đăng nhập; khách (`guest@local`) không được ghi.
 > 2. **Backend Node dạng JSON + proxy** (`json-server.cjs`, container `quantis-backend`, nginx đặt tại `/api/quantis/backend/*`): proxy Archive, proxy AI vLLM (`/api/quantis/ollama/*`), cấu hình dùng chung (`GET/PUT /api/quantis/settings`, chỉ quản trị viên được ghi) và chuyển tiếp phân tích sang Python (`/api/quantis/backend-python`). Kho dữ liệu chung không xác thực của backend này **mặc định tắt** (cần `QUANTIS_ALLOW_GLOBAL_DATA=1`, chỉ dùng khi dev một người).
-> Frontend nhúng đóng gói bằng `npm run build:pack` rồi đặt vào thư mục `public/` của app (giữ `embed-config.json`); backend nhúng không cần khởi động lại khi chỉ thay frontend.
+>
+> Địa chỉ nội bộ của cấu hình (`aiApiUrl`, `ollamaUpstreamUrl`) chỉ hiển thị cho quản trị viên; người dùng thường không thấy.
+>
+> Frontend nhúng đóng gói bằng `npm run build:pack` rồi đặt vào thư mục `public/` của app (giữ `embed-config.json`); backend nhúng không cần khởi động lại khi chỉ thay frontend. Image backend Node và Python lấy từ Docker Hub (`lampx83/quantis-backend`, `lampx83/quantis-python`, build tự động khi push `main` — xem [DEPLOY-PORTAINER.md](./DEPLOY-PORTAINER.md)); khi cập nhật Quantis cần kéo lại cả hai image để backend Python có các module mới (dữ liệu bảng, MICE, đọc metadata SPSS/Stata/SAS).
 
 ## Tổng quan
 
@@ -147,7 +150,7 @@ Backend Python (phân tích) được cấu hình **trên server** (biến `ANAL
 
 3. **Frontend**: trong Cấu hình kết nối, ô **URL backend Node (gốc API)** trỏ tới backend Node (vd. `http://localhost:4001`). Không cần cấu hình URL Python ở frontend — Node tự proxy `/api/quantis/analyze/*` sang `ANALYZE_PYTHON_URL`.
 
-Sau khi cấu hình đúng, hộp thoại Cấu hình kết nối sẽ hiển thị "Backend phân tích (Python/R) đã kết nối". Nếu không set `ANALYZE_PYTHON_URL` hoặc Python không chạy, app vẫn chạy bình thường và dùng tính toán trên trình duyệt.
+Sau khi cấu hình đúng, hộp thoại Cấu hình kết nối sẽ hiển thị "Backend phân tích (Python/R) đã kết nối". Nếu không set `ANALYZE_PYTHON_URL` hoặc Python không chạy, app vẫn chạy bình thường và dùng tính toán trên trình duyệt cho các mục có bản chạy phía trình duyệt; các mục cần Python (đọc Excel/SPSS/Stata/SAS/R, ANCOVA/MANOVA/MANCOVA, z-test hai trung bình, Path analysis/CFA/PLS-SEM, hồi quy Poisson/Ridge, Dữ liệu bảng, MICE) sẽ báo cần backend Python.
 
 ---
 
