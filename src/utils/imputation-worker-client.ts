@@ -17,6 +17,14 @@ export type HotDeckWorkerResponse =
 
 let nextRequestId = 0;
 
+/** The worker ran the imputation and it failed; re-running it here would just block the UI. */
+class WorkerTaskError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerTaskError";
+  }
+}
+
 function abortError(): DOMException {
   return new DOMException("The operation was aborted", "AbortError");
 }
@@ -92,7 +100,7 @@ export async function runHotDeckImputation(
         cleanup();
         worker.terminate();
         if (response.type === "success") resolve(response.columnPatches);
-        else reject(new Error(response.error));
+        else reject(new WorkerTaskError(response.error));
       };
 
       const onError = (event: ErrorEvent) => {
@@ -132,6 +140,8 @@ export async function runHotDeckImputation(
   } catch (err: unknown) {
     // A cancelled job must never restart on the main thread.
     if ((err as Error)?.name === "AbortError" || options?.signal?.aborted) throw err;
+    // A real imputation failure would fail the same way here, after freezing the UI.
+    if (err instanceof WorkerTaskError) throw err;
     return imputeHotDeck(data, selectedColumns, variables);
   }
 }

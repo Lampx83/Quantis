@@ -137,7 +137,7 @@ describe("runHotDeckImputation", () => {
     expect(worker.terminated).toBe(true);
   });
 
-  it("falls back to synchronous imputation when the worker reports an error", async () => {
+  it("rejects with the worker error instead of re-running on the main thread", async () => {
     enableWorker();
     const promise = runHotDeckImputation(data, ["score"]);
     const worker = FakeWorker.instances[0];
@@ -148,7 +148,7 @@ describe("runHotDeckImputation", () => {
       error: "boom",
     });
 
-    await expect(promise).resolves.toEqual(imputeHotDeck(data, ["score"]));
+    await expect(promise).rejects.toThrow("boom");
     expect(worker.terminated).toBe(true);
   });
 
