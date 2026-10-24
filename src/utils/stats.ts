@@ -2,8 +2,9 @@
  * Utils: parse CSV, data profiling, descriptive statistics, t-test (client-side).
  */
 
-import type { DataProfile } from "../types";
+import type { DataProfile, VariableMetadata } from "../types";
 import { t } from "../i18n";
+import { buildMissingMatcher, missingRuleSignature } from "./metadata";
 
 const MAX_ROWS_STORED = 50000;
 
@@ -691,6 +692,80 @@ export function getDataRows(d: { preview?: string[][]; data?: string[][] } | nul
   if (d.data && Array.isArray(d.data) && d.data.length > 0) return d.data;
   if (d.preview && Array.isArray(d.preview) && d.preview.length > 0) return d.preview;
   return [];
+}
+
+/**
+ * Cache theo mảng hàng gốc: tránh dựng lại bản sao 100.000 dòng mỗi lần render.
+ * Khóa phụ là chữ ký quy tắc khuyết của từng cột nên sửa mã khuyết thì cache tự làm mới.
+ */
+const analysisRowsCache = new WeakMap<string[][], Map<string, string[][]>>();
+const ANALYSIS_CACHE_PER_ROWS = 4;
+
+/**
+ * ĐIỂM DUY NHẤT tạo «dữ liệu sẵn sàng phân tích» của một dataset.
+ *
+ * Giống `getDataRows` ([header, ...rows]) nhưng mọi ô trùng mã khuyết người dùng khai báo
+ * (`variables[col].missingValues` rời rạc và/hoặc `missingRange` kiểu SPSS) được thay bằng "" —
+ * cùng quy ước với ô trống (không bao giờ bị coi là 0), nên mọi hàm thống kê tự loại chúng
+ * (N hữu hiệu, Missing, deletion listwise/pairwise…).
+ *
+ * MỌI tab phân tích / biểu đồ / gửi dữ liệu lên backend Python phải lấy hàng qua hàm này.
+ * Chỉ lưới dữ liệu (DataGrid/Variable View) và thao tác sửa giá trị (recode, lọc, sắp xếp, đổi tên…)
+ * mới dùng `getDataRows` để còn thấy và sửa được mã gốc (vd: 99).
+ *
+ * Không có biến nào khai báo mã khuyết (hoặc dataset cũ chưa có `variables`) thì trả đúng mảng gốc,
+ * không sao chép. Không bao giờ sửa dữ liệu gốc.
+ */
+export function getAnalysisRows(
+  d: { preview?: string[][]; data?: string[][]; variables?: Record<string, VariableMetadata> } | null | undefined
+): string[][] {
+  const rows = getDataRows(d);
+  const variables = d?.variables;
+  if (rows.length < 2 || !variables) return rows;
+  const header = rows[0];
+  const matchers: (((trimmed: string) => boolean) | null)[] = [];
+  const active: number[] = [];
+  let signature = "";
+  for (let ci = 0; ci < header.length; ci++) {
+    const meta = variables[String(header[ci])];
+    const sig = missingRuleSignature(meta);
+    if (sig === "") {
+      matchers.push(null);
+      continue;
+    }
+    matchers.push(buildMissingMatcher(meta));
+    if (matchers[ci]) {
+      active.push(ci);
+      signature += `${ci}:${sig};`;
+    }
+  }
+  if (active.length === 0) return rows;
+  let perRows = analysisRowsCache.get(rows);
+  const hit = perRows?.get(signature);
+  if (hit) return hit;
+  const out: string[][] = new Array(rows.length);
+  out[0] = header;
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    let copy: string[] | null = null;
+    for (const ci of active) {
+      const v = row[ci];
+      if (v === undefined || v === null) continue;
+      const trimmed = String(v).trim();
+      if (trimmed !== "" && matchers[ci]!(trimmed)) {
+        if (!copy) copy = row.slice();
+        copy[ci] = "";
+      }
+    }
+    out[i] = copy ?? row;
+  }
+  if (!perRows) {
+    perRows = new Map();
+    analysisRowsCache.set(rows, perRows);
+  }
+  if (perRows.size >= ANALYSIS_CACHE_PER_ROWS) perRows.delete(perRows.keys().next().value as string);
+  perRows.set(signature, out);
+  return out;
 }
 
 export function getUniqueValues(rows: string[][], columnName: string): string[] {
@@ -2572,7 +2647,7 @@ export function computeKMOBartlett(rows: string[][], columnNames: string[]): KMO
 function eigenDecomposition(matrix: number[][]): { eigenvalues: number[]; eigenvectors: number[][] } {
   const n = matrix.length;
   let A = matrix.map((r) => r.map((x) => x));
-  const V = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 1 : 0));
+  const V: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 1 : 0));
   for (let iter = 0; iter < 100; iter++) {
     let maxOff = 0;
     let p = 0, q = 1;

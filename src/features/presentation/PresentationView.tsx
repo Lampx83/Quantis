@@ -36,7 +36,7 @@ import type {
 } from "@/utils/stats";
 import {
   numCell,
-  getDataRows,
+  getAnalysisRows,
   getBoxStatsByGroup,
   getHistogramBins,
   binNumericForPie,
@@ -101,7 +101,7 @@ export function PresentationView({
       setBoxStatsBackendResult(null);
       return;
     }
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     quantisApi.analyzeBoxStats(rows, chartXCol, chartYCol).then(setBoxStatsBackendResult);
   }, [tab, selectedDataset?.id, chartType, chartXCol, chartYCol, analysisBackendAvailable]);
 
@@ -110,7 +110,7 @@ export function PresentationView({
       setHistBinsBackendResult(null);
       return;
     }
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
     const histColIdx = cols.indexOf(histogramCol);
     const histValues = histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
@@ -119,7 +119,7 @@ export function PresentationView({
   }, [tab, selectedDataset?.id, chartType, histogramCol, analysisBackendAvailable]);
 
   if (tab === "visualization" && selectedDataset) {
-    const rows = getDataRows(selectedDataset);
+    const rows = getAnalysisRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
     const xCol = chartXCol;
     const setXCol = setChartXCol;

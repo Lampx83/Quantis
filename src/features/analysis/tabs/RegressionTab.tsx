@@ -3,7 +3,7 @@ import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
   numCell,
-  getDataRows,
+  getAnalysisRows,
   computeOLS,
   computeLogisticRegression,
   computeVIF,
@@ -27,7 +27,7 @@ export function RegressionTab({
   showToast,
 }: RegressionTabProps) {
   const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
-  const rows = selectedDataset ? getDataRows(selectedDataset) : [];
+  const rows = selectedDataset ? getAnalysisRows(selectedDataset) : [];
   const cols = selectedDataset?.columnNames ?? [];
   const numericCols =
     rows.length >= 2

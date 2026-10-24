@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getDataRows } from "@/utils/stats";
+import { getAnalysisRows } from "@/utils/stats";
 import * as quantisApi from "@/api";
 import type { PanelResult, PanelCoefRow } from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
@@ -53,7 +53,7 @@ function CoefTable({ rows }: { rows: PanelCoefRow[] }) {
 }
 
 export function PanelTab({ selectedDataset, analysisBackendAvailable = false, showToast }: PanelTabProps) {
-  const rows = useMemo(() => getDataRows(selectedDataset), [selectedDataset]);
+  const rows = useMemo(() => getAnalysisRows(selectedDataset), [selectedDataset]);
   const cols = selectedDataset.columnNames || [];
   const numericCols = useMemo(
     () =>

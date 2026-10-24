@@ -3,7 +3,7 @@
  * Khi backend không có hoặc chưa đăng nhập: dữ liệu chỉ lưu localStorage.
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
-import type { Dataset, Workflow } from "./types";
+import type { Dataset, Workflow, VariableMetadata } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
@@ -312,7 +312,9 @@ export async function checkBackendAvailable(baseUrl?: string): Promise<boolean> 
 }
 
 /** Gửi file lên backend để parse (Excel, ODS, SPSS, Stata, SAS, R). Cần backend Node + Python. */
-export async function parseFileViaBackend(file: File): Promise<{ rows: string[][]; format: string }> {
+export async function parseFileViaBackend(
+  file: File
+): Promise<{ rows: string[][]; format: string; variables?: Record<string, VariableMetadata> }> {
   const base = getBase();
   if (!base) throw new Error(t("api.backendNotConfiguredForImport"));
   const form = new FormData();
@@ -333,7 +335,11 @@ export async function parseFileViaBackend(file: File): Promise<{ rows: string[][
     throw new Error(JSON.stringify(msg));
   }
   if (!Array.isArray(errBody.rows)) throw new Error("Invalid response: missing rows");
-  return { rows: errBody.rows, format: errBody.format ?? "unknown" };
+  return {
+    rows: errBody.rows,
+    format: errBody.format ?? "unknown",
+    variables: errBody.variables && typeof errBody.variables === "object" ? errBody.variables : undefined,
+  };
 }
 
 /** Kiểm tra backend phân tích Python (qua proxy Node) có sẵn không. */
@@ -1934,8 +1940,9 @@ function parseAiResponseRaw(rawText: string): string {
       const data = JSON.parse(line) as unknown
       const o = data as Record<string, unknown>
       if (typeof o.response === "string") parts.push(o.response)
-      else if (o.choices?.[0] && typeof o.choices[0] === "object") {
-        const c = (o.choices[0] as Record<string, unknown>).delta ?? (o.choices[0] as Record<string, unknown>).message
+      else if (Array.isArray(o.choices) && o.choices[0] && typeof o.choices[0] === "object") {
+        const first = o.choices[0] as Record<string, unknown>
+        const c = first.delta ?? first.message
         if (c && typeof c === "object" && c !== null && typeof (c as Record<string, unknown>).content === "string")
           parts.push((c as Record<string, unknown>).content as string)
       } else {
@@ -2010,3 +2017,61 @@ export async function aiComplete(apiBase: string, prompt: string, systemHint?: s
   }
   return out
 }
+
+export interface MiceImputationResponse {
+  rows: string[][];
+  imputedColumns: string[];
+  statistics: Array<{
+    column: string;
+    missingCount: number;
+    originalMean?: number | null;
+    originalStd?: number | null;
+    imputedMean?: number | null;
+    imputedStd?: number | null;
+    min?: number | null;
+    max?: number | null;
+  }>;
+  iterations: number;
+}
+
+/** Số vòng lặp MICE hợp lệ (khớp backend `MICE_MAX_ITER_LIMIT`). */
+export const MICE_MIN_ITER = 1;
+export const MICE_MAX_ITER = 50;
+
+export function clampMiceIterations(value: number | undefined | null, fallback = 10): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MICE_MAX_ITER, Math.max(MICE_MIN_ITER, n));
+}
+
+/**
+ * Multiple Imputation by Chained Equations (MICE) via Python backend.
+ */
+export async function analyzeMiceImputation(
+  rows: string[][],
+  columns?: string[],
+  variables?: Record<string, VariableMetadata>,
+  maxIter?: number
+): Promise<MiceImputationResponse> {
+  const base = getANALYZE_BASE();
+  if (!base) {
+    throw new Error(t("api.backendNotConfigured") || "Backend phân tích chưa được cấu hình.");
+  }
+  const res = await fetch(`${base}/impute-mice`, {
+    method: "POST",
+    credentials: "include",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      rows,
+      columns: columns && columns.length > 0 ? columns : undefined,
+      variables,
+      maxIter: clampMiceIterations(maxIter),
+    }),
+  });
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => null);
+    throw new Error(formatAnalyzeErrorJson(errJson, res.status));
+  }
+  return await res.json();
+}
+

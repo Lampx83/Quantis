@@ -13,7 +13,7 @@ import type { Dataset } from "@/types";
 import {
   numCell,
   type DescriptiveRow,
-  getDataRows,
+  getAnalysisRows,
   computeDescriptive,
   computeBootstrapMeanCI,
   getCrosstab,
@@ -42,14 +42,14 @@ export function DescriptiveStatsView({
   const [crosstabCol1, setCrosstabCol1] = useState("");
   const [crosstabCol2, setCrosstabCol2] = useState("");
   const [crosstabBackendResult, setCrosstabBackendResult] = useState<{ rowLabels: string[]; colLabels: string[]; counts: number[][] } | null>(null);
-  const rows = selectedDataset ? getDataRows(selectedDataset) : [];
+  const rows = selectedDataset ? getAnalysisRows(selectedDataset) : [];
   const cols = selectedDataset?.columnNames ?? [];
   useEffect(() => {
     if (!analysisBackendAvailable || !crosstabCol1 || !crosstabCol2 || !selectedDataset) {
       setCrosstabBackendResult(null);
       return;
     }
-    const r = getDataRows(selectedDataset);
+    const r = getAnalysisRows(selectedDataset);
     quantisApi.analyzeCrosstab(r, crosstabCol1, crosstabCol2).then(setCrosstabBackendResult);
   }, [analysisBackendAvailable, crosstabCol1, crosstabCol2, selectedDataset?.id]);
   const [textStatsCol, setTextStatsCol] = useState("");

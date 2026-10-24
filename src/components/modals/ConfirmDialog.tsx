@@ -1,6 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
-import { useUIStore } from "@/stores";
+import { useUIStore } from "@/stores/useUIStore";
 import { t } from "@/i18n";
 
 export function ConfirmDialog() {
@@ -39,7 +39,10 @@ export function ConfirmDialog() {
             </button>
             <button
               type="button"
-              onClick={() => confirmDialog.onConfirm()}
+              onClick={() => {
+                confirmDialog.onConfirm();
+                setConfirmDialog(null);
+              }}
               className="px-3 py-1.5 rounded-md text-sm font-medium bg-brand text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               {t("app.confirm")}

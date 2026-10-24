@@ -1776,3 +1776,197 @@ def run_ztest_two_means(
         "knownVar1": known_var1,
         "knownVar2": known_var2,
     }
+
+
+MICE_MAX_ITER_LIMIT = 50
+
+
+def missing_code_mask(series: pd.Series, meta: dict | None) -> pd.Series:
+    """
+    Mặt nạ (True = ô là mã khuyết người dùng khai báo) cho một cột, dựa trên metadata biến:
+    `missingValues` (mã rời rạc, so khớp chuỗi hoặc số: "99" = "99.0") và `missingRange` {min, max}
+    (khoảng kiểu SPSS, chỉ áp dụng cho giá trị số). Ô trống/NaN KHÔNG nằm trong mặt nạ này (đã là NaN).
+    Cùng ngữ nghĩa với `isMissingValue` ở frontend (src/utils/metadata.ts).
+    """
+    mask = pd.Series(False, index=series.index)
+    if not isinstance(meta, dict):
+        return mask
+    codes = [str(c).strip() for c in (meta.get("missingValues") or []) if str(c).strip() != ""]
+    rng = meta.get("missingRange")
+    lo = hi = None
+    if isinstance(rng, dict):
+        try:
+            a, b = float(rng.get("min")), float(rng.get("max"))
+            lo, hi = min(a, b), max(a, b)
+        except (TypeError, ValueError):
+            lo = hi = None
+    if not codes and lo is None:
+        return mask
+    is_string = meta.get("type") == "string"
+    strs = series.astype(object).map(lambda v: "" if pd.isna(v) else str(v).strip())
+    norm = strs.map(lambda x: x[:-2] if x.endswith(".0") else x)
+    norm_codes = {c[:-2] if c.endswith(".0") else c for c in codes}
+    mask = strs.isin(codes) | norm.isin(norm_codes)
+    if not is_string:
+        num = pd.to_numeric(strs.where(strs != ""), errors="coerce")
+        num_codes = []
+        for c in codes:
+            try:
+                num_codes.append(float(c))
+            except ValueError:
+                pass
+        if num_codes:
+            mask = mask | num.isin(num_codes)
+        if lo is not None:
+            mask = mask | num.between(lo, hi)
+    return mask
+
+
+def run_mice_imputation(
+    rows: list,
+    columns: list[str] | None = None,
+    variables: dict[str, dict] | None = None,
+    max_iter: int = 10,
+    random_state: int = 42,
+) -> dict:
+    """
+    Multiple Imputation by Chained Equations (MICE) sử dụng IterativeImputer với BayesianRidge.
+    - Quy đổi các giá trị trùng với missingValues trong metadata hoặc rỗng/NaN thành np.nan.
+    - Nội suy các biến định lượng đa biến.
+    - Xử lý ngoại lệ an toàn khi ma trận suy biến.
+    - Trả về bảng dữ liệu đã điền (dạng string[][]) kèm thống kê trước và sau nội suy.
+    """
+    # Kẹp số vòng lặp: maxIter quá lớn (vd 100000) làm chạy rất lâu hoặc lỗi 500.
+    try:
+        max_iter = int(max_iter)
+    except (TypeError, ValueError):
+        max_iter = 10
+    max_iter = max(1, min(MICE_MAX_ITER_LIMIT, max_iter))
+
+    df = _rows_to_df(rows)
+    if df.empty or len(df.columns) == 0:
+        raise ValueError("Dữ liệu rỗng hoặc không có cột")
+
+    # Target columns
+    if columns and len(columns) > 0:
+        target_cols = [c for c in columns if c in df.columns]
+    else:
+        target_cols = list(df.columns)
+
+    if not target_cols:
+        raise ValueError("Không tìm thấy cột hợp lệ để nội suy")
+
+    # Mask missing values for all columns based on variables metadata (mã rời rạc + khoảng kiểu SPSS)
+    cleaned_df = df.copy()
+    if variables:
+        for col in df.columns:
+            meta = variables.get(col)
+            if isinstance(meta, dict):
+                mask = missing_code_mask(cleaned_df[col], meta)
+                if mask.any():
+                    cleaned_df.loc[mask, col] = np.nan
+
+    # Replace whitespace-only strings and literal nan strings with np.nan
+    for col in target_cols:
+        cleaned_df[col] = cleaned_df[col].replace(r"^\s*$", np.nan, regex=True)
+        cleaned_df[col] = cleaned_df[col].replace(["nan", "NaN", "None", "<NA>", "NA", "null"], np.nan)
+
+    # Convert target columns to numeric
+    numeric_target_cols = []
+    numeric_df = pd.DataFrame(index=cleaned_df.index)
+
+    for col in target_cols:
+        num_series = pd.to_numeric(cleaned_df[col], errors="coerce")
+        if num_series.notna().sum() > 0:
+            numeric_target_cols.append(col)
+            numeric_df[col] = num_series
+
+    if len(numeric_target_cols) == 0:
+        raise ValueError("Không có cột số hợp lệ nào chứa dữ liệu để thực hiện MICE")
+
+    # Collect pre-imputation statistics
+    statistics = []
+    for col in numeric_target_cols:
+        s = numeric_df[col]
+        missing_count = int(s.isna().sum())
+        orig_mean = float(s.mean()) if s.notna().sum() > 0 else None
+        orig_std = float(s.std()) if s.notna().sum() > 1 else None
+        statistics.append({
+            "column": col,
+            "missingCount": missing_count,
+            "originalMean": orig_mean,
+            "originalStd": orig_std,
+        })
+
+    # If no missing values across all target columns, return original rows
+    total_missing = sum(item["missingCount"] for item in statistics)
+    if total_missing == 0:
+        return {
+            "rows": rows,
+            "imputedColumns": numeric_target_cols,
+            "statistics": statistics,
+            "iterations": 0,
+        }
+
+    # Run IterativeImputer
+    try:
+        from sklearn.experimental import enable_iterative_imputer  # noqa: F401
+        from sklearn.impute import IterativeImputer
+        from sklearn.linear_model import BayesianRidge
+
+        imputer = IterativeImputer(
+            estimator=BayesianRidge(),
+            max_iter=max_iter,
+            random_state=random_state,
+            initial_strategy="mean",
+            # Giá trị điền không vượt khoảng quan sát của từng cột (vd thang Likert 1–5 không ra 5,4).
+            min_value=numeric_df.min(skipna=True).to_numpy(dtype=float),
+            max_value=numeric_df.max(skipna=True).to_numpy(dtype=float),
+        )
+        imputed_array = imputer.fit_transform(numeric_df)
+    except Exception as e:
+        raise ValueError(f"Thuật toán MICE gặp lỗi trong quá trình hội tụ: {str(e)}")
+
+    imputed_df = pd.DataFrame(imputed_array, columns=numeric_target_cols, index=numeric_df.index)
+
+    # Update statistics with post-imputation metrics
+    for item in statistics:
+        col = item["column"]
+        s = imputed_df[col]
+        item["imputedMean"] = float(s.mean())
+        item["imputedStd"] = float(s.std()) if len(s) > 1 else 0.0
+        item["min"] = float(s.min())
+        item["max"] = float(s.max())
+
+    # Build final rows: chỉ ô khuyết của các cột đã chọn được thay bằng giá trị điền; mọi ô khác giữ nguyên.
+    final_df = df.copy().astype(object)
+    for col in numeric_target_cols:
+        meta = variables.get(col) if variables else None
+        decimals = 2
+        if meta and isinstance(meta, dict) and "decimals" in meta:
+            try:
+                decimals = int(meta["decimals"])
+            except (ValueError, TypeError):
+                decimals = 2
+
+        miss = cleaned_df[col].isna()
+        if not miss.any():
+            continue
+        vals = imputed_df.loc[miss, col]
+        if decimals == 0:
+            final_df.loc[miss, col] = vals.map(lambda x: str(int(round(x))))
+        else:
+            final_df.loc[miss, col] = vals.map(lambda x: f"{x:.{decimals}f}")
+
+    header = list(df.columns)
+    # Ô trống ở cột KHÔNG được chọn là NaN: phải đổi về "" trước khi ép chuỗi (NaN không mã hoá được thành JSON → 500).
+    data_rows = final_df.fillna("").astype(str).values.tolist()
+    out_rows = [header] + data_rows
+
+    return {
+        "rows": out_rows,
+        "imputedColumns": numeric_target_cols,
+        "statistics": statistics,
+        "iterations": int(getattr(imputer, "n_iter_", max_iter)),
+    }
+
