@@ -45,6 +45,7 @@ import {
   getCrosstab,
   kernelDensityEstimate,
 } from "@/utils/stats";
+import { safeMax, safeMin, safeMinMax } from "@/utils/math";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel, type AIQuickPrompt } from "@/features/ai";
@@ -156,8 +157,8 @@ export function PresentationView({
     const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
     const boxYDomain: [number, number] = (() => {
       if (boxStats.length === 0) return [0, 1];
-      const lo = Math.min(...boxStats.map((b) => b.min));
-      const hi = Math.max(...boxStats.map((b) => b.max));
+      const lo = safeMin(boxStats.map((b) => b.min));
+      const hi = safeMax(boxStats.map((b) => b.max));
       const pad = (hi - lo) * 0.05 || 1;
       return [Math.floor(lo - pad), Math.ceil(hi + pad)];
     })();
@@ -174,8 +175,7 @@ export function PresentationView({
       });
       const allVals = Object.values(groups).flat();
       if (allVals.length < 2) return [];
-      const lo = Math.min(...allVals);
-      const hi = Math.max(...allVals);
+      const [lo, hi] = safeMinMax(allVals);
       const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
       const series: { group: string; points: { x: number; density: number }[] }[] = [];
       Object.entries(groups).forEach(([group, vals]) => {
@@ -190,14 +190,13 @@ export function PresentationView({
     const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
     const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
     const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
-      const lo = Math.min(...histValues);
-      const hi = Math.max(...histValues);
+      const [lo, hi] = safeMinMax(histValues);
       const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
       return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
     })() : [];
     const histComboData = (chartType === "histogram" && showHistogramDensity && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
-      const maxCount = Math.max(...histChartData.map((d) => d.count));
-      const maxDens = Math.max(...histDensityCurve.map((d) => d.density));
+      const maxCount = safeMax(histChartData.map((d) => d.count));
+      const maxDens = safeMax(histDensityCurve.map((d) => d.density));
       const scale = maxDens > 0 ? maxCount / maxDens : 1;
       return histChartData.map((d, i) => {
         const binStart = histBins[i].binStart;
