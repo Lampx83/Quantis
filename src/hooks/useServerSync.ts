@@ -10,6 +10,7 @@ import {
 import * as quantisApi from "@/api";
 import { clearWorkspaceLocalData, setServerSettings } from "@/utils/storage";
 import { getAnalysisRows } from "@/utils/stats";
+import { numericColumnNames } from "@/utils/metadata";
 
 export function useServerSync() {
   const { setDatasets, selectedDatasetId, datasets } = useDataStore();
@@ -135,7 +136,9 @@ export function useServerSync() {
       setDescriptiveBackendResult(null);
       return;
     }
-    quantisApi.analyzeDescriptive(rows).then((res) => setDescriptiveBackendResult(res ?? null));
+    quantisApi
+      .analyzeDescriptive(rows, numericColumnNames(selectedDataset.variables))
+      .then((res) => setDescriptiveBackendResult(res ?? null));
   }, [mainSection, dataTab, analysisBackendAvailable, selectedDataset?.id, setDescriptiveBackendResult]);
 
   // Khi tab correlation + backend Python: lấy ma trận tương quan từ server
