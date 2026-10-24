@@ -30,9 +30,10 @@ Chỉ cần tạo stack từ Git repository, không cần clone hay paste file:
    - **Repository URL:** `https://github.com/Lampx83/Quantis`
    - **Compose path:** `portainer-stack.yml`
    - **Branch:** `main`
-5. (Tùy chọn) **Environment variables** — nếu dùng Docker Hub user khác hoặc Ollama khác:
+5. (Tùy chọn) **Environment variables** — nếu dùng Docker Hub user khác hoặc gateway vLLM khác:
    - `DOCKERHUB_USER` = username Docker Hub (mặc định: Lampx83)
-   - `OLLAMA_URL` = URL Ollama (mặc định: `https://research.neu.edu.vn/ollama`)
+   - `OLLAMA_URL` = (tùy chọn) URL gateway vLLM kiểu OpenAI, dạng `http://<gateway>:8037/vllm` (đuôi `/v1` tự bỏ; cấu hình cũ `…/ollama` tự đổi thành `…/vllm`). Tên biến giữ là `OLLAMA_URL` để tương thích ngược. Có thể để trống và nhập trong menu ⋮ → Cấu hình kết nối (admin).
+   - `OLLAMA_SECKEY` = (nếu gateway yêu cầu) khóa gửi qua header `x-ollama-seckey`
 6. **Deploy the stack**.
 
 Portainer sẽ kéo file `portainer-stack.yml` từ repo và dùng image đã build sẵn trên Docker Hub. Backend **Node** lộ cổng **4001**, backend **Python** (phân tích) lộ cổng **4000**. Kiểm tra:
@@ -46,7 +47,7 @@ Portainer sẽ kéo file `portainer-stack.yml` từ repo và dùng image đã bu
 3. Đặt tên stack (ví dụ `quantis`).
 4. Chọn **Web editor**, dán nội dung file `docker-compose.yml` (ở thư mục gốc Quantis) — dùng khi bạn cần build tại chỗ từ source.
 5. Chỉnh **Environment variables** (nếu cần):
-   - `OLLAMA_URL`: URL Ollama (mặc định: https://research.neu.edu.vn/ollama).
+   - `OLLAMA_URL`: URL gateway vLLM (xem mục Portainer ở trên; có thể để trống và cấu hình trong Cấu hình kết nối).
    - `ARCHIVE_NEU_TOKEN`: Chỉ thêm nếu Archive NEU yêu cầu token.
 6. **Deploy the stack**.
 7. Kiểm tra: mở `<URL-backend>:4001` → trang thông tin backend; `<URL-backend>:4001/api/quantis/health` → `{"status":"ok","service":"quantis"}`.
@@ -95,25 +96,26 @@ curl http://localhost:4001/api/quantis/health
   - Build với: `VITE_QUANTIS_API_URL=http://<host>:4001` khi dùng Portainer stack hoặc docker-compose.
   - Hoặc dùng domain/proxy: `VITE_QUANTIS_API_URL=https://quantis-api.example.com` (proxy trỏ về backend Node).
 
-Sau khi build lại frontend với biến môi trường trên và đưa lên AI Portal, ứng dụng Quantis sẽ dùng backend đó (lưu data, proxy Archive, proxy Ollama, phân tích Python).
+Sau khi build lại frontend với biến môi trường trên và đưa lên AI Portal, ứng dụng Quantis sẽ dùng backend đó (lưu data, proxy Archive, proxy vLLM (AI), phân tích Python).
 
 ## Các service trong stack
 
 | Service          | Port (trong container) | Port (host) | Mô tả |
 |------------------|-------------------------|-------------|--------|
-| quantis-backend  | 4001                    | 4001        | Node: API lưu datasets/workflows, proxy Archive NEU, proxy Ollama, proxy phân tích Python. |
+| quantis-backend  | 4001                    | 4001        | Node: API lưu datasets/workflows, proxy Archive NEU, proxy vLLM (AI), proxy phân tích Python. |
 | quantis-python   | 8000                    | 4000        | FastAPI: phân tích thống kê (scipy, statsmodels, pandas). Backend Node gọi nội bộ; host có thể gọi trực tiếp qua 4000. |
 
 ## Dữ liệu lưu trữ
 
-- Datasets và workflows được lưu trong **volume** `quantis-data` (trong container Node mount tại `/app/data`, file `store.json`).
+- Volume `quantis-data` (trong container Node mount tại `/app/data`) chứa `settings.json` (cấu hình dùng chung: URL backend, Archive, upstream vLLM, model AI) và `store.json` / `users.json` / `user-stores/` của chế độ JSON.
+- **Lưu ý bảo mật:** kho dữ liệu chung `store.json` (`/api/quantis/data` không xác thực) **mặc định tắt** (trả 403); chỉ bật bằng `QUANTIS_ALLOW_GLOBAL_DATA=1` khi chạy dev một người dùng. Trên hệ thống nghiên cứu, workspace của người dùng được lưu theo tài khoản ở router nhúng trong Portal (PostgreSQL schema `quantis`), không qua container này.
 - Volume được Docker quản lý; khi xóa stack cần giữ volume nếu muốn giữ dữ liệu (trong Portainer: Volumes → không xóa volume `quantis_quantis-data` khi xóa stack).
 
-## Sửa port hoặc Ollama
+## Sửa port hoặc vLLM
 
 - Trong stack Portainer có thể thêm/sửa biến môi trường:
   - `PORT`: port của backend Node (mặc định 4001).
-  - `OLLAMA_URL`: URL Ollama (vd. https://research.neu.edu.vn/ollama).
+  - `OLLAMA_URL`: URL gateway vLLM (vd. `http://<gateway>:8037/vllm`); model mặc định `qwen3.5-35b-a3b-int4`. Embedding vẫn dùng Ollama (`/ollama/api/embed`).
 - Sau khi sửa, **Re-deploy** stack.
 
 ## Xử lý lỗi "Connection reset by peer" khi curl localhost:4000

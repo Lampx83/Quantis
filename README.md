@@ -1,6 +1,6 @@
 # Quantis
 
-Quantitative analysis and statistics platform for research and education: data management, descriptive statistics, hypothesis testing, reliability, visualisation and academic reporting (APA). Can run **frontend-only** (data in browser), or with **`backend/`** — cùng package gồm **PostgreSQL** (khuyến nghị, giống SurveyLab) hoặc **JSON + proxy** (dev nhanh) — **schema `quantis`** trên DB AI Portal khi nhúng.
+Quantitative analysis and statistics platform for research and education. Trên hệ thống nghiên cứu của Đại học Kinh tế Quốc dân (research.neu.edu.vn) công cụ này có tên tiếng Việt là **Phân tích định lượng** (alias `quantis`, mở tại `/embed/quantis`): quản lý và làm sạch dữ liệu, thống kê mô tả, kiểm định giả thuyết, hồi quy, SEM, học máy, trực quan hóa, workflow tái lập và trợ lý AI giải thích kết quả. Quantis chạy **chỉ frontend** (dữ liệu trong trình duyệt) hoặc với **`backend/`** — cùng package gồm **PostgreSQL** (khuyến nghị, giống SurveyLab) hoặc **JSON + proxy** (dev nhanh) — **schema `quantis`** trên DB AI Portal khi nhúng. AI chỉ hỗ trợ: các con số do Quantis tính, AI diễn giải và có thể sai nên cần kiểm chứng.
 
 **Hai cách triển khai UI:** **Standalone** (tab trình duyệt / dev) dùng đăng nhập Quantis khi bật auth; **Embed AI Portal** nhận diện qua `__PORTAL_USER__`, `__WRITE_API_BASE__`, `embed-config.json`, URL `/embed/quantis`, hoặc `__QUANTIS_PORTAL_EMBED__` — không bắt form đăng nhập Node, đồng bộ `/data` theo header Portal. Chi tiết: [`docs/QUANTIS-DATABASE.md`](docs/QUANTIS-DATABASE.md) mục *Frontend: nhận biết embed*. So sánh triển khai với SurveyLab: [`docs/QUANTIS-PORTAL-AND-SURVEYLAB.md`](docs/QUANTIS-PORTAL-AND-SURVEYLAB.md).
 
@@ -16,22 +16,55 @@ Quantis **có** luồng giống SurveyLab (`/api/quantis/auth/register`, `login`
 
 Xem thêm khối **Tài khoản & đăng nhập** trong menu **⋮ → Cấu hình kết nối** sau khi mở ứng dụng.
 
-## Main features
+## Tính năng chính
 
-- **Data management:** CSV import, profiling (missing, type, skewness, IQR outliers), transform (treat missing / replace with mean), table view.
-- **Descriptive statistics:** Mean, median, std, min, max, Q25, Q75; frequency for categorical variables.
-- **Hypothesis testing:** Independent two-sample t-test (Welch), one-way ANOVA (F, η²), Chi-square independence, Mann-Whitney U (non-parametric), Shapiro-Wilk (normality), power analysis (sample size for t-test).
-- **Regression:** OLS (linear), logistic (binary Y), VIF (multicollinearity), mediation (Baron-Kenny), moderation (interaction term).
-- **Factor analysis:** EFA (PCA extraction, varimax rotation).
-- **Correlation:** Pearson and Spearman (correlation matrix).
-- **Reliability:** Cronbach's alpha for scales (e.g. Likert).
-- **Machine learning (ML):** K-means clustering; **multi-class classification** (One-vs-Rest logistic regression) with **confusion matrix**, **classification report** (accuracy, precision, recall, F1 per class, macro/weighted); **feature importance / explainability**: coefficient-based importance and **permutation importance** (shuffle each feature, measure accuracy drop).
-- **Visualisation:** Scatter, bar, line (trend), pie, box plot by group, histogram.
-- **Reporting:** HTML export with descriptive stats and APA-style test results (t, F, χ²).
-- **Workflow:** Save workflow, generate R script, versioning.
-- **Reproducibility:** Tab **Pre-reg & tái lập** — pre-registration và checklist open science, đồng bộ `localStorage` với Writium (Đề cương nghiên cứu).
-- **Mobile / màn hình nhỏ:** Layout `100dvh`, safe-area (notch), sidebar dạng overlay + nút footer; tab header nhãn rút gọn; thanh công cụ cuộn ngang; vùng chạm ~44px ở chỗ chính.
-- **Cấu hình kết nối (menu ⋮):** Kiểm tra Backend + LLM (vLLM), lưu URL; cuối cửa sổ có **Đặt lại ứng dụng** — xóa toàn bộ dữ liệu cục bộ (`quantis_*` trong localStorage, v.v.) như mới cài; nếu đang đăng nhập có thể ghi workspace rỗng lên server (có hộp thoại xác nhận).
+Đối chiếu trực tiếp với bản chạy thật và mã nguồn (12/10/2026). Tên nút/tab dưới đây là tên trên giao diện tiếng Việt.
+
+### Tab «Khám phá & biến đổi dữ liệu» (rút gọn: Dữ liệu)
+
+- **Tải dữ liệu:** *Tải file* — CSV, TSV, JSON, TXT đọc ngay trong trình duyệt; Excel (.xlsx, .xls), ODS, SPSS (.sav), Stata (.dta), SAS (.sas7bdat), R (.rds, .RData) cần backend Python để đọc; *Thêm dataset mẫu* (bộ mẫu do quản trị viên quản lý trên server); *Lấy từ Archive NEU*.
+- **Xem dữ liệu**, **Sơ bộ** (missing, kiểu cột, skewness, outlier IQR 1,5).
+- **Mô tả:** thống kê mô tả (kèm CI 95% bootstrap), bảng tần suất, bảng chéo (crosstab), thống kê văn bản, đếm từ khóa, n-gram, Cohen's kappa, điểm ngoại lai IQR.
+- **Biến đổi:** loại dòng thiếu, thay missing bằng mean / median / mode, chuẩn hóa z-score / min-max, lọc, sắp xếp, recode — kết quả là bộ dữ liệu mới.
+
+### Tab «Phân tích thống kê» — 43 mục
+
+| Nhóm | Mục | Số mục |
+|------|-----|:------:|
+| Tương quan | Pearson, Spearman, Kendall, ma trận hiệp phương sai, tương quan từng phần | 5 |
+| Kiểm định | t-test độc lập / cặp / một mẫu, z-test hai trung bình, ANOVA 1 nhân tố (post-hoc Bonferroni), ANCOVA, MANOVA, MANCOVA, Mann-Whitney U, Wilcoxon cặp, Kruskal-Wallis, Friedman, Sign test, Chi-square, McNemar, Fisher exact, Binomial, Z-test hai tỉ lệ, Shapiro-Wilk, Levene, F-test hai phương sai, Power analysis (cỡ mẫu cho t-test, tỉ lệ, chi-square, ANOVA, hồi quy) | 22 |
+| Độ tin cậy | Cronbach's alpha (kèm tương quan biến–tổng, alpha nếu loại biến) | 1 |
+| Hồi quy | OLS (kèm VIF), Logistic, Poisson, Ridge | 4 |
+| Nhân tố | EFA (PCA, varimax; KMO, Bartlett) | 1 |
+| SEM | Mediation (nhiều M song song), Moderation, Path analysis, CFA, PLS-SEM | 5 |
+| Học máy | K-means, phân loại đa lớp (One-vs-Rest logistic; confusion matrix, precision/recall/F1), feature importance, permutation importance | 4 |
+| Bayesian | Beta-Binomial cho tỉ lệ (MCMC, Bayes Factor chưa có) | 1 |
+
+Cộng với 9 công cụ ở nhóm **Mô tả** thì có **52** phương pháp; số «50 phương pháp» dùng trong tài liệu truyền thông là cách nói làm tròn xuống. Một số mục cần backend Python: ANCOVA / MANOVA / MANCOVA, F-test, z-test, Path analysis, CFA, PLS-SEM, hồi quy Poisson / Ridge.
+
+### Các tab còn lại
+
+- **Trực quan** — 13 loại biểu đồ: Cột, Đường, Phân tán, Histogram, Box plot, Heatmap tương quan, Tròn, Cột chồng, Cột ngang, Vùng, Donut, Density, Radar. Xuất: lưu PNG, sao chép biểu đồ vào clipboard, xuất CSV (ma trận tương quan).
+- **AI hướng dẫn** — hỏi cách dùng Quantis, cách chọn phương pháp, cách báo cáo APA. Ngoài ra mọi màn kết quả có nút hỏi AI (*Giải thích ý nghĩa kết quả*, *Viết đoạn Kết quả theo APA*). Mô hình chạy qua vLLM nội bộ (xem mục *Trợ lý AI* bên dưới).
+- **Workflows & tái lập** (menu ⋮) — lưu workflow theo các bước từ nhập dữ liệu đến báo cáo; nút *Sao chép khung script R* chỉ liệt kê các bước (chưa sinh mã R). Mục *Versioning & audit* **chưa có** chức năng (chỉ là trang thông báo).
+- **Pre-reg & tái lập** (menu ⋮ → *Pre-reg & mở khoa học*) — pre-registration và checklist open science, đồng bộ `localStorage` với Writium (Đề cương nghiên cứu); *Xuất draft (HTML)*.
+- **Cấu hình kết nối** (menu ⋮) — kiểm tra Backend (Node + Python) và vLLM, lưu URL; quản trị viên mới được lưu cấu hình dùng chung; cuối cửa sổ có **Đặt lại ứng dụng** (xóa dữ liệu cục bộ như mới cài, có hộp thoại xác nhận).
+- **Mobile / màn hình nhỏ:** layout `100dvh`, safe-area, sidebar dạng overlay, thanh công cụ cuộn ngang.
+
+### Chưa có
+
+Báo cáo HTML / PDF / Word tự động (bản prototype cũ từng có, đã gỡ khi tách module), xuất bộ dữ liệu ra CSV, ANOVA hai nhân tố, hồi quy đa cấp, panel, chuỗi thời gian, MCMC / Bayes Factor, lịch sử phiên bản dữ liệu. Các hàm `analyzeAnovaTwoFactor*`, `analyzeMovingAverage`, `analyzeExponentialSmoothing`, `analyzeFourier`, `analyzeRankPercentile`, `analyzeRandomNumber`, `analyzeSampling` có trong `src/api.ts` và backend Python nhưng **chưa có giao diện**.
+
+### Trợ lý AI (vLLM)
+
+- Trình duyệt chỉ gọi backend Quantis: `…/api/quantis/ollama/v1/chat/completions` và `…/v1/models` (tên đường dẫn `ollama` được giữ để tương thích ngược; backend chuyển tiếp sang vLLM theo chuẩn OpenAI).
+- Upstream: `ollamaUpstreamUrl` trong cấu hình dùng chung (admin) hoặc biến môi trường `OLLAMA_URL`; khóa gateway gửi qua header `x-ollama-seckey` (`OLLAMA_SECKEY` hoặc `ollamaSeckey`, không bao giờ trả lại ở GET `/settings`).
+- Model mặc định: `qwen3.5-35b-a3b-int4` (tắt chế độ thinking); tên model kiểu Ollama cũ (`qwen2.5…`, `a:b`) tự đổi sang model này. **Embedding vẫn dùng Ollama** (`/ollama/api/embed`).
+- Prompt hệ thống của «AI hướng dẫn» nằm ở khóa `aiAssistView.systemHintTask` trong `src/i18n.ts` (có bản đồ ứng dụng — cập nhật khi thêm/bớt mục giao diện).
+
+### Cấu trúc mã nguồn (từ commit `767b027`)
+
+`src/App.tsx` chỉ còn ~135 dòng; state dùng **Zustand** (`src/stores/`: data, analysis, ui, workflow, sync), chức năng theo module trong `src/features/` (`ai`, `analysis` + `tabs/`, `data`, `presentation`, `reproducibility`), khung giao diện `src/components/layouts/`, hộp thoại `src/components/modals/`, hook `src/hooks/` (`useServerSync`, `useURLSync`, `useAuthSession`), tiện ích `src/utils/` (`stats.ts`, `storage.ts`, `helpers.ts`), chuỗi giao diện song ngữ vi/en trong `src/i18n.ts`. Alias `@` → `src/`. Điều kiện đồng bộ workspace lên server là `canSyncToServer()` (`src/stores/useSyncStore.ts`): trên Portal chỉ tài khoản thật (không phải khách `@local`) mới được ghi.
 
 ## Run
 
@@ -97,7 +130,7 @@ uvicorn main:app --reload --port 4000
 - **Frontend:** `GET /api/quantis/auth/config`. **Standalone:** nếu `authEnabled` và `authRequired !== false` → màn hình đăng nhập/đăng ký toàn trang; nếu `authRequired === false` → vào app ngay, **header** có Đăng nhập + Đăng ký, **status bar** có Đăng nhập · Đăng ký. **Embed Portal:** không form Quantis; user Portal + `postMessage`.
 - **Portal:** middleware set **`X-User-Id`**.
 
-**Build frontend:** `npm run build` — output in `public/`.
+**Build frontend:** `npm run build` — output in `public/`. Để đóng gói bản nhúng dùng `npm run build:pack` (ghi vào `dist/build`, không copy lại bundle cũ từ `public/`); bundle dùng base `./` (backend nhúng chèn `<base href>`), riêng bản nhúng ở Tuyển sinh build bằng `npm run build:basepath` (`EMBED_BASE_PATH`, xem `vite.config.ts`).
 
 **Archive NEU:** With backend, app calls Archive via backend proxy (`/api/quantis/archive/*`).
 

@@ -2,6 +2,16 @@
 
 Tài liệu này liệt kê mọi vị trí trong Quantis đang dùng câu kiểu “sẽ được bổ sung” hoặc “tích hợp … sẽ”, và đề xuất phương án thực hiện cụ thể (client-side, backend R/Python, hoặc kết hợp).
 
+> **Cập nhật 12/10/2026 — tình trạng thực tế.** Tài liệu này là kế hoạch lịch sử (các số dòng `App.tsx:…` không còn đúng: `App.tsx` nay chỉ còn ~135 dòng, chức năng nằm ở `src/features/*`, `src/stores/*`, xem README). Kết quả đối chiếu với bản chạy thật:
+>
+> | Hạng mục | Tình trạng |
+> |----------|-----------|
+> | 2.1 Hồi quy & SEM | **Đã làm.** Hồi quy: OLS (kèm VIF), Logistic, Poisson, Ridge. SEM: Mediation, Moderation (chạy được trên trình duyệt), Path analysis, CFA, PLS-SEM (qua backend Python). Đa cấp / panel / time series **chưa có**. |
+> | 2.2 Machine learning | **Đã làm.** K-means, phân loại đa lớp One-vs-Rest logistic (confusion matrix, precision/recall/F1), feature importance, permutation importance. Random forest / XGBoost / cross-validation **chưa có**. |
+> | 2.3 Bayesian | **Một phần.** Chỉ có Beta-Binomial cho tỉ lệ (posterior, khoảng 95%). Normal-Normal, MCMC, Bayes Factor **chưa có**. |
+> | 2.4 Versioning & audit | **Chưa làm.** Mục *Versioning & audit* chỉ là trang thông báo; backend chưa lưu snapshot. Nội dung 2.4 dưới đây vẫn là đề xuất. |
+> | 2.5 AI hỗ trợ phương pháp | **Đã làm.** Tab *AI hướng dẫn* và nút hỏi AI ở các màn kết quả; backend proxy tới vLLM (`/api/quantis/ollama/v1`, model `qwen3.5-35b-a3b-int4`). |
+
 ---
 
 ## 1. Rà soát vị trí

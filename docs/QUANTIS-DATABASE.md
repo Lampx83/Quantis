@@ -20,7 +20,8 @@
 - **`users`** — tài khoản standalone + bản ghi shadow cho user Portal (khi sync data).
 - **`workspaces`** — một dòng / user: `datasets`, `workflows` (JSONB).
 - **`global_workspace`** — một dòng `id=1`: dữ liệu chung khi standalone không bắt buộc đăng nhập.
-- **`app_settings`** — một dòng `id=1`: cấu hình chung (Archive URL, AI, …).
+- **`app_settings`** — một dòng `id=1`: cấu hình chung (Archive URL, upstream vLLM, model AI, …). Khóa gateway (`ollamaSeckey`) chỉ ghi, GET `/settings` chỉ trả cờ `ollamaSeckeySet`.
+- **`sample_datasets`** — các bộ dữ liệu mẫu do quản trị viên quản lý (nút *Thêm dataset mẫu*); file `002_sample_datasets.sql`, dữ liệu gieo `003_sample_datasets_seed.sql`.
 
 File SQL: `backend/schema/schema.sql` (placeholder `__SCHEMA__` → tên schema khi apply).
 
@@ -30,6 +31,7 @@ File SQL: `backend/schema/schema.sql` (placeholder `__SCHEMA__` → tên schema 
 - **JSON + proxy (dev):** `json-server.cjs`, `npm run start:json` hoặc `npm run dev` (port **4001**).
 - Entry Portal: **`createEmbedRouter()`** trong `dist/embed.js` — giống SurveyLab (`embed.ts`).
 - Frontend: `VITE_QUANTIS_API_URL` trỏ tới host có prefix `/api/quantis` (standalone) hoặc mount Portal `.../api/quantis/backend` + đường dẫn `.../api/quantis/data`.
+- **Trên research.neu.edu.vn:** workspace người dùng đi qua router nhúng (`/api/apps/quantis/…`, schema `quantis`); khách Portal (`guest@local`) **không** được ghi lên server (điều kiện `canSyncToServer()` ở `src/stores/useSyncStore.ts`). Backend JSON + proxy (`/api/quantis/backend/*`) không phục vụ dữ liệu người dùng — kho `/data` chung của nó mặc định trả 403.
 
 ## Biến môi trường quan trọng
 

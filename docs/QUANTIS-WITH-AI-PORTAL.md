@@ -1,12 +1,17 @@
 # Cài đặt Backend Quantis để dùng với AI Portal (Research)
 
-Ứng dụng Quantis khi cài lên AI Portal (pack → cài từ Admin) chỉ gồm **frontend**. Để dùng lưu data, phân tích Python, Archive NEU, Ollama, bạn cần chạy **backend Quantis** (Node, và tùy chọn backend Python) rồi cấu hình địa chỉ đó trong Quantis.
+Ứng dụng Quantis khi cài lên AI Portal (pack → cài từ Admin) chỉ gồm **frontend**. Để dùng lưu data, phân tích Python, Archive NEU và trợ lý AI (vLLM), bạn cần chạy **backend Quantis** (Node, và tùy chọn backend Python) rồi cấu hình địa chỉ đó trong Quantis.
+
+> **Cập nhật 12/10/2026 — hiện trạng trên research.neu.edu.vn.** Công cụ có tên tiếng Việt **Phân tích định lượng** (alias `quantis`, `/embed/quantis`). Có **hai** thành phần backend, đừng nhầm:
+> 1. **Router nhúng trong Portal** (`/api/apps/quantis/…`, PostgreSQL schema `quantis`): lưu workspace (datasets + workflows) theo từng tài khoản đăng nhập; khách (`guest@local`) không được ghi.
+> 2. **Backend Node dạng JSON + proxy** (`json-server.cjs`, container `quantis-backend`, nginx đặt tại `/api/quantis/backend/*`): proxy Archive, proxy AI vLLM (`/api/quantis/ollama/*`), cấu hình dùng chung (`GET/PUT /api/quantis/settings`, chỉ quản trị viên được ghi) và chuyển tiếp phân tích sang Python (`/api/quantis/backend-python`). Kho dữ liệu chung không xác thực của backend này **mặc định tắt** (cần `QUANTIS_ALLOW_GLOBAL_DATA=1`, chỉ dùng khi dev một người).
+> Frontend nhúng đóng gói bằng `npm run build:pack` rồi đặt vào thư mục `public/` của app (giữ `embed-config.json`); backend nhúng không cần khởi động lại khi chỉ thay frontend.
 
 ## Tổng quan
 
 - **AI Portal** (Research): frontend port **3000**, backend (ai-portal-backend) port **3001**.
 - **Backend Quantis**: Node (API + proxy) chạy port **4001**; backend Python (phân tích) port **4000**.
-- Trong ứng dụng Quantis (mở từ AI Portal), mục **Cài đặt → Địa chỉ backend Quantis** phải trỏ tới URL mà **trình duyệt** gọi được (Node Quantis).
+- Trong ứng dụng Quantis (mở từ AI Portal), mục **menu ⋮ → Cấu hình kết nối → URL backend Node (gốc API)** phải trỏ tới URL mà **trình duyệt** gọi được (Node Quantis).
 
 ## Cách 1: Cùng server với AI Portal — Backend Quantis một port riêng
 
@@ -40,7 +45,7 @@ Sau khi chạy, từ máy trong LAN hoặc qua domain:
 ### Bước 2: Cấu hình trong ứng dụng Quantis (trên AI Portal)
 
 1. Mở AI Portal → vào ứng dụng **Quantis** (sau khi đã cài gói).
-2. Vào **Cài đặt** (hoặc mục cấu hình backend).
+2. Mở menu **⋮ → Cấu hình kết nối**.
 3. **Địa chỉ backend Quantis (phân tích định lượng):** nhập URL backend **Node**:
    - Cùng LAN, không proxy: `http://<IP-server>:4001`
    - Có domain/proxy: `https://quantis-api.yourdomain.com` (proxy trỏ về `http://127.0.0.1:4001`).
@@ -140,36 +145,36 @@ Backend Python (phân tích) được cấu hình **trên server** (biến `ANAL
    - Cài thêm dependency (nếu chưa): `npm install`
    - Khởi động lại backend Node (từ thư mục gốc: `npm run start` hoặc `cd backend && npm run dev`).
 
-3. **Frontend**: trong Cài đặt, **Địa chỉ backend Quantis** trỏ tới backend Node (vd. `http://localhost:4001`). Không cần cấu hình URL Python ở frontend — Node tự proxy `/api/quantis/analyze/*` sang `ANALYZE_PYTHON_URL`.
+3. **Frontend**: trong Cấu hình kết nối, ô **URL backend Node (gốc API)** trỏ tới backend Node (vd. `http://localhost:4001`). Không cần cấu hình URL Python ở frontend — Node tự proxy `/api/quantis/analyze/*` sang `ANALYZE_PYTHON_URL`.
 
-Sau khi cấu hình đúng, trang Cài đặt sẽ hiển thị "Backend phân tích (Python/R) đã kết nối". Nếu không set `ANALYZE_PYTHON_URL` hoặc Python không chạy, app vẫn chạy bình thường và dùng tính toán trên trình duyệt.
+Sau khi cấu hình đúng, hộp thoại Cấu hình kết nối sẽ hiển thị "Backend phân tích (Python/R) đã kết nối". Nếu không set `ANALYZE_PYTHON_URL` hoặc Python không chạy, app vẫn chạy bình thường và dùng tính toán trên trình duyệt.
 
 ---
 
 ## Mặc định khi chạy trên research.neu.edu.vn
 
-Khi người dùng **không chỉnh** gì trong Cài đặt và truy cập từ **research.neu.edu.vn**, ứng dụng tự dùng:
+Khi người dùng **không chỉnh** gì trong Cấu hình kết nối và truy cập từ **research.neu.edu.vn**, ứng dụng tự dùng:
 
 | Thành phần | URL mặc định |
 |------------|----------------|
 | Backend Quantis (Node) | https://research.neu.edu.vn/api/quantis/backend |
 | Backend Python (phân tích) | https://research.neu.edu.vn/api/quantis/backend-python (proxy qua Node khi cấu hình ANALYZE_PYTHON_URL) |
-| Ollama (API AI) | https://research.neu.edu.vn/ollama/v1 |
+| API AI (vLLM, qua proxy của backend Node) | https://research.neu.edu.vn/api/quantis/backend/api/quantis/ollama/v1 (tên đường dẫn `ollama` giữ để tương thích ngược; chuyển tiếp sang gateway vLLM nội bộ `/vllm/v1`) |
 | Archive (tìm kiếm dataset) | https://research.neu.edu.vn/api/archive/ |
 | Archive file (tải file) | https://research.neu.edu.vn/api/archive-file/ |
-| Mô hình AI mặc định | qwen3:8b |
+| Mô hình AI mặc định | qwen3.5-35b-a3b-int4 (tắt chế độ thinking; embedding vẫn Ollama) |
 
-Chỉ cần đảm bảo server research.neu.edu.vn đã cấu hình proxy tương ứng. **Để người dùng hoàn toàn không cần mở Cài đặt**, khi deploy backend Node lên research.neu.edu.vn hãy đặt biến môi trường:
+Chỉ cần đảm bảo server research.neu.edu.vn đã cấu hình proxy tương ứng. **Để người dùng hoàn toàn không cần mở Cấu hình kết nối**, khi deploy backend Node lên research.neu.edu.vn hãy đặt biến môi trường:
 
-- **`RESEARCH_NEU_DEPLOY=1`** — Khi chưa có file `data/settings.json`, GET `/api/quantis/settings` sẽ trả về sẵn các URL mặc định (backend, archive, archive-file, ollama, mô hình qwen3:8b). Mọi client lần đầu mở app sẽ nhận cấu hình này, không cần chỉnh gì.
+- **`RESEARCH_NEU_DEPLOY=1`** — Khi chưa có file `data/settings.json`, GET `/api/quantis/settings` sẽ trả về sẵn các URL mặc định (backend, archive, archive-file, mô hình qwen3.5-35b-a3b-int4). Mọi client lần đầu mở app sẽ nhận cấu hình này, không cần chỉnh gì.
 - **`RESEARCH_NEU_BASE_URL`** (tùy chọn) — Base URL, mặc định `https://research.neu.edu.vn`. Chỉ cần đổi nếu dùng domain/port khác.
 
-Ví dụ Docker / systemd: `RESEARCH_NEU_DEPLOY=1` (và nếu cần `RESEARCH_NEU_BASE_URL=https://research.neu.edu.vn`). Sau khi có người bấm Lưu trong Cài đặt, backend sẽ ghi `settings.json` và dùng file đó thay vì mặc định.
+Ví dụ Docker / systemd: `RESEARCH_NEU_DEPLOY=1` (và nếu cần `RESEARCH_NEU_BASE_URL=https://research.neu.edu.vn`). Sau khi có người bấm Lưu trong Cấu hình kết nối (tài khoản quản trị), backend sẽ ghi `settings.json` và dùng file đó thay vì mặc định.
 
 ---
 
 ## Cấu hình dùng chung (mọi tài khoản)
 
-Khi đã cấu hình **Địa chỉ backend Quantis** và backend đang chạy, các mục trong **Cài đặt** (Backend Quantis, Archive, Archive file, API AI, Mô hình AI) khi bấm **Lưu** sẽ được ghi lên server (file `backend/data/settings.json`). Cấu hình này **áp dụng cho tất cả tài khoản** dùng cùng instance backend. Khi mở ứng dụng, frontend tải cấu hình từ `GET /api/quantis/settings` và ưu tiên dùng thay cho localStorage. Nếu không kết nối được backend thì chỉ lưu trên trình duyệt (theo từng máy). Để dùng cơ sở dữ liệu thật (PostgreSQL, MongoDB…) thay cho file JSON, có thể sửa backend đọc/ghi từ DB trong `readSettings` / `writeSettings`.
+Khi đã cấu hình **Địa chỉ backend Quantis** và backend đang chạy, các mục trong **Cấu hình kết nối** (Backend Quantis, Archive, Archive file, địa chỉ upstream vLLM, Mô hình AI) khi bấm **Lưu** sẽ được ghi lên server (file `backend/data/settings.json`) — **chỉ tài khoản quản trị viên** được ghi (người dùng thường nhận 403). Cấu hình này **áp dụng cho tất cả tài khoản** dùng cùng instance backend. Khi mở ứng dụng, frontend tải cấu hình từ `GET /api/quantis/settings` và ưu tiên dùng thay cho localStorage. Nếu không kết nối được backend thì chỉ lưu trên trình duyệt (theo từng máy). Để dùng cơ sở dữ liệu thật (PostgreSQL, MongoDB…) thay cho file JSON, có thể sửa backend đọc/ghi từ DB trong `readSettings` / `writeSettings`.
 
 Nếu Quantis chạy trên research.neu.edu.vn và dùng proxy same-origin để tải file (path `/api/archive-file`), proxy **bắt buộc** gửi đúng header **Host** khi forward tới MinIO (trùng với Host dùng lúc ký presigned URL), nếu không sẽ lỗi **SignatureDoesNotMatch**. Chi tiết và ví dụ Nginx: [ARCHIVE-FILE-PROXY.md](./ARCHIVE-FILE-PROXY.md).
