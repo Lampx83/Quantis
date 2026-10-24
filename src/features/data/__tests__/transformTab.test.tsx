@@ -1,16 +1,21 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TransformTab } from "../TransformTab";
+import { TransformTab, HotDeckLoadingBanner } from "../TransformTab";
 import { useDataStore } from "@/stores/useDataStore";
 import { analyzeMiceImputation } from "@/api";
 import { setLocale, t } from "@/i18n";
+import { runHotDeckImputation } from "@/utils/imputation-worker-client";
 import {
   imputeListwise,
   imputeMeanMedianMode,
   imputeHotDeck,
 } from "@/utils/missing-imputation";
 import type { Dataset } from "@/types";
+
+vi.mock("@/utils/imputation-worker-client", () => ({
+  runHotDeckImputation: vi.fn(),
+}));
 
 // Test tự chứa: base URL backend do mock cấp, KHÔNG phụ thuộc file .env của máy chạy test
 // (getBase đọc loadBackendApiUrl() rồi mới tới VITE_QUANTIS_API_URL).
@@ -60,6 +65,7 @@ const sampleDatasetWithMissing: Dataset = {
 describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
   beforeEach(() => {
     setLocale("en");
+    vi.mocked(runHotDeckImputation).mockReset();
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
       selectedDatasetId: "ds_transform_test",
@@ -68,6 +74,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders all missing data imputation options including fill_hot_deck and fill_mice", () => {
@@ -260,5 +267,146 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     useDataStore.getState().removeDataset(newDsId);
     expect(useDataStore.getState().datasets.length).toBe(1);
     expect(useDataStore.getState().datasets[0].id).toBe("ds_transform_test");
+  });
+
+  it("localizes the hot-deck worker message", () => {
+    setLocale("en");
+    expect(t("transformTab.hotDeck.loading")).toBe(
+      "Running hot-deck imputation in a Web Worker..."
+    );
+    setLocale("vi");
+    expect(t("transformTab.hotDeck.loading")).toBe(
+      "Đang thực hiện nội suy Hot-deck qua Web Worker..."
+    );
+  });
+
+  it("renders the hot-deck spinner with a cancel button", () => {
+    setLocale("en");
+    const html = renderToStaticMarkup(<HotDeckLoadingBanner onCancel={vi.fn()} />);
+    expect(html).toContain(t("transformTab.hotDeck.loading"));
+    expect(html).toContain(t("transformTab.cancelButton"));
+  });
+
+  it("sends hot-deck work through the worker client and creates a new dataset", async () => {
+    vi.mocked(runHotDeckImputation).mockResolvedValue([
+      ["ID", "INCOME", "GENDER"],
+      ["1", "1000", "Nam"],
+      ["2", "1250", "Nữ"],
+      ["3", "1250", "Nam"],
+      ["4", "1500", "Nam"],
+    ]);
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function Harness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialShowChoiceModal: true,
+        initialColsMultiple: ["INCOME"],
+        initialAction: "fill_hot_deck",
+      });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    await createNewBtn.props.onClick();
+
+    expect(runHotDeckImputation).toHaveBeenCalledWith(
+      sampleDatasetWithMissing.data,
+      ["INCOME"],
+      sampleDatasetWithMissing.variables,
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets).toHaveLength(2);
+    expect(datasets[1].name).toContain("(hot-deck)");
+    expect(datasets[1].data?.[2][1]).toBe("1250");
+  });
+
+  it("cancels an in-flight hot-deck run without creating a dataset", async () => {
+    let controller: AbortController | undefined;
+    class CapturingAbortController extends AbortController {
+      constructor() {
+        super();
+        controller = this;
+      }
+    }
+    vi.stubGlobal("AbortController", CapturingAbortController);
+
+    let signal: AbortSignal | undefined;
+    vi.mocked(runHotDeckImputation).mockImplementation(
+      (_data, _columns, _variables, options) => {
+        signal = options?.signal;
+        return new Promise<string[][]>((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted", "AbortError"))
+          );
+        });
+      }
+    );
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function Harness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialShowChoiceModal: true,
+        initialColsMultiple: ["INCOME"],
+        initialAction: "fill_hot_deck",
+      });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    const pending = createNewBtn.props.onClick();
+    await Promise.resolve();
+
+    expect(signal).toBeDefined();
+    controller!.abort();
+    await pending;
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].id).toBe("ds_transform_test");
   });
 });
