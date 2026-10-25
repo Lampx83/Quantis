@@ -364,13 +364,13 @@ export async function checkAnalysisBackendAvailable(baseUrl?: string): Promise<b
 }
 
 /** Phân tích: thống kê mô tả (backend Python). Trả về null nếu lỗi hoặc không dùng backend. */
-export async function analyzeDescriptive(rows: string[][]): Promise<Array<{ column: string; type: string; n: number; missing: number; mean?: number; median?: number; std?: number; min?: number; max?: number; q25?: number; q75?: number; freq?: { value: string; count: number }[] }> | null> {
+export async function analyzeDescriptive(rows: string[][], numericColumns?: string[]): Promise<Array<{ column: string; type: string; n: number; missing: number; nonNumeric?: number; mean?: number; median?: number; std?: number; min?: number; max?: number; q25?: number; q75?: number; freq?: { value: string; count: number }[] }> | null> {
   try {
     const res = await fetch(`${getANALYZE_BASE()}/descriptive`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      body: JSON.stringify({ rows }),
+      body: JSON.stringify({ rows, numericColumns: numericColumns ?? [] }),
     });
     if (!res.ok) return null;
     const json = await res.json();

@@ -33,6 +33,44 @@ export function validateVariableName(
   return { valid: true };
 }
 
+function isCalendarDate(y: number, m: number, d: number): boolean {
+  if (!(y >= 1000 && y <= 9999) || !(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) return false;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const TIME_SUFFIX = String.raw`(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s?[AaPp][Mm])?(?:Z|[+-]\d{2}:?\d{2})?)?`;
+const RE_Y_FIRST = new RegExp(String.raw`^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})${TIME_SUFFIX}$`);
+const RE_D_FIRST = new RegExp(String.raw`^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})${TIME_SUFFIX}$`);
+const RE_D_MON_Y = /^(\d{1,2})[ -]([A-Za-z]{3,9})\.?,?[ -](\d{4})$/;
+const RE_MON_D_Y = /^([A-Za-z]{3,9})\.? (\d{1,2}),? (\d{4})$/;
+
+/**
+ * Chuỗi có phải NGÀY THẬT không (để tự đoán kiểu Date). Chỉ nhận định dạng ngày rõ ràng và kiểm hợp lệ lịch:
+ * `yyyy-mm-dd` (/ hoặc .; có thể kèm giờ), `dd/mm/yyyy`, `dd-mm-yyyy`, `dd.mm.yyyy` (hoặc tháng/ngày kiểu Mỹ nếu một trong hai
+ * cách đọc hợp lệ), `12 Jan 2024`, `Jan 12, 2024`. KHÔNG nhận mã chữ-số-gạch nối như «phong-van-01», «2024-A», «S-01»,
+ * «01-02», số điện thoại, mã sinh viên — kể cả khi `Date.parse` của trình duyệt “cố hiểu” chúng thành ngày.
+ */
+export function isDateString(raw: string | undefined | null): boolean {
+  if (raw === undefined || raw === null) return false;
+  const v = String(raw).trim();
+  if (v.length < 8 || v.length > 40) return false;
+  let m = RE_Y_FIRST.exec(v);
+  if (m) return isCalendarDate(+m[1], +m[3], +m[4]);
+  m = RE_D_FIRST.exec(v);
+  if (m) return isCalendarDate(+m[4], +m[3], +m[1]) || isCalendarDate(+m[4], +m[1], +m[3]);
+  const monthIdx = (name: string) => MONTH_NAMES.indexOf(name.slice(0, 3).toLowerCase());
+  m = RE_D_MON_Y.exec(v);
+  if (m) return monthIdx(m[2]) >= 0 && isCalendarDate(+m[3], monthIdx(m[2]) + 1, +m[1]);
+  m = RE_MON_D_Y.exec(v);
+  if (m) return monthIdx(m[1]) >= 0 && isCalendarDate(+m[3], monthIdx(m[1]) + 1, +m[2]);
+  return false;
+}
+
+/** Tỉ lệ ô khớp định dạng ngày tối thiểu để cả cột được đoán là Date. */
+const DATE_COLUMN_RATIO = 0.9;
+
 /**
  * Automatically infer metadata for a variable based on its observed values.
  */
@@ -62,13 +100,9 @@ export function inferVariableMetadata(name: string, values: string[]): VariableM
   if (numericRatio >= 0.9) {
     type = "numeric";
   } else {
-    // Check if ISO/valid date format
-    const dateCount = cleanValues.filter((v) => {
-      if (v.length < 8) return false;
-      const parsed = Date.parse(v);
-      return !isNaN(parsed);
-    }).length;
-    if (dateCount / cleanValues.length >= 0.9) {
+    // Chỉ là Date khi đa số ô khớp định dạng ngày thật (không dùng Date.parse: nó hiểu nhầm «phong-van-01» là ngày)
+    const dateCount = cleanValues.filter(isDateString).length;
+    if (dateCount / cleanValues.length >= DATE_COLUMN_RATIO) {
       type = "date";
     }
   }
@@ -309,6 +343,13 @@ export function isValidNumericValue(val: string | undefined | null): boolean {
   const trimmed = String(val).trim();
   if (trimmed === "") return true;
   return STRICT_NUMERIC_REGEX.test(trimmed);
+}
+
+/** Tên các cột được khai báo kiểu Numeric (gửi cho backend để tách ô không phải số). */
+export function numericColumnNames(variables?: Record<string, VariableMetadata>): string[] {
+  return Object.entries(variables ?? {})
+    .filter(([, v]) => v?.type === "numeric")
+    .map(([name]) => name);
 }
 
 /**

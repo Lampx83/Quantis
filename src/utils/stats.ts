@@ -4,26 +4,88 @@
 
 import type { DataProfile, VariableMetadata } from "../types";
 import { t } from "../i18n";
-import { buildMissingMatcher, missingRuleSignature } from "./metadata";
+import { buildMissingMatcher, missingRuleSignature, isValidNumericValue } from "./metadata";
 import { safeMax, safeMin, safeMinMax } from "./math";
 
 const MAX_ROWS_STORED = 50000;
 
-/** Dòng đầu không rỗng (dùng đoán dấu phân cách CSV/TXT). */
-function firstNonEmptyLine(text: string): string {
-  const parts = text.split(/\r?\n/);
-  for (const line of parts) {
-    if (line.trim() !== "") return line;
+export type TextDelimiter = "," | ";" | "\t";
+
+/** Số ô của từng bản ghi (dòng) trong `sample` theo dấu phân cách `d`, bỏ qua dấu nằm trong ngoặc kép; bỏ dòng trống. */
+function recordFieldCounts(sample: string, d: TextDelimiter): number[] {
+  const counts: number[] = [];
+  let inQuotes = false;
+  let fields = 1;
+  let nonEmpty = false;
+  const flush = () => {
+    if (nonEmpty) counts.push(fields);
+    fields = 1;
+    nonEmpty = false;
+  };
+  for (let i = 0; i < sample.length; i++) {
+    const c = sample[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+      nonEmpty = true;
+    } else if (inQuotes) {
+      nonEmpty = true;
+    } else if (c === d) {
+      fields++;
+      nonEmpty = true;
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && sample[i + 1] === "\n") i++;
+      flush();
+    } else if (c.trim() !== "") {
+      nonEmpty = true;
+    }
   }
-  return "";
+  flush();
+  return counts;
 }
 
-/** Đoán `,` vs `;` cho file .csv (Excel/Google Form locale VN/EU hay xuất CSV phân tách bằng `;`). */
-export function detectCsvDelimiter(text: string): "," | ";" {
-  const line = firstNonEmptyLine(text);
-  const semi = (line.match(/;/g) || []).length;
-  const comma = (line.match(/,/g) || []).length;
-  return semi > comma ? ";" : ",";
+const DELIMITER_SAMPLE_CHARS = 64 * 1024;
+const RE_DECIMAL_COMMA_CELL = /^[+-]?\d+,\d+$/;
+
+/**
+ * Đoán dấu phân cách `,` / `;` / tab của file văn bản bằng cách dò mẫu: dấu nào cho SỐ CỘT NHẤT QUÁN qua các dòng
+ * (≥ 2 cột) thì được chọn — không chỉ nhìn dòng tiêu đề. Nhờ vậy "3,5" (dấu phẩy thập phân kiểu Excel Việt) trong tệp
+ * `;`/tab không làm tệp bị tách thành hai cột, còn CSV chuẩn dùng `,` vẫn nguyên. Hòa nhau thì ưu tiên dấu mà các ô
+ * tách ra có dạng số-phẩy-số ("3,5"), rồi đến dấu cho nhiều cột hơn.
+ */
+export function detectDelimiter(text: string): TextDelimiter {
+  const clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  let sample = clean.slice(0, DELIMITER_SAMPLE_CHARS);
+  if (clean.length > DELIMITER_SAMPLE_CHARS) {
+    const cut = Math.max(sample.lastIndexOf("\n"), sample.lastIndexOf("\r"));
+    if (cut > 0) sample = sample.slice(0, cut);
+  }
+  type Cand = { d: TextDelimiter; cols: number; frac: number; decimalHint: boolean };
+  const cands: Cand[] = [];
+  for (const d of [",", ";", "\t"] as TextDelimiter[]) {
+    const counts = recordFieldCounts(sample, d);
+    if (counts.length === 0) continue;
+    const freq = new Map<number, number>();
+    for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1);
+    let cols = 1;
+    let best = 0;
+    for (const [c, n] of freq) if (n > best || (n === best && c > cols)) { best = n; cols = c; }
+    if (cols < 2) continue;
+    let decimalHint = false;
+    if (d !== ",") {
+      const probe = d === "\t" ? parseTSV(sample) : parseDelimited(sample, d);
+      decimalHint = probe.slice(1).some((r) => r.some((cell) => RE_DECIMAL_COMMA_CELL.test(cell)));
+    }
+    cands.push({ d, cols, frac: best / counts.length, decimalHint });
+  }
+  if (cands.length === 0) return ",";
+  const prio: Record<TextDelimiter, number> = { "\t": 2, ";": 1, ",": 0 };
+  cands.sort((a, b) => {
+    if (Math.abs(a.frac - b.frac) > 1e-9) return b.frac - a.frac;
+    if (a.decimalHint !== b.decimalHint) return a.decimalHint ? -1 : 1;
+    if (a.cols !== b.cols) return b.cols - a.cols;
+    return prio[b.d] - prio[a.d];
+  });
+  return cands[0].d;
 }
 
 /**
@@ -62,17 +124,24 @@ export function parseDelimited(text: string, delimiter: "," | ";"): string[][] {
 }
 
 /**
- * CSV kiểu Việt/châu Âu (phân tách `;`) viết số thập phân bằng dấu phẩy ("6,84", "1.234,5").
+ * CSV kiểu Việt/châu Âu (phân tách `;` hoặc tab) viết số thập phân bằng dấu phẩy ("6,84", "1.234,5").
  * Đổi cả cột sang dạng "6.84" CHỈ KHI mọi ô không trống của cột đều là số (nguyên, thập phân dấu phẩy, hoặc có chấm hàng nghìn
  * kèm dấu phẩy thập phân) và có ít nhất một ô dùng dấu phẩy — cột văn bản/ngày/hỗn hợp giữ nguyên.
+ * `commaDelimited`: tệp phân tách bằng `,` (số "3,5" chỉ có được khi bọc ngoặc kép) — dè dặt hơn: chỉ nhận phần thập phân
+ * 1–2 chữ số (để "1,234" vẫn là hàng nghìn, không thành 1.234).
+ * Trả về cả tên các cột đã đổi để báo cho người dùng.
  */
-export function normalizeDecimalCommaColumns(rows: string[][]): string[][] {
-  if (rows.length < 2) return rows;
+export function normalizeDecimalCommaColumnsDetailed(
+  rows: string[][],
+  opts: { commaDelimited?: boolean } = {}
+): { rows: string[][]; converted: string[] } {
+  if (rows.length < 2) return { rows, converted: [] };
   const nCols = rows.reduce((m, r) => Math.max(m, r.length), 0);
   const out = rows.map((r) => r.slice());
   const reInt = /^[+-]?\d+$/;
-  const reDec = /^[+-]?\d+,\d+$/;
+  const reDec = opts.commaDelimited ? /^[+-]?\d+,\d{1,2}$/ : /^[+-]?\d+,\d+$/;
   const reThousandsDec = /^[+-]?\d{1,3}(\.\d{3})+,\d+$/;
+  const converted: string[] = [];
   for (let c = 0; c < nCols; c++) {
     let hasComma = false;
     let ok = true;
@@ -82,7 +151,7 @@ export function normalizeDecimalCommaColumns(rows: string[][]): string[][] {
       if (v === "") continue;
       count++;
       if (reInt.test(v)) continue;
-      if (reDec.test(v) || reThousandsDec.test(v)) { hasComma = true; continue; }
+      if (reDec.test(v) || (!opts.commaDelimited && reThousandsDec.test(v))) { hasComma = true; continue; }
       ok = false;
       break;
     }
@@ -91,11 +160,16 @@ export function normalizeDecimalCommaColumns(rows: string[][]): string[][] {
       const v = (out[r][c] ?? "").trim();
       if (v !== "") out[r][c] = v.replace(/\./g, "").replace(",", ".");
     }
+    converted.push(String(rows[0][c] ?? `#${c + 1}`));
   }
-  return out;
+  return { rows: out, converted };
 }
 
-/** Parse CSV text (dấu phẩy). Với file có thể là `;`, dùng `parseFileContent` hoặc `parseDelimited(text, detectCsvDelimiter(text))`. */
+export function normalizeDecimalCommaColumns(rows: string[][]): string[][] {
+  return normalizeDecimalCommaColumnsDetailed(rows).rows;
+}
+
+/** Parse CSV text (dấu phẩy). Với file có thể là `;`, dùng `parseFileContent` (tự dò `,` / `;` / tab). */
 export function parseCSV(text: string): string[][] {
   return parseDelimited(text, ",");
 }
@@ -191,43 +265,49 @@ export function isBackendParseFormat(format: string): boolean {
   return ["xlsx", "xls", "ods", "sav", "dta", "sas7bdat", "rds", "rdata"].includes(format);
 }
 
-/** Parse nội dung file theo định dạng, trả về rows và format. */
-export function parseFileContent(text: string, filename: string): { rows: string[][]; format: string } {
+export interface ParsedFileContent {
+  rows: string[][];
+  format: string;
+  /** Dấu phân cách đã dùng (chỉ với văn bản phân tách: csv/tsv/txt). */
+  delimiter?: TextDelimiter;
+  /** Dấu phân cách do Quantis tự đoán và khác dấu phẩy mặc định (`;` hoặc tab) — cần báo cho người dùng. */
+  delimiterGuessed?: boolean;
+  /** Tên các cột đã đổi số thập phân "3,5" thành "3.5". */
+  decimalCommaColumns?: string[];
+}
+
+/** Parse nội dung file theo định dạng, trả về rows, format và các điều Quantis đã tự đoán (dấu phân cách, dấu thập phân). */
+export function parseFileContent(text: string, filename: string): ParsedFileContent {
   const ext = getFormatFromFilename(filename);
   if (ext === "json") {
     const rows = parseJSONToRows(text);
     return { rows, format: "json" };
   }
-  if (ext === "tsv") {
-    const rows = parseTSV(text);
-    return { rows, format: "tsv" };
+  const clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const delimiter: TextDelimiter = ext === "tsv" ? "\t" : detectDelimiter(clean);
+  const parsed = delimiter === "\t" ? parseTSV(clean) : parseDelimited(clean, delimiter);
+  const { rows, converted } = normalizeDecimalCommaColumnsDetailed(parsed, { commaDelimited: delimiter === "," });
+  return {
+    rows,
+    format: delimiter === "\t" ? "tsv" : "csv",
+    delimiter,
+    delimiterGuessed: ext !== "tsv" && delimiter !== ",",
+    decimalCommaColumns: converted,
+  };
+}
+
+/** Thông báo ngắn cho người dùng khi Quantis tự đoán dấu phân cách / dấu thập phân lúc nạp văn bản; `null` nếu không có gì đáng báo. */
+export function describeParseAssumptions(r: Pick<ParsedFileContent, "delimiter" | "delimiterGuessed" | "decimalCommaColumns">): string | null {
+  const parts: string[] = [];
+  if (r.delimiterGuessed && r.delimiter) {
+    parts.push(t("import.autoDelimiter", { delim: r.delimiter === "\t" ? t("import.delimTab") : t("import.delimSemicolon") }));
   }
-  if (ext === "txt") {
-    const line = firstNonEmptyLine(text);
-    const tabCount = (line.match(/\t/g) || []).length;
-    const commaCount = (line.match(/,/g) || []).length;
-    const semiCount = (line.match(/;/g) || []).length;
-    const maxDelim = Math.max(tabCount, commaCount, semiCount);
-    let rows: string[][];
-    let format: string;
-    if (maxDelim === 0) {
-      rows = parseDelimited(text, ",");
-      format = "csv";
-    } else if (tabCount === maxDelim) {
-      rows = parseTSV(text);
-      format = "tsv";
-    } else if (semiCount > commaCount) {
-      rows = normalizeDecimalCommaColumns(parseDelimited(text, ";"));
-      format = "csv";
-    } else {
-      rows = parseDelimited(text, ",");
-      format = "csv";
-    }
-    return { rows, format };
+  const cols = r.decimalCommaColumns ?? [];
+  if (cols.length > 0) {
+    const shown = cols.slice(0, 4).join(", ") + (cols.length > 4 ? ", …" : "");
+    parts.push(t("import.autoDecimal", { n: cols.length, cols: shown }));
   }
-  const delimiter = detectCsvDelimiter(text);
-  const parsed = parseDelimited(text, delimiter);
-  return { rows: delimiter === ";" ? normalizeDecimalCommaColumns(parsed) : parsed, format: "csv" };
+  return parts.length > 0 ? `${parts.join(" ")} ${t("import.checkTable")}` : null;
 }
 
 function isNumeric(val: string): boolean {
@@ -251,8 +331,24 @@ function toNum(val: unknown): number {
   return Number(s);
 }
 
-/** Compute data profile for each column. */
-export function computeProfile(rows: string[][]): DataProfile[] {
+/**
+ * Cột nào được coi là «cột số» khi thống kê: theo kiểu người dùng/Quantis đã khai ở Variable View (`type === "numeric"`),
+ * nếu không có thông tin thì suy từ dữ liệu (mọi ô không trống đều là số). Với cột số KHAI BÁO, ô không phải số hợp lệ
+ * (chữ «bốn», «N/A», dấu phẩy thập phân «3,5») không làm cột thành chữ: chúng bị bỏ qua khi tính và được đếm riêng ở `nonNumeric`.
+ */
+function isDeclaredNumeric(variables: Record<string, VariableMetadata> | undefined, column: string): boolean {
+  return variables?.[String(column)]?.type === "numeric";
+}
+
+/** Tách các ô không trống của cột số khai báo thành (số hợp lệ, số ô không phải số). */
+function splitDeclaredNumeric(nonEmpty: string[]): { nums: number[]; nonNumeric: number } {
+  const nums: number[] = [];
+  for (const v of nonEmpty) if (isValidNumericValue(v)) nums.push(toNum(v));
+  return { nums, nonNumeric: nonEmpty.length - nums.length };
+}
+
+/** Compute data profile for each column. `variables` (tuỳ chọn): đếm riêng ô không phải số của các cột số đã khai báo. */
+export function computeProfile(rows: string[][], variables?: Record<string, VariableMetadata>): DataProfile[] {
   if (!rows || !Array.isArray(rows) || rows.length === 0) return [];
   const headers = rows[0];
   if (!headers || !Array.isArray(headers)) return [];
@@ -262,8 +358,17 @@ export function computeProfile(rows: string[][]): DataProfile[] {
     const nonEmpty = values.filter((v) => v !== "");
     const missing = values.length - nonEmpty.length;
     const unique = new Set(nonEmpty).size;
-    const nums = nonEmpty.filter(isNumeric).map(toNum);
-    const type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    const declared = isDeclaredNumeric(variables, col);
+    let nums: number[];
+    let nonNumeric: number | undefined;
+    let type: string;
+    if (declared) {
+      ({ nums, nonNumeric } = splitDeclaredNumeric(nonEmpty));
+      type = "numeric";
+    } else {
+      nums = nonEmpty.filter(isNumeric).map(toNum);
+      type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    }
     const profile: DataProfile = {
       column: col,
       type,
@@ -271,6 +376,7 @@ export function computeProfile(rows: string[][]): DataProfile[] {
       missingPct: values.length ? (missing / values.length) * 100 : 0,
       unique,
     };
+    if (nonNumeric !== undefined) profile.nonNumeric = nonNumeric;
     if (nums.length > 0) {
       const n = nums.length;
       const sum = nums.reduce((a, b) => a + b, 0);
@@ -296,6 +402,8 @@ export interface DescriptiveRow {
   type: string;
   n: number;
   missing: number;
+  /** Cột số khai báo: số ô không trống nhưng không phải số hợp lệ (bỏ qua khi tính, KHÔNG tính vào `missing`). */
+  nonNumeric?: number;
   mean?: number;
   median?: number;
   std?: number;
@@ -309,8 +417,8 @@ export interface DescriptiveRow {
   freq?: { value: string; count: number }[];
 }
 
-/** Descriptive statistics per column. */
-export function computeDescriptive(rows: string[][]): DescriptiveRow[] {
+/** Descriptive statistics per column. `variables` (tuỳ chọn): cột số khai báo giữ kiểu số, ô sai kiểu đếm ở `nonNumeric`. */
+export function computeDescriptive(rows: string[][], variables?: Record<string, VariableMetadata>): DescriptiveRow[] {
   if (rows.length === 0) return [];
   const headers = rows[0];
   const dataRows = rows.slice(1);
@@ -318,9 +426,18 @@ export function computeDescriptive(rows: string[][]): DescriptiveRow[] {
     const values = dataRows.map((r) => (r[ci] !== undefined ? String(r[ci]).trim() : ""));
     const nonEmpty = values.filter((v) => v !== "");
     const missing = values.length - nonEmpty.length;
-    const nums = nonEmpty.filter(isNumeric).map(toNum);
-    const type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    let nums: number[];
+    let nonNumeric: number | undefined;
+    let type: string;
+    if (isDeclaredNumeric(variables, col)) {
+      ({ nums, nonNumeric } = splitDeclaredNumeric(nonEmpty));
+      type = nums.length > 0 ? "numeric" : "categorical";
+    } else {
+      nums = nonEmpty.filter(isNumeric).map(toNum);
+      type = nums.length === nonEmpty.length && nonEmpty.length > 0 ? "numeric" : "categorical";
+    }
     const row: DescriptiveRow = { column: col, type, n: values.length, missing };
+    if (nonNumeric !== undefined) row.nonNumeric = nonNumeric;
     if (type === "numeric" && nums.length > 0) {
       const sorted = [...nums].sort((a, b) => a - b);
       const n = sorted.length;
@@ -2225,16 +2342,19 @@ export function computeOutlierIqr(values: number[]): { outlierCount: number; q1:
 }
 
 /** Add outlier counts and skew to profiling: returns profile with optional outlierCount. */
-export function computeProfileWithOutliers(rows: string[][]): (DataProfile & { outlierCount?: number })[] {
+export function computeProfileWithOutliers(
+  rows: string[][],
+  variables?: Record<string, VariableMetadata>
+): (DataProfile & { outlierCount?: number })[] {
   if (!rows || !Array.isArray(rows) || rows.length === 0) return [];
-  const profiles = computeProfile(rows);
+  const profiles = computeProfile(rows, variables);
   if (rows.length < 2) return profiles;
   const headers = rows[0];
   if (!headers || !Array.isArray(headers)) return profiles;
   const dataRows = rows.slice(1);
   return profiles.map((p, ci) => {
     const values = dataRows.map((r) => (r[ci] !== undefined ? String(r[ci]).trim() : ""));
-    const nums = values.filter((v) => v !== "" && isNumeric(v)).map(toNum);
+    const nums = values.filter((v) => v !== "" && (isDeclaredNumeric(variables, p.column) ? isValidNumericValue(v) : isNumeric(v))).map(toNum);
     const outlierCount = nums.length >= 4 ? getOutlierCountIQR(nums) : undefined;
     return { ...p, outlierCount };
   });
