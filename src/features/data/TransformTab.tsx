@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { X, Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
 import { numCell, getDataRows, getAnalysisRows, computeDescriptive } from "@/utils/stats";
@@ -9,11 +9,11 @@ import { InfoHint } from "@/components/common/InfoHint";
 import {
   imputeListwise,
   imputeMeanMedianMode,
-  imputeHotDeck,
   getModeFallbackColumns,
 } from "@/utils/missing-imputation";
 import { analyzeMiceImputation, clampMiceIterations, MICE_MIN_ITER, MICE_MAX_ITER, type MiceImputationResponse } from "@/api";
 import { ensureDatasetMetadata } from "@/utils/metadata";
+import { runHotDeckImputation } from "@/utils/imputation-worker-client";
 import {
   renameColumn,
   coerceColumns,
@@ -27,8 +27,41 @@ import {
 
 type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
 const PREP_ACTIONS: PrepAction[] = ["rename", "coerce_numeric", "coerce_text", "compute", "log", "outlier_iqr", "dedupe"];
+type TransformAction =
+  | "drop_missing"
+  | "fill_mean"
+  | "fill_median"
+  | "fill_mode"
+  | "fill_hot_deck"
+  | "fill_mice"
+  | "z_score"
+  | "min_max"
+  | "filter"
+  | "sort"
+  | "recode"
+  | PrepAction;
 const tpl = (s: string, vars: Record<string, string | number>) =>
   Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(String(v)), s);
+
+/** Spinner and cancel control shown while hot-deck runs off the main thread. */
+export function HotDeckLoadingBanner({ onCancel }: { onCancel: () => void }) {
+  return (
+    <div
+      role="status"
+      className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-200"
+    >
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      <span>{t("transformTab.hotDeck.loading")}</span>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="rounded-md border border-sky-300 px-2 py-1 font-medium hover:bg-sky-100 dark:border-sky-700 dark:hover:bg-sky-900"
+      >
+        {t("transformTab.cancelButton")}
+      </button>
+    </div>
+  );
+}
 
 export interface TransformTabProps {
   selectedDs: Dataset | null;
@@ -37,6 +70,7 @@ export interface TransformTabProps {
   onWorkflowDatasetAdd?: (id: string) => void;
   initialShowChoiceModal?: boolean;
   initialColsMultiple?: string[];
+  initialAction?: TransformAction;
 }
 
 export function TransformTab({
@@ -46,23 +80,11 @@ export function TransformTab({
   onWorkflowDatasetAdd,
   initialShowChoiceModal = false,
   initialColsMultiple = [],
+  initialAction,
 }: TransformTabProps) {
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>(initialColsMultiple);
-  const [transformAction, setTransformAction] = useState<
-    | "drop_missing"
-    | "fill_mean"
-    | "fill_median"
-    | "fill_mode"
-    | "fill_hot_deck"
-    | "fill_mice"
-    | "z_score"
-    | "min_max"
-    | "filter"
-    | "sort"
-    | "recode"
-    | PrepAction
-  >("drop_missing");
+  const [transformAction, setTransformAction] = useState<TransformAction>(initialAction ?? "drop_missing");
   const [renameFrom, setRenameFrom] = useState("");
   const [renameTo, setRenameTo] = useState("");
   const [computeName, setComputeName] = useState("");
@@ -87,6 +109,17 @@ export function TransformTab({
     actionLabel: string;
     stats?: MiceImputationResponse["statistics"];
   } | null>(null);
+  const [isHotDeckLoading, setIsHotDeckLoading] = useState(false);
+  const selectedDsRef = useRef(selectedDs);
+  selectedDsRef.current = selectedDs;
+  const currentOpIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, [selectedDs?.id]);
 
   if (!selectedDs) {
     return (
@@ -237,7 +270,30 @@ export function TransformTab({
       } else if (transformAction === "fill_mode") {
         newRows = imputeMeanMedianMode(dataRows, columnsToApply, selectedDs.variables, "mode");
       } else if (transformAction === "fill_hot_deck") {
-        newRows = imputeHotDeck(dataRows, columnsToApply, selectedDs.variables);
+        const abortCtrl = new AbortController();
+        abortControllerRef.current = abortCtrl;
+        const opId = ++currentOpIdRef.current;
+        const dsId = selectedDs.id;
+        setIsHotDeckLoading(true);
+        try {
+          newRows = await runHotDeckImputation(
+            dataRows,
+            columnsToApply,
+            selectedDs.variables,
+            { signal: abortCtrl.signal }
+          );
+        } catch (err: unknown) {
+          if (abortCtrl.signal.aborted) return;
+          const msg = err instanceof Error ? err.message : String(err);
+          setPrepNote({ ok: false, text: msg });
+          return;
+        } finally {
+          if (abortControllerRef.current === abortCtrl) {
+            abortControllerRef.current = null;
+            setIsHotDeckLoading(false);
+          }
+        }
+        if (currentOpIdRef.current !== opId || selectedDsRef.current?.id !== dsId) return;
       } else if (transformAction === "fill_mice") {
         setIsMiceLoading(true);
         setMiceError(null);
@@ -615,6 +671,7 @@ export function TransformTab({
         onClick={requestApply}
         disabled={
           isMiceLoading ||
+          isHotDeckLoading ||
           (["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max", "coerce_numeric", "coerce_text", "log", "outlier_iqr"].includes(transformAction) &&
             transformColsMultiple.length === 0) ||
           (transformAction === "rename" && (!renameFrom || !renameTo.trim())) ||
@@ -622,7 +679,7 @@ export function TransformTab({
         }
         className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50"
       >
-        {isMiceLoading ? (
+        {isMiceLoading || isHotDeckLoading ? (
           <span className="flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
             {t("transformTab.processing")}
@@ -631,6 +688,9 @@ export function TransformTab({
           t("transformTab.applyButton")
         )}
       </button>
+      {isHotDeckLoading && (
+        <HotDeckLoadingBanner onCancel={() => abortControllerRef.current?.abort()} />
+      )}
       {prepNote && (
         <p role="status" className={`mt-3 text-sm ${prepNote.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{prepNote.text}</p>
       )}

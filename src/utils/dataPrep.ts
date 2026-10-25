@@ -5,6 +5,8 @@
  * Quy ước: ô trống / chỉ có khoảng trắng = giá trị thiếu; ô không phải số trong cột số = thiếu khi tính toán.
  */
 
+import { safeMax, safeMin } from "./math";
+
 export type Rows = string[][];
 
 export interface PrepResult {
@@ -188,8 +190,8 @@ const FUNCS: Record<string, { min: number; max: number; f: (a: number[]) => numb
   // Hàm nhiều đối số: bỏ qua ô thiếu (như SPSS MEAN/SUM); không còn giá trị hợp lệ nào -> thiếu
   sum: { min: 1, max: 99, f: (a) => (finite(a).length ? finite(a).reduce((s, x) => s + x, 0) : NaN) },
   mean: { min: 1, max: 99, f: (a) => (finite(a).length ? finite(a).reduce((s, x) => s + x, 0) / finite(a).length : NaN) },
-  min: { min: 1, max: 99, f: (a) => (finite(a).length ? Math.min(...finite(a)) : NaN) },
-  max: { min: 1, max: 99, f: (a) => (finite(a).length ? Math.max(...finite(a)) : NaN) },
+  min: { min: 1, max: 99, f: (a) => safeMin(finite(a), NaN) },
+  max: { min: 1, max: 99, f: (a) => safeMax(finite(a), NaN) },
 };
 const MULTI_SKIP_NAN = new Set(["sum", "mean", "min", "max"]);
 

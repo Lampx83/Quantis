@@ -5,6 +5,7 @@
 import type { DataProfile, VariableMetadata } from "../types";
 import { t } from "../i18n";
 import { buildMissingMatcher, missingRuleSignature, isValidNumericValue } from "./metadata";
+import { safeMax, safeMin, safeMinMax } from "./math";
 
 const MAX_ROWS_STORED = 50000;
 
@@ -382,8 +383,9 @@ export function computeProfile(rows: string[][], variables?: Record<string, Vari
       const mean = sum / n;
       const ss = nums.reduce((a, b) => a + (b - mean) ** 2, 0);
       const variance = ss / n;
-      profile.min = Math.min(...nums);
-      profile.max = Math.max(...nums);
+      const [min, max] = safeMinMax(nums);
+      profile.min = min;
+      profile.max = max;
       profile.mean = mean;
       // Độ lệch chuẩn MẪU (n−1) như SPSS/R/pandas và như bảng "Mô tả"; skewness G1 hiệu chỉnh theo n.
       profile.std = n > 1 ? Math.sqrt(ss / (n - 1)) : 0;
@@ -2410,8 +2412,7 @@ export function getBoxStatsByGroup(rows: string[][], groupCol: string, valueCol:
 export function getHistogramBins(values: number[], binCount?: number): { binStart: number; binEnd: number; count: number }[] {
   const valid = values.filter((v) => !Number.isNaN(v));
   if (valid.length === 0) return [];
-  const min = Math.min(...valid);
-  const max = Math.max(...valid);
+  const [min, max] = safeMinMax(valid);
   const k = binCount ?? Math.min(20, Math.max(5, Math.ceil(Math.sqrt(valid.length))));
   const step = (max - min) / k || 1;
   const bins: { binStart: number; binEnd: number; count: number }[] = [];
@@ -2446,8 +2447,7 @@ export function binNumericForPie(
 ): { label: string; count: number; binStart: number; binEnd: number }[] {
   const valid = values.filter((v) => !Number.isNaN(v));
   if (valid.length === 0) return [];
-  const min = Math.min(...valid);
-  const max = Math.max(...valid);
+  const [min, max] = safeMinMax(valid);
   const breaks: number[] = customBreaks?.length
     ? [...customBreaks].sort((a, b) => a - b)
     : (() => {
@@ -3353,8 +3353,8 @@ export function computeTextStats(rows: string[][], col: string, topN: number = 1
     totalWords,
     uniqueWords,
     avgWordsPerRow: nRows ? totalWords / nRows : 0,
-    minWordsPerRow: wordsPerRow.length ? Math.min(...wordsPerRow) : 0,
-    maxWordsPerRow: wordsPerRow.length ? Math.max(...wordsPerRow) : 0,
+    minWordsPerRow: safeMin(wordsPerRow, 0),
+    maxWordsPerRow: safeMax(wordsPerRow, 0),
     wordFreq,
   };
 }
