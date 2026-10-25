@@ -2,6 +2,17 @@
 
 Tài liệu này liệt kê mọi vị trí trong Quantis đang dùng câu kiểu “sẽ được bổ sung” hoặc “tích hợp … sẽ”, và đề xuất phương án thực hiện cụ thể (client-side, backend R/Python, hoặc kết hợp).
 
+> **Cập nhật 25/10/2026 — tình trạng thực tế** (đối chiếu `main`, commit `a646810`; lần rà trước 12/10/2026). Tài liệu này là kế hoạch lịch sử (các số dòng `App.tsx:…` không còn đúng: `App.tsx` nay chỉ còn ~135 dòng, chức năng nằm ở `src/features/*`, `src/stores/*`, xem README). Kết quả đối chiếu với bản chạy thật:
+>
+> | Hạng mục | Tình trạng |
+> |----------|-----------|
+> | 2.1 Hồi quy & SEM | **Đã làm.** Hồi quy: OLS (kèm VIF), Logistic, Poisson, Ridge. SEM: Mediation, Moderation (chạy được trên trình duyệt), Path analysis, CFA, PLS-SEM (qua backend Python). **Dữ liệu bảng (panel) đã có** (tab *Dữ liệu bảng*: OLS gộp, Fixed Effects, Random Effects, Hausman; cần Python; sai số chuẩn cổ điển, chưa cluster/robust). Hồi quy đa cấp / time series **chưa có**. |
+> | 2.2 Machine learning | **Đã làm.** K-means, phân loại đa lớp One-vs-Rest logistic (confusion matrix, precision/recall/F1), feature importance, permutation importance. Random forest / XGBoost / cross-validation **chưa có**. |
+> | 2.3 Bayesian | **Một phần.** Chỉ có Beta-Binomial cho tỉ lệ (posterior, khoảng 95%). Normal-Normal, MCMC, Bayes Factor **chưa có**. |
+> | 2.4 Versioning & audit | **Chưa làm.** Mục *Versioning & audit* chỉ là trang thông báo; backend chưa lưu snapshot. Nội dung 2.4 dưới đây vẫn là đề xuất. |
+> | 2.5 AI hỗ trợ phương pháp | **Đã làm.** Tab *AI hướng dẫn* và nút hỏi AI ở các màn kết quả; backend proxy tới vLLM (`/api/quantis/ollama/v1`, model `qwen3.5-35b-a3b-int4`); địa chỉ upstream nội bộ chỉ quản trị viên thấy. |
+> | Ngoài kế hoạch gốc | **Đã làm thêm:** lớp dữ liệu kiểu SPSS (Variable View, nhãn giá trị, mã khuyết rời rạc + khoảng, điền khuyết hot-deck / MICE một lần), chuẩn bị dữ liệu thứ cấp (đổi tên, ép kiểu, công thức, log, ngoại lai IQR, xóa trùng), chú giải thuật ngữ (i), CI (tsc + vitest + pytest). Còn lại: MICE đa nhập liệu, kiểm thử mã khuyết Stata/SAS bằng file thật, Web Worker cho dữ liệu lớn — xem các issue #8, #10, #12 trên GitHub và README. |
+
 ---
 
 ## 1. Rà soát vị trí
