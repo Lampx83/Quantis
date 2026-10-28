@@ -490,9 +490,137 @@ def run_kruskal_wallis(rows: list, factor_col: str, value_col: str):
     }
 
 
-def run_ols(rows: list, y_col: str, x_cols: list):
+def run_ols(rows: list, y_col: str, x_cols: list, imputed_datasets: list | None = None):
     from statsmodels.regression.linear_model import OLS
     from statsmodels.tools import add_constant
+
+    if imputed_datasets and len(imputed_datasets) >= 2:
+        models = []
+        n_obs = None
+        for dataset in imputed_datasets:
+            try:
+                df_i = _rows_to_df(dataset)
+            except Exception:
+                return None
+            for c in [y_col] + x_cols:
+                if c not in df_i.columns:
+                    return None
+            df_sub = df_i[[y_col] + x_cols].copy().apply(pd.to_numeric, errors="coerce").dropna()
+            if len(df_sub) <= len(x_cols) + 1:
+                return None
+            if n_obs is None:
+                n_obs = len(df_sub)
+            y_i = df_sub[y_col]
+            X_i = add_constant(df_sub[x_cols])
+            try:
+                mod_i = OLS(y_i, X_i).fit()
+                models.append(mod_i)
+            except Exception:
+                return None
+
+        m = len(models)
+        if m < 2:
+            return None
+
+        var_list = [("const", "(Intercept)")] + [(c, c) for c in x_cols]
+        k = len(x_cols) + 1
+        nu_0 = float(max(1, n_obs - k))
+
+        coeff = {}
+        se = {}
+        t_stat = {}
+        p_val = {}
+        ci_lower = {}
+        ci_upper = {}
+        rubin_df = {}
+        within_var = {}
+        between_var = {}
+        fmi = {}
+
+        for var_sm, var_key in var_list:
+            betas = [float(mod.params[var_sm]) for mod in models]
+            bse_sqs = [float(mod.bse[var_sm]) ** 2 for mod in models]
+
+            beta_bar = float(sum(betas) / m)
+            u_bar = float(sum(bse_sqs) / m)
+            b = float(sum((beta_val - beta_bar) ** 2 for beta_val in betas) / (m - 1))
+            t = float(u_bar + (1.0 + 1.0 / m) * b)
+            rubin_se = float(math.sqrt(max(0.0, t)))
+
+            if b > 0.0 and u_bar > 0.0 and t > 0.0:
+                nu_m = (m - 1.0) * ((1.0 + u_bar / ((1.0 + 1.0 / m) * b)) ** 2)
+                gamma = ((1.0 + 1.0 / m) * b) / t
+                nu_obs = ((nu_0 + 1.0) / (nu_0 + 3.0)) * nu_0 * (1.0 - gamma)
+                if (nu_m + nu_obs) > 0.0:
+                    nu_adj = float((nu_m * nu_obs) / (nu_m + nu_obs))
+                else:
+                    nu_adj = nu_0
+            else:
+                nu_adj = nu_0
+
+            nu_adj = max(1.0, float(nu_adj))
+
+            t_val = (beta_bar / rubin_se) if rubin_se > 0.0 else 0.0
+            p_val_item = 2.0 * float(scipy_stats.t.sf(abs(t_val), df=nu_adj))
+            if math.isnan(p_val_item):
+                p_val_item = 0.0
+
+            try:
+                t_crit = float(scipy_stats.t.ppf(0.975, df=nu_adj))
+                ci_low = float(beta_bar - t_crit * rubin_se)
+                ci_up = float(beta_bar + t_crit * rubin_se)
+                if math.isnan(ci_low) or math.isinf(ci_low):
+                    ci_low = beta_bar
+                if math.isnan(ci_up) or math.isinf(ci_up):
+                    ci_up = beta_bar
+            except Exception:
+                ci_low = beta_bar
+                ci_up = beta_bar
+
+            if b > 0.0 and u_bar > 0.0:
+                r = ((1.0 + 1.0 / m) * b) / u_bar
+                fmi_val = float((r + 2.0 / (nu_adj + 3.0)) / (r + 1.0)) if (r + 1.0) > 0.0 else 0.0
+            else:
+                r = 0.0
+                fmi_val = 0.0
+            fmi_val = max(0.0, min(1.0, fmi_val))
+
+            coeff[var_key] = beta_bar
+            within_var[var_key] = u_bar
+            between_var[var_key] = b
+            se[var_key] = rubin_se
+            t_stat[var_key] = t_val
+            p_val[var_key] = p_val_item
+            ci_lower[var_key] = ci_low
+            ci_upper[var_key] = ci_up
+            rubin_df[var_key] = nu_adj
+            fmi[var_key] = fmi_val
+
+        return {
+            "coefficients": coeff,
+            "intercept": float(coeff["(Intercept)"]),
+            "r2": float(np.mean([mod.rsquared for mod in models])),
+            "adjR2": float(np.mean([mod.rsquared_adj for mod in models])),
+            "se": se,
+            "tStat": t_stat,
+            "pValue": p_val,
+            "ciLower": ci_lower,
+            "ciUpper": ci_upper,
+            "n": int(n_obs),
+            "df": float(nu_0),
+            "s2": float(np.mean([mod.mse_resid for mod in models])),
+            "yName": y_col,
+            "xNames": x_cols,
+            "rubinPooled": True,
+            "rubinDf": rubin_df,
+            "fmi": fmi,
+            "withinVar": within_var,
+            "betweenVar": between_var,
+        }
+
+    # Fallback to single dataset
+    if imputed_datasets and len(imputed_datasets) == 1:
+        rows = imputed_datasets[0]
 
     df = _rows_to_df(rows)
     for c in [y_col] + x_cols:
@@ -537,6 +665,7 @@ def run_ols(rows: list, y_col: str, x_cols: list):
         "s2": float(model.mse_resid),
         "yName": y_col,
         "xNames": x_cols,
+        "rubinPooled": False,
     }
 
 

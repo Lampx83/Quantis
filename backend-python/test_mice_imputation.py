@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from analysis_impl import run_mice_imputation
+from analysis_impl import run_mice_imputation, run_ols
 
 client = TestClient(app)
 
@@ -351,6 +351,223 @@ def test_mice_m_is_clamped():
     res_default = run_mice_imputation(rows, columns=["x", "y"])
     assert res_default["m"] == 5
     assert len(res_default["imputedDatasets"]) == 5
+
+
+def test_run_ols_rubin_pooling():
+    import math
+    import scipy.stats as stats
+
+    rng = np.random.default_rng(42)
+    m = 5
+    n = 20
+    header = ["y", "x1", "x2"]
+
+    datasets = []
+    for l in range(m):
+        x1 = rng.normal(10, 2, n)
+        x2 = rng.normal(5, 1, n)
+        # Varying noise across imputations to simulate imputed data variance
+        y = 3.0 + 2.0 * x1 - 1.5 * x2 + rng.normal(0, 1 + 0.3 * l, n)
+        data_rows = [[f"{y[i]:.4f}", f"{x1[i]:.4f}", f"{x2[i]:.4f}"] for i in range(n)]
+        datasets.append([header] + data_rows)
+
+    result = run_ols(rows=[], y_col="y", x_cols=["x1", "x2"], imputed_datasets=datasets)
+    assert result is not None
+    assert result["rubinPooled"] is True
+    assert result["yName"] == "y"
+    assert result["xNames"] == ["x1", "x2"]
+    assert result["n"] == n
+    assert result["df"] == float(n - 3)
+    assert "rubinDf" in result
+    assert "withinVar" in result
+    assert "betweenVar" in result
+    assert "fmi" in result
+
+    for var in ["(Intercept)", "x1", "x2"]:
+        assert var in result["coefficients"]
+        assert var in result["se"]
+        assert var in result["tStat"]
+        assert var in result["pValue"]
+        assert var in result["ciLower"]
+        assert var in result["ciUpper"]
+        assert var in result["rubinDf"]
+        assert var in result["withinVar"]
+        assert var in result["betweenVar"]
+        assert var in result["fmi"]
+
+        # Between variance should be positive due to variation across datasets
+        assert result["betweenVar"][var] > 0
+        assert result["withinVar"][var] > 0
+        # SE must be strictly greater than sqrt(withinVar) due to (1 + 1/m) * betweenVar > 0
+        assert result["se"][var] > math.sqrt(result["withinVar"][var])
+
+        # Degrees of freedom must be float > 0
+        nu_adj = result["rubinDf"][var]
+        assert isinstance(nu_adj, float)
+        assert nu_adj > 0
+
+        # t-statistic = beta_bar / SE
+        expected_t = result["coefficients"][var] / result["se"][var]
+        assert result["tStat"][var] == pytest.approx(expected_t, rel=1e-5)
+
+        # p-value = 2 * sf(|t|, df=nu_adj)
+        expected_p = 2.0 * float(stats.t.sf(abs(expected_t), df=nu_adj))
+        assert result["pValue"][var] == pytest.approx(expected_p, rel=1e-5)
+
+        # 95% Confidence interval
+        t_crit = float(stats.t.ppf(0.975, df=nu_adj))
+        expected_ci_lower = result["coefficients"][var] - t_crit * result["se"][var]
+        expected_ci_upper = result["coefficients"][var] + t_crit * result["se"][var]
+        assert result["ciLower"][var] == pytest.approx(expected_ci_lower, rel=1e-5)
+        assert result["ciUpper"][var] == pytest.approx(expected_ci_upper, rel=1e-5)
+
+        # FMI within [0, 1]
+        assert 0.0 <= result["fmi"][var] <= 1.0
+
+
+def test_run_ols_rubin_exact_math():
+    import math
+    import scipy.stats as stats
+    from statsmodels.regression.linear_model import OLS
+    from statsmodels.tools import add_constant
+
+    m = 3
+    n = 10
+    header = ["y", "x"]
+
+    # 3 datasets with distinct values
+    d1_data = [[1.0, 2.0], [2.1, 3.8], [3.0, 6.2], [4.2, 8.1], [5.0, 9.9],
+               [5.9, 12.1], [7.1, 14.0], [8.0, 16.2], [9.1, 18.1], [10.2, 19.8]]
+    d2_data = [[1.2, 2.0], [2.0, 3.8], [3.2, 6.2], [4.0, 8.1], [5.2, 9.9],
+               [6.1, 12.1], [6.9, 14.0], [8.2, 16.2], [8.9, 18.1], [10.0, 19.8]]
+    d3_data = [[0.9, 2.0], [2.2, 3.8], [2.9, 6.2], [4.3, 8.1], [4.9, 9.9],
+               [5.8, 12.1], [7.2, 14.0], [7.9, 16.2], [9.2, 18.1], [10.4, 19.8]]
+
+    datasets = [
+        [header] + [[str(v[0]), str(v[1])] for v in d1_data],
+        [header] + [[str(v[0]), str(v[1])] for v in d2_data],
+        [header] + [[str(v[0]), str(v[1])] for v in d3_data],
+    ]
+
+    # Manual calculation with statsmodels on each
+    models = []
+    for raw in [d1_data, d2_data, d3_data]:
+        df_raw = pd.DataFrame(raw, columns=["y", "x"])
+        X = add_constant(df_raw[["x"]])
+        y = df_raw["y"]
+        models.append(OLS(y, X).fit())
+
+    result = run_ols(rows=[], y_col="y", x_cols=["x"], imputed_datasets=datasets)
+    assert result is not None
+    assert result["rubinPooled"] is True
+
+    # Check pooled R2 and adjR2
+    expected_r2 = float(np.mean([m.rsquared for m in models]))
+    expected_adj_r2 = float(np.mean([m.rsquared_adj for m in models]))
+    expected_s2 = float(np.mean([m.mse_resid for m in models]))
+    assert result["r2"] == pytest.approx(expected_r2, rel=1e-5)
+    assert result["adjR2"] == pytest.approx(expected_adj_r2, rel=1e-5)
+    assert result["s2"] == pytest.approx(expected_s2, rel=1e-5)
+
+    k = 2  # const and x
+    nu_0 = n - k  # 8
+
+    for var_sm, var_key in [("const", "(Intercept)"), ("x", "x")]:
+        betas = [float(mod.params[var_sm]) for mod in models]
+        ses = [float(mod.bse[var_sm]) for mod in models]
+
+        beta_bar = sum(betas) / m
+        u_bar = sum(s ** 2 for s in ses) / m
+        b = sum((b_val - beta_bar) ** 2 for b_val in betas) / (m - 1)
+        t = u_bar + (1.0 + 1.0 / m) * b
+        se = math.sqrt(t)
+
+        nu_m = (m - 1.0) * (1.0 + u_bar / ((1.0 + 1.0 / m) * b)) ** 2
+        gamma = (1.0 + 1.0 / m) * b / t
+        nu_obs = ((nu_0 + 1.0) / (nu_0 + 3.0)) * nu_0 * (1.0 - gamma)
+        nu_adj = (nu_m * nu_obs) / (nu_m + nu_obs)
+
+        t_stat = beta_bar / se
+        p_val = 2.0 * float(stats.t.sf(abs(t_stat), df=nu_adj))
+        ci_lower = beta_bar - float(stats.t.ppf(0.975, df=nu_adj)) * se
+        ci_upper = beta_bar + float(stats.t.ppf(0.975, df=nu_adj)) * se
+        r = (1.0 + 1.0 / m) * b / u_bar
+        fmi = (r + 2.0 / (nu_adj + 3.0)) / (r + 1.0)
+
+        assert result["coefficients"][var_key] == pytest.approx(beta_bar, rel=1e-5)
+        assert result["withinVar"][var_key] == pytest.approx(u_bar, rel=1e-5)
+        assert result["betweenVar"][var_key] == pytest.approx(b, rel=1e-5)
+        assert result["se"][var_key] == pytest.approx(se, rel=1e-5)
+        assert result["rubinDf"][var_key] == pytest.approx(nu_adj, rel=1e-5)
+        assert result["tStat"][var_key] == pytest.approx(t_stat, rel=1e-5)
+        assert result["pValue"][var_key] == pytest.approx(p_val, rel=1e-5)
+        assert result["ciLower"][var_key] == pytest.approx(ci_lower, rel=1e-5)
+        assert result["ciUpper"][var_key] == pytest.approx(ci_upper, rel=1e-5)
+        assert result["fmi"][var_key] == pytest.approx(fmi, rel=1e-5)
+
+
+def test_ols_api_with_imputed_datasets():
+    header = ["y", "x1", "x2"]
+    d1 = [header] + [[str(i * 2.0 + (i % 2) * 0.5), str(i), str((i % 4) * 1.5 + 1.0)] for i in range(1, 15)]
+    d2 = [header] + [[str(i * 2.1 - (i % 2) * 0.3), str(i), str((i % 4) * 1.5 + 1.0)] for i in range(1, 15)]
+    datasets = [d1, d2]
+
+    # Test with snake_case imputed_datasets
+    payload = {
+        "rows": [],
+        "yCol": "y",
+        "xCols": ["x1", "x2"],
+        "imputed_datasets": datasets,
+    }
+    response = client.post("/api/quantis/analyze/ols", json=payload)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert "result" in data
+    res = data["result"]
+    assert res["rubinPooled"] is True
+    assert "rubinDf" in res
+    assert "withinVar" in res
+    assert "betweenVar" in res
+    assert "fmi" in res
+
+    # Test with camelCase imputedDatasets
+    payload_camel = {
+        "rows": [],
+        "yCol": "y",
+        "xCols": ["x1", "x2"],
+        "imputedDatasets": datasets,
+    }
+    response_camel = client.post("/api/quantis/analyze/ols", json=payload_camel)
+    assert response_camel.status_code == 200, response_camel.text
+    res_camel = response_camel.json()["result"]
+    assert res_camel["rubinPooled"] is True
+
+
+def test_run_ols_backward_compatibility():
+    header = ["y", "x1"]
+    rows = [header] + [[str(i * 2), str(i)] for i in range(1, 15)]
+
+    # Direct function call without imputed_datasets
+    res = run_ols(rows, "y", ["x1"])
+    assert res is not None
+    assert res.get("rubinPooled", False) is False
+    assert "coefficients" in res
+    assert "se" in res
+    assert "tStat" in res
+    assert "pValue" in res
+    assert "r2" in res
+
+    # API call without imputed_datasets
+    payload = {
+        "rows": rows,
+        "yCol": "y",
+        "xCols": ["x1"],
+    }
+    response = client.post("/api/quantis/analyze/ols", json=payload)
+    assert response.status_code == 200, response.text
+    api_res = response.json()["result"]
+    assert api_res.get("rubinPooled", False) is False
+
 
 
 if __name__ == "__main__":

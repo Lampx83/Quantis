@@ -132,9 +132,11 @@ class MancovaBody(BaseModel):
 
 
 class OLSBody(BaseModel):
-    rows: list[list[str]]
+    rows: list[list[Any]] = []
     yCol: str
     xCols: list[str]
+    imputed_datasets: list[list[list[Any]]] | None = None
+    imputedDatasets: list[list[list[Any]]] | None = None
 
 
 class PanelBody(BaseModel):
@@ -550,7 +552,8 @@ async def analyze_kruskal(body: AnovaBody):
 @router.post("/ols")
 async def analyze_ols(body: OLSBody):
     try:
-        result = run_ols(body.rows, body.yCol, body.xCols)
+        imputed_data = body.imputed_datasets if body.imputed_datasets is not None else body.imputedDatasets
+        result = run_ols(body.rows, body.yCol, body.xCols, imputed_datasets=imputed_data)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
         return {"result": result}
