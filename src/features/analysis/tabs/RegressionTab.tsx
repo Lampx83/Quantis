@@ -14,6 +14,7 @@ import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
+import { reconstructImputedRows } from "@/utils/sparseDelta";
 
 /**
  * Tái tạo m bảng dữ liệu từ Sparse Delta của ImputationMeta.
@@ -28,26 +29,9 @@ export function reconstructImputedDatasets(dataset: Dataset): string[][][] {
   const result: string[][][] = [];
   const { m, originalRows, sparsePatches } = meta;
   const colNames = dataset.columnNames || (originalRows[0] ?? []);
-  const hasHeader =
-    originalRows.length === dataset.rows + 1 ||
-    (colNames.length > 0 && originalRows[0]?.[0] === colNames[0]);
 
   for (let i = 1; i <= m; i++) {
-    const tableCopy = originalRows.map((row) => [...row]);
-    for (const [colName, patches] of Object.entries(sparsePatches)) {
-      let colIdx = colNames.indexOf(colName);
-      if (colIdx === -1 && originalRows[0]) {
-        colIdx = originalRows[0].indexOf(colName);
-      }
-      if (colIdx === -1) continue;
-      for (const patch of patches) {
-        const rowIdx = hasHeader ? patch.rowIndex + 1 : patch.rowIndex;
-        if (rowIdx >= 0 && rowIdx < tableCopy.length && patch.values[i - 1] !== undefined) {
-          tableCopy[rowIdx][colIdx] = patch.values[i - 1];
-        }
-      }
-    }
-    result.push(tableCopy);
+    result.push(reconstructImputedRows(originalRows, colNames, sparsePatches, i, dataset.rows));
   }
   return result;
 }

@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type { Dataset, VariableMetadata } from "@/types";
 import { ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
+import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { useSyncStore, canSyncToServer, persistsWorkspaceLocally } from "./useSyncStore";
 
 export interface DataState {
@@ -482,32 +483,13 @@ export const useDataStore = create<DataState>()(
           if (!target || !target.imputationMeta) return s;
           if (index < 0 || index > target.imputationMeta.m) return s;
 
-          const original = target.imputationMeta.originalRows;
-          let newRows: string[][];
-
-          if (index === 0) {
-            newRows = original.map((r) => [...r]);
-          } else {
-            newRows = original.map((r) => [...r]);
-            const hasHeader =
-              newRows.length === target.rows + 1 ||
-              (target.columnNames && newRows[0]?.[0] === target.columnNames[0]);
-
-            for (const [colName, patches] of Object.entries(target.imputationMeta.sparsePatches)) {
-              const colIdx = target.columnNames.indexOf(colName);
-              if (colIdx === -1) continue;
-              for (const patch of patches) {
-                const rowIdx = hasHeader ? patch.rowIndex + 1 : patch.rowIndex;
-                if (
-                  rowIdx >= 0 &&
-                  rowIdx < newRows.length &&
-                  patch.values[index - 1] !== undefined
-                ) {
-                  newRows[rowIdx][colIdx] = patch.values[index - 1];
-                }
-              }
-            }
-          }
+          const newRows = reconstructImputedRows(
+            target.imputationMeta.originalRows,
+            target.columnNames,
+            target.imputationMeta.sparsePatches,
+            index,
+            target.rows
+          );
 
           const previewLength =
             target.preview && target.preview.length < newRows.length && target.preview.length > 0
@@ -541,32 +523,13 @@ export const useDataStore = create<DataState>()(
           if (!target || !target.imputationMeta) return s;
           if (index < 0 || index > target.imputationMeta.m) return s;
 
-          const original = target.imputationMeta.originalRows;
-          let reconstructedRows: string[][];
-
-          if (index === 0) {
-            reconstructedRows = original.map((r) => [...r]);
-          } else {
-            reconstructedRows = original.map((r) => [...r]);
-            const hasHeader =
-              reconstructedRows.length === target.rows + 1 ||
-              (target.columnNames && reconstructedRows[0]?.[0] === target.columnNames[0]);
-
-            for (const [colName, patches] of Object.entries(target.imputationMeta.sparsePatches)) {
-              const colIdx = target.columnNames.indexOf(colName);
-              if (colIdx === -1) continue;
-              for (const patch of patches) {
-                const rowIdx = hasHeader ? patch.rowIndex + 1 : patch.rowIndex;
-                if (
-                  rowIdx >= 0 &&
-                  rowIdx < reconstructedRows.length &&
-                  patch.values[index - 1] !== undefined
-                ) {
-                  reconstructedRows[rowIdx][colIdx] = patch.values[index - 1];
-                }
-              }
-            }
-          }
+          const reconstructedRows = reconstructImputedRows(
+            target.imputationMeta.originalRows,
+            target.columnNames,
+            target.imputationMeta.sparsePatches,
+            index,
+            target.rows
+          );
 
           const previewLength =
             target.preview &&

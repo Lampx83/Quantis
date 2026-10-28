@@ -510,10 +510,14 @@ def run_ols(rows: list, y_col: str, x_cols: list, imputed_datasets: list | None 
                 return None
             if n_obs is None:
                 n_obs = len(df_sub)
+            elif len(df_sub) != n_obs:
+                return None
             y_i = df_sub[y_col]
             X_i = add_constant(df_sub[x_cols])
             try:
                 mod_i = OLS(y_i, X_i).fit()
+                if "const" not in mod_i.params or any(c not in mod_i.params for c in x_cols):
+                    return None
                 models.append(mod_i)
             except Exception:
                 return None
@@ -631,7 +635,12 @@ def run_ols(rows: list, y_col: str, x_cols: list, imputed_datasets: list | None 
         return None
     y = df[y_col]
     X = add_constant(df[x_cols])
-    model = OLS(y, X).fit()
+    try:
+        model = OLS(y, X).fit()
+        if "const" not in model.params or any(c not in model.params for c in x_cols):
+            return None
+    except Exception:
+        return None
     coeff = {"(Intercept)": float(model.params["const"])}
     for c in x_cols:
         coeff[c] = float(model.params[c])
@@ -2030,10 +2039,11 @@ def _compute_rubin_descriptive(
         # Fraction of missing information: fmi = (r + 2 / (nu_adj + 3)) / (r + 1) if (r + 1) > 0 else 0
         if b > 0.0 and u_bar > 0.0:
             r = ((1.0 + 1.0 / m) * b) / u_bar
-            fmi = float((r + 2.0 / (nu_adj + 3.0)) / (r + 1.0)) if (r + 1.0) > 0.0 else 0.0
+            fmi = max(0.0, min(1.0, float((r + 2.0 / (nu_adj + 3.0)) / (r + 1.0)))) if (r + 1.0) > 0.0 else 0.0
         else:
             r = 0.0
             fmi = 0.0
+        fmi = max(0.0, min(1.0, fmi))
 
         # 95% Confidence Interval
         try:

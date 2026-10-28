@@ -570,6 +570,39 @@ def test_run_ols_backward_compatibility():
 
 
 
+
+
+def test_run_ols_rubin_constant_predictor_returns_none():
+    """Finding 1: Zero-variance predictor causes add_constant to drop 'const', returning None gracefully."""
+    header = ["y", "x1", "x_const"]
+    # x_const has zero variance (all 5.0)
+    datasets = []
+    for _ in range(3):
+        rows = [header] + [
+            [str(float(i * 2 + 1)), str(float(i)), "5.0"]
+            for i in range(1, 15)
+        ]
+        datasets.append(rows)
+
+    # Imputed datasets mode
+    result_imputed = run_ols(rows=[], y_col="y", x_cols=["x1", "x_const"], imputed_datasets=datasets)
+    assert result_imputed is None, "Expected None when a predictor has zero variance in imputed datasets"
+
+    # Single dataset fallback mode
+    result_single = run_ols(rows=datasets[0], y_col="y", x_cols=["x1", "x_const"])
+    assert result_single is None, "Expected None when a predictor has zero variance in single dataset"
+
+
+def test_run_ols_rubin_mismatched_dataset_lengths_returns_none():
+    """Finding 2: Enforce identical observation counts across all m imputations."""
+    header = ["y", "x1"]
+    ds1 = [header] + [[str(float(i * 2)), str(float(i))] for i in range(1, 15)] # 14 rows
+    ds2 = [header] + [[str(float(i * 2)), str(float(i))] for i in range(1, 12)] # 11 rows
+
+    result = run_ols(rows=[], y_col="y", x_cols=["x1"], imputed_datasets=[ds1, ds2])
+    assert result is None, "Expected None when imputed datasets have mismatched lengths"
+
+
 if __name__ == "__main__":
     test_run_mice_imputation_basic()
     print("test_run_mice_imputation_basic passed!")
