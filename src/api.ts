@@ -556,14 +556,35 @@ export async function analyzeKruskalWallis(
 export async function analyzeOLS(
   rows: string[][],
   yCol: string,
-  xCols: string[]
-): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; adjR2: number; se: Record<string, number>; tStat: Record<string, number>; pValue: Record<string, number>; ciLower?: Record<string, number>; ciUpper?: Record<string, number>; n: number; df: number; s2: number; yName: string; xNames: string[] } | null> {
+  xCols: string[],
+  imputedDatasets?: string[][][]
+): Promise<{
+  coefficients: Record<string, number>;
+  intercept: number;
+  r2: number;
+  adjR2: number;
+  se: Record<string, number>;
+  tStat: Record<string, number>;
+  pValue: Record<string, number>;
+  ciLower?: Record<string, number>;
+  ciUpper?: Record<string, number>;
+  n: number;
+  df: number;
+  s2: number;
+  yName: string;
+  xNames: string[];
+  rubinPooled?: boolean;
+  rubinDf?: Record<string, number>;
+  fmi?: Record<string, number>;
+  withinVar?: Record<string, number>;
+  betweenVar?: Record<string, number>;
+} | null> {
   try {
     const res = await fetch(`${getANALYZE_BASE()}/ols`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      body: JSON.stringify({ rows, yCol, xCols }),
+      body: JSON.stringify({ rows, yCol, xCols, imputedDatasets }),
     });
     if (!res.ok) return null;
     const json = await res.json();

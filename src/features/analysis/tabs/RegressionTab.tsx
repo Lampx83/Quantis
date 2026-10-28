@@ -15,16 +15,59 @@ import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 
+/**
+ * Tái tạo m bảng dữ liệu từ Sparse Delta của ImputationMeta.
+ * Với mỗi index 1..m: sao chép originalRows, áp dụng patch.values[index - 1]
+ * cho các ô khuyết của các cột tương ứng, trả về m bảng string[][][].
+ */
+export function reconstructImputedDatasets(dataset: Dataset): string[][][] {
+  const meta = dataset.imputationMeta;
+  if (!meta || meta.m < 1 || !meta.sparsePatches || !meta.originalRows) {
+    return [];
+  }
+  const result: string[][][] = [];
+  const { m, originalRows, sparsePatches } = meta;
+  const colNames = dataset.columnNames || (originalRows[0] ?? []);
+  const hasHeader =
+    originalRows.length === dataset.rows + 1 ||
+    (colNames.length > 0 && originalRows[0]?.[0] === colNames[0]);
+
+  for (let i = 1; i <= m; i++) {
+    const tableCopy = originalRows.map((row) => [...row]);
+    for (const [colName, patches] of Object.entries(sparsePatches)) {
+      let colIdx = colNames.indexOf(colName);
+      if (colIdx === -1 && originalRows[0]) {
+        colIdx = originalRows[0].indexOf(colName);
+      }
+      if (colIdx === -1) continue;
+      for (const patch of patches) {
+        const rowIdx = hasHeader ? patch.rowIndex + 1 : patch.rowIndex;
+        if (rowIdx >= 0 && rowIdx < tableCopy.length && patch.values[i - 1] !== undefined) {
+          tableCopy[rowIdx][colIdx] = patch.values[i - 1];
+        }
+      }
+    }
+    result.push(tableCopy);
+  }
+  return result;
+}
+
 export interface RegressionTabProps {
   selectedDataset: Dataset | undefined;
   analysisBackendAvailable?: boolean;
   showToast: (msg: string) => void;
+  initialOlsYCol?: string;
+  initialOlsXSelected?: string[];
+  initialOlsResult?: OLSResult | null;
 }
 
 export function RegressionTab({
   selectedDataset,
   analysisBackendAvailable = false,
   showToast,
+  initialOlsYCol,
+  initialOlsXSelected,
+  initialOlsResult,
 }: RegressionTabProps) {
   const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
   const rows = selectedDataset ? getAnalysisRows(selectedDataset) : [];
@@ -48,9 +91,9 @@ export function RegressionTab({
     return uniq.length === 2 && uniq.every((v) => v === 0 || v === 1);
   });
 
-  const [olsYCol, setOlsYCol] = useState("");
-  const [olsXSelected, setOlsXSelected] = useState<string[]>([]);
-  const [olsResult, setOlsResult] = useState<OLSResult | null>(null);
+  const [olsYCol, setOlsYCol] = useState(initialOlsYCol ?? "");
+  const [olsXSelected, setOlsXSelected] = useState<string[]>(initialOlsXSelected ?? []);
+  const [olsResult, setOlsResult] = useState<OLSResult | null>(initialOlsResult ?? null);
   const [logYCol, setLogYCol] = useState("");
   const [logXSelected, setLogXSelected] = useState<string[]>([]);
   const [logResult, setLogResult] = useState<LogisticResult | null>(null);
@@ -102,10 +145,13 @@ export function RegressionTab({
 
   const runOLS = async () => {
     if (!olsYCol || olsXSelected.length === 0 || !rows.length) return;
+    const reconstructed = selectedDataset?.imputationMeta
+      ? reconstructImputedDatasets(selectedDataset)
+      : undefined;
     if (analysisBackendAvailable) {
       setRegressionLoading("ols");
       try {
-        const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected);
+        const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected, reconstructed);
         setOlsResult(res ?? null);
       } finally {
         setRegressionLoading(null);
@@ -178,6 +224,19 @@ export function RegressionTab({
           <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">
             {t("regressionExplainer.olsSectionTitle")}
           </h3>
+          {selectedDataset?.imputationMeta && (
+            <div
+              data-testid="mice-bundle-banner"
+              className="mb-3 rounded-md bg-emerald-100 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 p-2.5 text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2"
+            >
+              <span className="font-semibold px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 shrink-0">
+                MICE
+              </span>
+              <span>
+                {t("regressionExplainer.miceBanner", { m: selectedDataset.imputationMeta.m })}
+              </span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -244,12 +303,15 @@ export function RegressionTab({
                 <button
                   type="button"
                   onClick={() => {
+                    const isRubin = Boolean(olsResult.rubinPooled);
                     const headers = [
                       t("regressionExplainer.tableVariable"),
                       t("regressionExplainer.tableCoefficient"),
                       "SE",
                       "t",
+                      ...(isRubin ? [t("regressionExplainer.tableRubinDf"), t("regressionExplainer.tableFmi")] : []),
                       "p-value",
+                      ...(olsResult.ciLower ? ["95% CI"] : []),
                     ];
                     const reportRows = [
                       [
@@ -257,22 +319,52 @@ export function RegressionTab({
                         olsResult.intercept.toFixed(4),
                         olsResult.se["(Intercept)"]?.toFixed(4) ?? "",
                         olsResult.tStat["(Intercept)"]?.toFixed(4) ?? "",
+                        ...(isRubin
+                          ? [
+                              olsResult.rubinDf?.["(Intercept)"]?.toFixed(1) ?? "",
+                              olsResult.fmi?.["(Intercept)"] != null
+                                ? (olsResult.fmi["(Intercept)"] * 100).toFixed(1) + "%"
+                                : "-",
+                            ]
+                          : []),
                         olsResult.pValue["(Intercept)"] != null
                           ? olsResult.pValue["(Intercept)"] < 0.001
                             ? "< .001"
                             : olsResult.pValue["(Intercept)"].toFixed(4)
                           : "",
+                        ...(olsResult.ciLower
+                          ? [
+                              `[${olsResult.ciLower["(Intercept)"]?.toFixed(3) ?? "—"}, ${
+                                olsResult.ciUpper?.["(Intercept)"]?.toFixed(3) ?? "—"
+                              }]`,
+                            ]
+                          : []),
                       ],
                       ...olsResult.xNames.map((name) => [
                         name,
                         olsResult.coefficients[name]?.toFixed(4) ?? "",
                         olsResult.se[name]?.toFixed(4) ?? "",
                         olsResult.tStat[name]?.toFixed(4) ?? "",
+                        ...(isRubin
+                          ? [
+                              olsResult.rubinDf?.[name]?.toFixed(1) ?? "",
+                              olsResult.fmi?.[name] != null
+                                ? (olsResult.fmi[name] * 100).toFixed(1) + "%"
+                                : "-",
+                            ]
+                          : []),
                         olsResult.pValue[name] != null
                           ? olsResult.pValue[name]! < 0.001
                             ? "< .001"
                             : olsResult.pValue[name]!.toFixed(4)
                           : "",
+                        ...(olsResult.ciLower
+                          ? [
+                              `[${olsResult.ciLower[name]?.toFixed(3) ?? "—"}, ${
+                                olsResult.ciUpper?.[name]?.toFixed(3) ?? "—"
+                              }]`,
+                            ]
+                          : []),
                       ]),
                     ];
                     const tsv = [
@@ -341,6 +433,12 @@ export function RegressionTab({
                     <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}<InfoHint term="coefficient" /></th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">t</th>
+                    {olsResult.rubinPooled && (
+                      <>
+                        <th className="text-right p-2">{t("regressionExplainer.tableRubinDf")}</th>
+                        <th className="text-right p-2">{t("regressionExplainer.tableFmi")}</th>
+                      </>
+                    )}
                     <th className="text-right p-2">p-value<InfoHint term="pValue" /></th>
                     {olsResult.ciLower && <th className="text-right p-2">95% CI</th>}
                   </tr>
@@ -355,6 +453,18 @@ export function RegressionTab({
                     <td className="p-2 text-right">
                       {olsResult.tStat["(Intercept)"]?.toFixed(3) ?? "—"}
                     </td>
+                    {olsResult.rubinPooled && (
+                      <>
+                        <td className="p-2 text-right">
+                          {olsResult.rubinDf?.["(Intercept)"]?.toFixed(1) ?? "—"}
+                        </td>
+                        <td className="p-2 text-right">
+                          {olsResult.fmi?.["(Intercept)"] != null
+                            ? (olsResult.fmi["(Intercept)"] * 100).toFixed(1) + "%"
+                            : "-"}
+                        </td>
+                      </>
+                    )}
                     <td className="p-2 text-right">
                       {olsResult.pValue["(Intercept)"] != null
                         ? olsResult.pValue["(Intercept)"] < 0.001
@@ -384,6 +494,18 @@ export function RegressionTab({
                       <td className="p-2 text-right">
                         {olsResult.tStat[name]?.toFixed(3) ?? "—"}
                       </td>
+                      {olsResult.rubinPooled && (
+                        <>
+                          <td className="p-2 text-right">
+                            {olsResult.rubinDf?.[name]?.toFixed(1) ?? "—"}
+                          </td>
+                          <td className="p-2 text-right">
+                            {olsResult.fmi?.[name] != null
+                              ? (olsResult.fmi[name] * 100).toFixed(1) + "%"
+                              : "-"}
+                          </td>
+                        </>
+                      )}
                       <td className="p-2 text-right">
                         {olsResult.pValue[name] != null
                           ? olsResult.pValue[name] < 0.001
@@ -401,6 +523,11 @@ export function RegressionTab({
                   ))}
                 </tbody>
               </table>
+              {olsResult.rubinPooled && (
+                <p className="p-2 text-xs text-neutral-500 dark:text-neutral-400 border-t border-neutral-100 bg-neutral-50/50 dark:bg-neutral-800/50">
+                  * {t("regressionExplainer.rubinFootnote")}
+                </p>
+              )}
               <p className="p-2 text-neutral-600 dark:text-neutral-400 border-t border-neutral-100">
                 R² = {olsResult.r2.toFixed(4)}
                 {t("regressionExplainer.adjRSquaredLabel")}
@@ -436,6 +563,19 @@ export function RegressionTab({
           <h3 className="font-semibold text-neutral-800 dark:text-neutral-200 mb-3">
             {t("regressionExplainer.logisticSectionTitle")}
           </h3>
+          {selectedDataset?.imputationMeta && (
+            <div
+              data-testid="bundle-other-model-note"
+              className="mb-3 text-xs text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded px-2.5 py-1.5 flex items-center gap-1.5"
+            >
+              <span>ℹ️</span>
+              <span>
+                {t("regressionExplainer.bundleOtherModelsNote", {
+                  active: selectedDataset.imputationMeta.activeImputationIndex,
+                })}
+              </span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -620,6 +760,19 @@ export function RegressionTab({
           <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">
             {t("regressionExplainer.poissonDescription")}
           </p>
+          {selectedDataset?.imputationMeta && (
+            <div
+              data-testid="bundle-other-model-note"
+              className="mb-3 text-xs text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded px-2.5 py-1.5 flex items-center gap-1.5"
+            >
+              <span>ℹ️</span>
+              <span>
+                {t("regressionExplainer.bundleOtherModelsNote", {
+                  active: selectedDataset.imputationMeta.activeImputationIndex,
+                })}
+              </span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -771,6 +924,19 @@ export function RegressionTab({
           <p className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">
             {t("regressionExplainer.ridgeDescription")}
           </p>
+          {selectedDataset?.imputationMeta && (
+            <div
+              data-testid="bundle-other-model-note"
+              className="mb-3 text-xs text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded px-2.5 py-1.5 flex items-center gap-1.5"
+            >
+              <span>ℹ️</span>
+              <span>
+                {t("regressionExplainer.bundleOtherModelsNote", {
+                  active: selectedDataset.imputationMeta.activeImputationIndex,
+                })}
+              </span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-4 items-end mb-3">
             <div>
               <label className="block text-sm font-medium mb-1">
