@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useDataStore } from "../useDataStore";
-import type { Dataset, ImputationMeta } from "@/types";
+import type { Dataset } from "@/types";
 
 describe("Imputed Dataset Bundle Store Actions & Guards", () => {
   const createMockBundleDataset = (): Dataset => ({

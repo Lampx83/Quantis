@@ -3,7 +3,7 @@
  * Khi backend không có hoặc chưa đăng nhập: dữ liệu chỉ lưu localStorage.
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
-import type { Dataset, Workflow, VariableMetadata } from "./types";
+import type { Dataset, Workflow, VariableMetadata, RubinColumnStatistic } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
@@ -2032,11 +2032,24 @@ export interface MiceImputationResponse {
     max?: number | null;
   }>;
   iterations: number;
+  imputedDatasets?: string[][][];
+  m?: number;
+  rubinStatistics?: RubinColumnStatistic[];
 }
 
 /** Số vòng lặp MICE hợp lệ (khớp backend `MICE_MAX_ITER_LIMIT`). */
 export const MICE_MIN_ITER = 1;
 export const MICE_MAX_ITER = 50;
+
+/** Số bộ dữ liệu nội suy MICE hợp lệ (2 <= m <= 20). */
+export const MICE_MIN_M = 2;
+export const MICE_MAX_M = 20;
+
+export function clampMiceM(value: number | undefined | null, fallback = 5): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MICE_MAX_M, Math.max(MICE_MIN_M, n));
+}
 
 export function clampMiceIterations(value: number | undefined | null, fallback = 10): number {
   const n = Math.round(Number(value));
@@ -2051,7 +2064,8 @@ export async function analyzeMiceImputation(
   rows: string[][],
   columns?: string[],
   variables?: Record<string, VariableMetadata>,
-  maxIter?: number
+  maxIter?: number,
+  m?: number
 ): Promise<MiceImputationResponse> {
   const base = getANALYZE_BASE();
   if (!base) {
@@ -2066,6 +2080,7 @@ export async function analyzeMiceImputation(
       columns: columns && columns.length > 0 ? columns : undefined,
       variables,
       maxIter: clampMiceIterations(maxIter),
+      m: clampMiceM(m, 5),
     }),
   });
   if (!res.ok) {

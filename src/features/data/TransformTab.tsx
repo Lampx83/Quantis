@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { X, Loader2 } from "lucide-react";
-import type { Dataset } from "@/types";
+import type { Dataset, RubinColumnStatistic, ImputationSparseCell, ImputationMeta, VariableMetadata } from "@/types";
 import { numCell, getDataRows, getAnalysisRows, computeDescriptive } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
@@ -11,8 +11,8 @@ import {
   imputeMeanMedianMode,
   getModeFallbackColumns,
 } from "@/utils/missing-imputation";
-import { analyzeMiceImputation, clampMiceIterations, MICE_MIN_ITER, MICE_MAX_ITER, type MiceImputationResponse } from "@/api";
-import { ensureDatasetMetadata } from "@/utils/metadata";
+import { analyzeMiceImputation, clampMiceIterations, clampMiceM, MICE_MIN_ITER, MICE_MAX_ITER, MICE_MIN_M, MICE_MAX_M, type MiceImputationResponse } from "@/api";
+import { ensureDatasetMetadata, isMissingValue } from "@/utils/metadata";
 import { runHotDeckImputation } from "@/utils/imputation-worker-client";
 import {
   renameColumn,
@@ -63,6 +63,50 @@ export function HotDeckLoadingBanner({ onCancel }: { onCancel: () => void }) {
   );
 }
 
+
+/**
+ * Chuyển đổi m bảng dữ liệu đã điền (imputedDatasets) thành cấu trúc Sparse Delta sparsePatches.
+ * Chỉ lưu các ô ban đầu bị khuyết (hoặc khớp mã khuyết người dùng khai báo).
+ */
+export function convertSparsePatches(
+  originalRows: string[][],
+  imputedDatasets: string[][][],
+  imputedColumns: string[],
+  variables?: Record<string, VariableMetadata>
+): Record<string, ImputationSparseCell[]> {
+  const sparsePatches: Record<string, ImputationSparseCell[]> = {};
+  if (!originalRows || originalRows.length <= 1 || !imputedDatasets || imputedDatasets.length === 0) {
+    return sparsePatches;
+  }
+  const header = originalRows[0];
+  const m = imputedDatasets.length;
+
+  for (const colName of imputedColumns) {
+    const colIdx = header.indexOf(colName);
+    if (colIdx === -1) continue;
+    const meta = variables?.[colName];
+    const patches: ImputationSparseCell[] = [];
+
+    // Bỏ qua header ở dòng 0, duyệt qua các dòng dữ liệu 1..N
+    for (let r = 1; r < originalRows.length; r++) {
+      const origVal = originalRows[r][colIdx];
+      if (isMissingValue(origVal, meta)) {
+        const values: string[] = [];
+        for (let i = 0; i < m; i++) {
+          values.push(imputedDatasets[i]?.[r]?.[colIdx] ?? "");
+        }
+        patches.push({
+          rowIndex: r - 1, // 0-indexed trong dataRows (không tính header)
+          values,
+        });
+      }
+    }
+    sparsePatches[colName] = patches;
+  }
+
+  return sparsePatches;
+}
+
 export interface TransformTabProps {
   selectedDs: Dataset | null;
   setDatasets: Dispatch<SetStateAction<Dataset[]>>;
@@ -71,6 +115,15 @@ export interface TransformTabProps {
   initialShowChoiceModal?: boolean;
   initialColsMultiple?: string[];
   initialAction?: TransformAction;
+  initialMiceM?: number;
+  initialMiceMaxIter?: number;
+  initialLastTransformResult?: {
+    before: string[][];
+    after: string[][];
+    actionLabel: string;
+    stats?: MiceImputationResponse["statistics"];
+    rubinStats?: RubinColumnStatistic[];
+  } | null;
 }
 
 export function TransformTab({
@@ -81,6 +134,9 @@ export function TransformTab({
   initialShowChoiceModal = false,
   initialColsMultiple = [],
   initialAction,
+  initialMiceM,
+  initialMiceMaxIter,
+  initialLastTransformResult,
 }: TransformTabProps) {
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>(initialColsMultiple);
@@ -99,7 +155,8 @@ export function TransformTab({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [recodeCol, setRecodeCol] = useState("");
   const [recodeRules, setRecodeRules] = useState<{ from: string; to: string }[]>([{ from: "", to: "" }]);
-  const [miceMaxIter, setMiceMaxIter] = useState<number>(10);
+  const [miceM, setMiceM] = useState<number>(clampMiceM(initialMiceM, 5));
+  const [miceMaxIter, setMiceMaxIter] = useState<number>(clampMiceIterations(initialMiceMaxIter, 10));
   const [isMiceLoading, setIsMiceLoading] = useState<boolean>(false);
   const [miceError, setMiceError] = useState<string | null>(null);
   const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(initialShowChoiceModal);
@@ -108,7 +165,8 @@ export function TransformTab({
     after: string[][];
     actionLabel: string;
     stats?: MiceImputationResponse["statistics"];
-  } | null>(null);
+    rubinStats?: RubinColumnStatistic[];
+  } | null>(initialLastTransformResult ?? null);
   const [isHotDeckLoading, setIsHotDeckLoading] = useState(false);
   const selectedDsRef = useRef(selectedDs);
   selectedDsRef.current = selectedDs;
@@ -184,6 +242,8 @@ export function TransformTab({
     if (dataRows.length < 2) return;
     let newRows: string[][];
     let statsForMice: MiceImputationResponse["statistics"] | undefined = undefined;
+    let rubinStatsForMice: RubinColumnStatistic[] | undefined = undefined;
+    let imputationMetaForMice: ImputationMeta | undefined = undefined;
     let prepSuffix: string | null = null;
     if ((PREP_ACTIONS as string[]).includes(transformAction)) {
       const act = transformAction as PrepAction;
@@ -302,7 +362,8 @@ export function TransformTab({
             dataRows,
             columnsToApply,
             selectedDs.variables,
-            clampMiceIterations(miceMaxIter)
+            clampMiceIterations(miceMaxIter),
+            clampMiceM(miceM)
           );
           if (!res || !res.rows) {
             throw new Error(t("transformTab.mice.errEmptyResponse"));
@@ -310,6 +371,31 @@ export function TransformTab({
           newRows = res.rows;
           if (res.statistics) {
             statsForMice = res.statistics;
+          }
+          if (res.rubinStatistics) {
+            rubinStatsForMice = res.rubinStatistics;
+          }
+          if (res.imputedDatasets && res.imputedDatasets.length > 0) {
+            const mCount = res.m ?? res.imputedDatasets.length;
+            const patches = convertSparsePatches(
+              dataRows,
+              res.imputedDatasets,
+              res.imputedColumns || columnsToApply,
+              selectedDs.variables
+            );
+            const bundleId =
+              typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+                ? crypto.randomUUID()
+                : generateId();
+            imputationMetaForMice = {
+              bundleId,
+              m: mCount,
+              activeImputationIndex: 1,
+              imputedColumns: res.imputedColumns || columnsToApply,
+              rubinStatistics: res.rubinStatistics,
+              sparsePatches: patches,
+              originalRows: dataRows,
+            };
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -372,7 +458,7 @@ export function TransformTab({
         : transformAction === "fill_hot_deck"
         ? " (hot-deck)"
         : transformAction === "fill_mice"
-        ? " (MICE)"
+        ? ` (MICE m=${clampMiceM(miceM)})`
         : t("transformTab.suffixDefault"));
 
     const beforeSnapshot = dataRows.map((r) => [...r]);
@@ -381,6 +467,7 @@ export function TransformTab({
       after: newRows,
       actionLabel: suffix,
       stats: statsForMice,
+      rubinStats: rubinStatsForMice,
     });
 
     const newHeader = newRows[0];
@@ -435,6 +522,8 @@ export function TransformTab({
         data: newRows,
         variables: baseVariables,
         updatedAt: now,
+        readOnly: transformAction === "fill_mice" ? true : selectedDs.readOnly,
+        imputationMeta: transformAction === "fill_mice" && imputationMetaForMice ? imputationMetaForMice : selectedDs.imputationMeta,
       });
       setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
       setShowTransformChoiceModal(false);
@@ -452,6 +541,8 @@ export function TransformTab({
         sourceFormat: selectedDs.sourceFormat,
         createdAt: now,
         updatedAt: now,
+        readOnly: transformAction === "fill_mice" ? true : undefined,
+        imputationMeta: transformAction === "fill_mice" ? imputationMetaForMice : undefined,
       });
       setDatasets((prev) => [...prev, newDs]);
       onSelectDataset(id);
@@ -572,6 +663,19 @@ export function TransformTab({
       )}
       {transformAction === "fill_mice" && (
         <div className="flex flex-wrap gap-4 items-center mb-4 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
+              {t("transformTab.mice.mLabel")}
+            </label>
+            <input
+              type="number"
+              min={MICE_MIN_M}
+              max={MICE_MAX_M}
+              value={miceM}
+              onChange={(e) => setMiceM(clampMiceM(parseInt(e.target.value, 10), 5))}
+              className="rounded-lg border border-sky-300 dark:border-sky-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm w-28 font-mono"
+            />
+          </div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
               {t("transformTab.mice.maxIterLabel")}
@@ -728,7 +832,45 @@ export function TransformTab({
             {" → "}
             {t("transformTab.afterLabel")} <strong>{lastTransformResult.after.length - 1}</strong> {t("transformTab.rowsUnit")} × <strong>{lastTransformResult.after[0]?.length ?? 0}</strong> {t("transformTab.columnsUnit")}
           </p>
-          {lastTransformResult.stats && lastTransformResult.stats.length > 0 && (
+          {lastTransformResult.rubinStats && lastTransformResult.rubinStats.length > 0 ? (
+            <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 p-3 overflow-x-auto">
+              <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-200 uppercase tracking-wider mb-2">
+                {t("transformTab.mice.rubinReportTitle")}
+              </h4>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300">
+                    <th className="text-left py-1 px-2 font-medium">{t("transformTab.mice.colVariable")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colMissingCount")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colOriginalMeanRubin")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colPooledMean")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colRubinSe")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colWithinVar")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colBetweenVar")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colDf")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colFmi")}</th>
+                    <th className="text-right py-1 px-2 font-medium">{t("transformTab.mice.colCi95")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lastTransformResult.rubinStats.map((st) => (
+                    <tr key={st.column} className="border-b border-sky-100 dark:border-sky-900/40">
+                      <td className="py-1 px-2 font-medium text-neutral-800 dark:text-neutral-200">{st.column}</td>
+                      <td className="py-1 px-2 text-right text-red-600 dark:text-red-400 font-medium">{st.missingCount}</td>
+                      <td className="py-1 px-2 text-right">{st.originalMean != null ? st.originalMean.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right font-semibold text-sky-700 dark:text-sky-300">{st.pooledMean != null ? st.pooledMean.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right font-medium">{st.rubinSe != null ? st.rubinSe.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.withinVariance != null ? st.withinVariance.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.betweenVariance != null ? st.betweenVariance.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.df != null ? st.df.toFixed(2) : "—"}</td>
+                      <td className="py-1 px-2 text-right">{st.fmi != null ? `${(st.fmi * 100).toFixed(1)}%` : "—"}</td>
+                      <td className="py-1 px-2 text-right font-mono">{st.ciLower != null && st.ciUpper != null ? `[${st.ciLower.toFixed(2)}, ${st.ciUpper.toFixed(2)}]` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : lastTransformResult.stats && lastTransformResult.stats.length > 0 ? (
             <div className="rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20 p-3 overflow-x-auto">
               <h4 className="text-xs font-semibold text-sky-900 dark:text-sky-200 uppercase tracking-wider mb-2">
                 {t("transformTab.mice.reportTitle")}
@@ -760,7 +902,7 @@ export function TransformTab({
                 </tbody>
               </table>
             </div>
-          )}
+          ) : null}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20 overflow-hidden">
               <div className="px-3 py-2 border-b border-amber-200 dark:border-amber-800 bg-amber-100/80 dark:bg-amber-900/40 font-medium text-amber-900 dark:text-amber-100 text-sm">
