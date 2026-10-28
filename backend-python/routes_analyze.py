@@ -71,6 +71,9 @@ class MiceImputeBody(BaseModel):
     columns: list[str] | None = None
     variables: dict[str, Any] | None = None
     maxIter: int | None = 10
+    m: int | None = 5
+    randomState: int | None = None
+    random_state: int | None = 42
 
 
 class RowsBody(BaseModel):
@@ -1192,11 +1195,14 @@ async def analyze_ztest_two_means(body: ZTestTwoMeansBody):
 @router.post("/impute-mice")
 async def analyze_impute_mice(body: MiceImputeBody):
     try:
+        rand_seed = body.randomState if body.randomState is not None else (body.random_state if body.random_state is not None else 42)
         result = run_mice_imputation(
             rows=body.rows,
             columns=body.columns,
             variables=body.variables,
             max_iter=body.maxIter if body.maxIter is not None else 10,
+            m=body.m if body.m is not None else 5,
+            random_state=rand_seed,
         )
         if result is None:
             raise HTTPException(status_code=400, detail="Không thể thực hiện nội suy MICE")

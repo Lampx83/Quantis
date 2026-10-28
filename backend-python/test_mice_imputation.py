@@ -3,6 +3,7 @@ Test suite for MICE Imputation endpoint and analysis_impl.py
 """
 import numpy as np
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 from main import app
 from analysis_impl import run_mice_imputation
@@ -199,6 +200,159 @@ def test_mice_max_iter_is_clamped():
     assert result["iterations"] >= 1
 
 
+def test_run_mice_imputation_m_datasets_distinct():
+    # Multi-variable dataset with missing values in column Y
+    rows = [
+        ["X", "Y"],
+        ["1.0", "2.0"],
+        ["2.0", "4.1"],
+        ["3.0", "5.9"],
+        ["4.0", "8.2"],
+        ["5.0", "10.1"],
+        ["6.0", ""],
+        ["7.0", ""],
+        ["8.0", "16.0"],
+        ["9.0", "18.0"],
+        ["10.0", "20.0"],
+    ]
+    variables = {
+        "X": {"measure": "scale", "type": "numeric", "decimals": 1},
+        "Y": {"measure": "scale", "type": "numeric", "decimals": 2},
+    }
+    result = run_mice_imputation(rows, columns=["X", "Y"], variables=variables, max_iter=10, m=3, random_state=42)
+    assert result is not None
+    assert "imputedDatasets" in result
+    assert len(result["imputedDatasets"]) == 3
+    assert result["m"] == 3
+    assert "rubinStatistics" in result
+
+    # Backward compatibility
+    assert "rows" in result
+    assert result["rows"] == result["imputedDatasets"][0]
+    assert "statistics" in result
+
+    # Check that datasets are distinct in the imputed cells (betweenVariance > 0)
+    d0 = result["imputedDatasets"][0]
+    d1 = result["imputedDatasets"][1]
+    d2 = result["imputedDatasets"][2]
+    # Check that row 6 or row 7 Y value differs between datasets
+    y_vals_r6 = {d0[6][1], d1[6][1], d2[6][1]}
+    y_vals_r7 = {d0[7][1], d1[7][1], d2[7][1]}
+    assert len(y_vals_r6) > 1 or len(y_vals_r7) > 1
+
+    # Check Rubin statistics for Y
+    stat_y = next(s for s in result["rubinStatistics"] if s["column"] == "Y")
+    assert stat_y["missingCount"] == 2
+    assert stat_y["betweenVariance"] > 0
+    assert stat_y["totalVariance"] > stat_y["withinVariance"]
+    assert stat_y["rubinSe"] > 0
+    assert stat_y["df"] > 0
+    assert 0 <= stat_y["fmi"] <= 1
+    assert stat_y["ciLower"] < stat_y["pooledMean"] < stat_y["ciUpper"]
+
+
+def test_rubin_descriptive_statistics_formulas():
+    from analysis_impl import _compute_rubin_descriptive
+    import scipy.stats as stats
+    import math
+
+    # Reference data: m = 3 datasets, n = 5 rows
+    d1 = pd.DataFrame({"Y": [1.0, 2.0, 3.0, 4.0, 5.0]})
+    d2 = pd.DataFrame({"Y": [1.2, 2.1, 2.9, 4.2, 5.1]})
+    d3 = pd.DataFrame({"Y": [0.9, 1.9, 3.1, 3.9, 4.9]})
+    orig = pd.DataFrame({"Y": [1.0, np.nan, 3.0, np.nan, 5.0]})
+
+    m = 3
+    n = 5
+    y_bars = [float(d1["Y"].mean()), float(d2["Y"].mean()), float(d3["Y"].mean())]
+    s_sqs = [float(d1["Y"].var(ddof=1)), float(d2["Y"].var(ddof=1)), float(d3["Y"].var(ddof=1))]
+    q_bar = float(np.mean(y_bars))
+    u_bar = float(np.mean([s / n for s in s_sqs]))
+    b = float(sum((y - q_bar) ** 2 for y in y_bars) / (m - 1))
+    t = float(u_bar + (1.0 + 1.0 / m) * b)
+    rubin_se = float(math.sqrt(t))
+
+    nu_m = (m - 1.0) * (1.0 + u_bar / ((1.0 + 1.0 / m) * b)) ** 2
+    nu_0 = n - 1.0
+    gamma = (1.0 + 1.0 / m) * b / t
+    nu_obs = ((nu_0 + 1.0) / (nu_0 + 3.0)) * nu_0 * (1.0 - gamma)
+    nu_adj = float((nu_m * nu_obs) / (nu_m + nu_obs))
+
+    r = (1.0 + 1.0 / m) * b / u_bar
+    fmi = float((r + 2.0 / (nu_adj + 3.0)) / (r + 1.0))
+
+    t_crit = float(stats.t.ppf(0.975, df=nu_adj))
+    ci_lower = float(q_bar - t_crit * rubin_se)
+    ci_upper = float(q_bar + t_crit * rubin_se)
+
+    stats_list = _compute_rubin_descriptive([d1, d2, d3], orig)
+    assert len(stats_list) == 1
+    res = stats_list[0]
+
+    assert res["column"] == "Y"
+    assert res["missingCount"] == 2
+    assert res["originalMean"] == pytest.approx(3.0)
+    assert res["originalStd"] == pytest.approx(2.0)
+    assert res["pooledMean"] == pytest.approx(q_bar, rel=1e-5)
+    assert res["withinVariance"] == pytest.approx(u_bar, rel=1e-5)
+    assert res["betweenVariance"] == pytest.approx(b, rel=1e-5)
+    assert res["totalVariance"] == pytest.approx(t, rel=1e-5)
+    assert res["rubinSe"] == pytest.approx(rubin_se, rel=1e-5)
+    assert res["df"] == pytest.approx(nu_adj, rel=1e-5)
+    assert res["fmi"] == pytest.approx(fmi, rel=1e-5)
+    assert res["ciLower"] == pytest.approx(ci_lower, rel=1e-5)
+    assert res["ciUpper"] == pytest.approx(ci_upper, rel=1e-5)
+
+
+def test_mice_api_endpoint_with_m():
+    payload = {
+        "rows": [
+            ["X", "Y"],
+            ["1", "2"],
+            ["2", "4"],
+            ["3", ""],
+            ["4", "8"],
+            ["5", "10"],
+            ["6", ""],
+        ],
+        "columns": ["X", "Y"],
+        "m": 3,
+        "maxIter": 10,
+    }
+    response = client.post("/api/quantis/analyze/impute-mice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "imputedDatasets" in data
+    assert len(data["imputedDatasets"]) == 3
+    assert data["m"] == 3
+    assert "rubinStatistics" in data
+    assert len(data["rubinStatistics"]) == 2
+
+    # Backward compatibility
+    assert "rows" in data
+    assert data["rows"] == data["imputedDatasets"][0]
+    assert "statistics" in data
+    assert len(data["statistics"]) == 2
+
+
+def test_mice_m_is_clamped():
+    rows = [["x", "y"]] + [[str(i), str(2 * i) if i != 3 else ""] for i in range(1, 10)]
+    # m = 0 should clamp to 2
+    res_min = run_mice_imputation(rows, columns=["x", "y"], m=0)
+    assert res_min["m"] == 2
+    assert len(res_min["imputedDatasets"]) == 2
+
+    # m = 100 should clamp to 20
+    res_max = run_mice_imputation(rows, columns=["x", "y"], m=100)
+    assert res_max["m"] == 20
+    assert len(res_max["imputedDatasets"]) == 20
+
+    # m omitted should default to 5
+    res_default = run_mice_imputation(rows, columns=["x", "y"])
+    assert res_default["m"] == 5
+    assert len(res_default["imputedDatasets"]) == 5
+
+
 if __name__ == "__main__":
     test_run_mice_imputation_basic()
     print("test_run_mice_imputation_basic passed!")
@@ -206,4 +360,10 @@ if __name__ == "__main__":
     print("test_run_mice_imputation_with_discrete_missing_codes passed!")
     test_mice_impute_api_endpoint()
     print("test_mice_impute_api_endpoint passed!")
+    test_run_mice_imputation_m_datasets_distinct()
+    print("test_run_mice_imputation_m_datasets_distinct passed!")
+    test_rubin_descriptive_statistics_formulas()
+    print("test_rubin_descriptive_statistics_formulas passed!")
+    test_mice_api_endpoint_with_m()
+    print("test_mice_api_endpoint_with_m passed!")
     print("All MICE tests passed!")
