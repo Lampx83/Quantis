@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useDataStore } from "@/stores/useDataStore";
-import { setLocale } from "@/i18n";
+import { setLocale, t } from "@/i18n";
 import type { Dataset } from "@/types";
 import { DataGrid } from "../DataGrid";
 import { BundleNavigationBar, generateBundleCsv } from "../BundleNavigationBar";
@@ -79,7 +79,7 @@ describe("Task 5: Bundle Navigation Bar & Imputed Cell Highlighting", () => {
     const html = renderToStaticMarkup(<BundleNavigationBar dataset={ds} />);
 
     // Should contain original button and buttons for 1..5
-    expect(html).toContain("Gốc (m=0)");
+    expect(html).toContain(t("dataGrid.bundleOriginal"));
     expect(html).toContain("Bộ 1");
     expect(html).toContain("Bộ 2");
     expect(html).toContain("Bộ 3");
@@ -129,7 +129,7 @@ describe("Task 5: Bundle Navigation Bar & Imputed Cell Highlighting", () => {
     const htmlEn = renderToStaticMarkup(<BundleNavigationBar dataset={ds} />);
     expect(htmlEn).toContain("Read-only (MICE Bundle)");
     expect(htmlEn).toContain("Clone to edit");
-    expect(htmlEn).toContain("Original (m=0)");
+    expect(htmlEn).toContain(t("dataGrid.bundleOriginal"));
     expect(htmlEn).toContain("Set 1");
   });
 
@@ -224,7 +224,7 @@ describe("Task 5: Bundle Navigation Bar & Imputed Cell Highlighting", () => {
       />
     );
 
-    expect(html).toContain("Gốc (m=0)");
+    expect(html).toContain(t("dataGrid.bundleOriginal"));
     expect(html).toContain("Chỉ đọc (MICE Bundle)");
     expect(html).toContain("Nhân bản để chỉnh sửa");
   });

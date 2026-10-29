@@ -192,7 +192,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
   it("provides bilingual localization for MICE parameters, descriptions, and reports", () => {
     // English verification
     setLocale("en");
-    expect(t("transformTab.mice.maxIterLabel")).toBe("Maximum iterations (max_iter)");
+    expect(t("transformTab.mice.maxIterLabel")).toBe("Maximum iterations");
     expect(t("transformTab.mice.loading")).toBe("Executing MICE imputation via Python backend...");
     expect(t("transformTab.processing")).toBe("Processing...");
     expect(t("transformTab.mice.reportTitle")).toBe("MICE Report: Pre & Post Imputation Statistics");
@@ -204,7 +204,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
 
     // Vietnamese verification
     setLocale("vi");
-    expect(t("transformTab.mice.maxIterLabel")).toBe("Số vòng lặp tối đa (max_iter)");
+    expect(t("transformTab.mice.maxIterLabel")).toBe("Số vòng lặp tối đa");
     expect(t("transformTab.mice.loading")).toBe("Đang thực thi nội suy MICE qua Python backend...");
     expect(t("transformTab.processing")).toBe("Đang xử lý...");
     expect(t("transformTab.mice.reportTitle")).toBe("Báo cáo MICE: Thống kê trước và sau nội suy");
