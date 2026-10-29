@@ -84,6 +84,12 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     expect(html).toContain('max="20"');
     expect(html).toContain('value="5"');
 
+    // Kiểm tra info icons kích hoạt popover giải thích (MICE, m, max_iter)
+    expect(html).toContain('data-testid="info-hint-mice"');
+    expect(html).toContain('data-testid="info-hint-miceM"');
+    expect(html).toContain('data-testid="info-hint-miceMaxIter"');
+    expect(html).not.toContain("text-xs text-sky-700");
+
     // Clamping logic
     expect(api.clampMiceM(1)).toBe(2);
     expect(api.clampMiceM(25)).toBe(20);

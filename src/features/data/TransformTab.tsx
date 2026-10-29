@@ -641,6 +641,7 @@ export function TransformTab({
           <option value="outlier_iqr">{t("transformTab.actionOutlierIqr")}</option>
           <option value="dedupe">{t("transformTab.actionDedupe")}</option>
         </select>
+        {transformAction === "fill_mice" && <InfoHint term="mice" className="mb-3" />}
         {transformAction === "z_score" && <InfoHint term="zScore" className="mb-3" />}
         {transformAction === "outlier_iqr" && <InfoHint term="iqr" className="mb-3" />}
       </div>
@@ -718,8 +719,9 @@ export function TransformTab({
       {transformAction === "fill_mice" && (
         <div className="flex flex-wrap gap-4 items-center mb-4 p-3 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-sky-950/20">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
-              {t("transformTab.mice.mLabel")}
+            <label className="flex items-center text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
+              <span>{t("transformTab.mice.mLabel")}</span>
+              <InfoHint term="miceM" />
             </label>
             <input
               type="number"
@@ -731,8 +733,9 @@ export function TransformTab({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
-              {t("transformTab.mice.maxIterLabel")}
+            <label className="flex items-center text-xs font-semibold uppercase tracking-wider text-sky-900 dark:text-sky-200 mb-1">
+              <span>{t("transformTab.mice.maxIterLabel")}</span>
+              <InfoHint term="miceMaxIter" />
             </label>
             <input
               type="number"
@@ -742,9 +745,6 @@ export function TransformTab({
               onChange={(e) => setMiceMaxIter(clampMiceIterations(parseInt(e.target.value, 10), 10))}
               className="rounded-lg border border-sky-300 dark:border-sky-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm w-28 font-mono"
             />
-          </div>
-          <div className="text-xs text-sky-700 dark:text-sky-300 max-w-lg">
-            {t("transformTab.mice.description")}
           </div>
         </div>
       )}
