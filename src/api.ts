@@ -2086,7 +2086,8 @@ export async function analyzeMiceImputation(
   columns?: string[],
   variables?: Record<string, VariableMetadata>,
   maxIter?: number,
-  m?: number
+  m?: number,
+  signal?: AbortSignal
 ): Promise<MiceImputationResponse> {
   const base = getANALYZE_BASE();
   if (!base) {
@@ -2096,6 +2097,7 @@ export async function analyzeMiceImputation(
     method: "POST",
     credentials: "include",
     headers: getHeaders(),
+    signal,
     body: JSON.stringify({
       rows,
       columns: columns && columns.length > 0 ? columns : undefined,

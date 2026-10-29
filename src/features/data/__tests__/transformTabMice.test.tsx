@@ -4,6 +4,7 @@ import { TransformTab, convertSparsePatches } from "../TransformTab";
 import { useDataStore } from "@/stores/useDataStore";
 import * as api from "@/api";
 import { setLocale, t } from "@/i18n";
+import { useUIStore } from "@/stores";
 import type { Dataset, RubinColumnStatistic } from "@/types";
 
 vi.mock("@/utils/imputation-worker-client", () => ({
@@ -256,7 +257,8 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
       ["INCOME"],
       sampleDatasetWithMissing.variables,
       expect.any(Number),
-      3
+      3,
+      expect.anything()
     );
 
     const datasets = useDataStore.getState().datasets;
@@ -335,5 +337,155 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     expect(htmlEn).toContain(t("transformTab.mice.colDf"));
     expect(htmlEn).toContain(t("transformTab.mice.colFmi"));
     expect(htmlEn).toContain(t("transformTab.mice.colCi95"));
+  });
+
+  it("4. warns needFullData and disables apply button when dataset has only preview", () => {
+    const previewOnlyDs: Dataset = {
+      ...sampleDatasetWithMissing,
+      id: "ds_preview_only",
+      rows: 50,
+      data: [
+        ["ID", "INCOME", "GENDER"],
+        ["1", "1000", "Nam"],
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={previewOnlyDs}
+        setDatasets={useDataStore.getState().setDatasets}
+        onSelectDataset={vi.fn()}
+        initialAction="fill_mice"
+        initialColsMultiple={["INCOME"]}
+      />
+    );
+
+    expect(html).toContain(t("transformTab.mice.needFullData"));
+    expect(html).toContain("disabled");
+  });
+
+  it("5. shows toast noMissing and stops early without opening choice modal when selected variables have no missing cells", () => {
+    const showToastSpy = vi.fn();
+    useUIStore.setState({ showToast: showToastSpy });
+
+    const noMissingDs: Dataset = {
+      ...sampleDatasetWithMissing,
+      id: "ds_no_missing",
+      preview: [
+        ["ID", "INCOME", "GENDER"],
+        ["1", "1000", "Nam"],
+        ["2", "1200", "Nữ"],
+      ],
+      data: [
+        ["ID", "INCOME", "GENDER"],
+        ["1", "1000", "Nam"],
+        ["2", "1200", "Nữ"],
+      ],
+      rows: 2,
+    };
+
+    let rendered: any = null;
+    function Harness() {
+      rendered = TransformTab({
+        selectedDs: noMissingDs,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "fill_mice",
+        initialColsMultiple: ["INCOME"],
+      });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+
+    const buttons: any[] = [];
+    function collect(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collect);
+      }
+    }
+    collect(rendered);
+
+    const applyBtn = buttons.find((b) => String(b.props?.children).includes(t("transformTab.applyButton")));
+    expect(applyBtn).toBeDefined();
+
+    applyBtn.props.onClick();
+
+    expect(showToastSpy).toHaveBeenCalledWith(t("transformTab.mice.noMissing"));
+  });
+
+  it("6. shows replaceConfirm modal when running MICE overwrite on dataset that already has imputationMeta", () => {
+    const bundleDs: Dataset = {
+      ...sampleDatasetWithMissing,
+      imputationMeta: {
+        bundleId: "bundle_existing",
+        m: 5,
+        activeImputationIndex: 1,
+        imputedColumns: ["INCOME"],
+        originalRows: sampleDatasetWithMissing.data!,
+        sparsePatches: {},
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={bundleDs}
+        setDatasets={useDataStore.getState().setDatasets}
+        onSelectDataset={vi.fn()}
+        initialAction="fill_mice"
+        initialColsMultiple={["INCOME"]}
+        initialReplaceConfirm={true}
+      />
+    );
+
+    expect(html).toContain(t("transformTab.mice.replaceConfirmTitle"));
+    expect(html).toContain(t("transformTab.mice.replaceConfirmBody"));
+    expect(html).toContain(t("transformTab.mice.replaceConfirmOk"));
+  });
+
+  it("7. shows invalidateConfirm modal when running other transform overwrite on dataset that has imputationMeta", () => {
+    const bundleDs: Dataset = {
+      ...sampleDatasetWithMissing,
+      imputationMeta: {
+        bundleId: "bundle_existing",
+        m: 5,
+        activeImputationIndex: 1,
+        imputedColumns: ["INCOME"],
+        originalRows: sampleDatasetWithMissing.data!,
+        sparsePatches: {},
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={bundleDs}
+        setDatasets={useDataStore.getState().setDatasets}
+        onSelectDataset={vi.fn()}
+        initialAction="drop_missing"
+        initialColsMultiple={["INCOME"]}
+        initialInvalidateConfirm={true}
+      />
+    );
+
+    expect(html).toContain(t("mi.invalidateTitle"));
+    expect(html).toContain(t("mi.invalidateBody", { m: 5 }));
+    expect(html).toContain(t("mi.invalidateConfirm"));
+  });
+
+  it("8. renders MICE loading spinner with cancel button", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={useDataStore.getState().setDatasets}
+        onSelectDataset={vi.fn()}
+        initialAction="fill_mice"
+        initialColsMultiple={["INCOME"]}
+        initialIsMiceLoading={true}
+      />
+    );
+    expect(html).toContain(t("transformTab.mice.loading"));
+    expect(html).toContain(t("transformTab.cancelButton"));
   });
 });

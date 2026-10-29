@@ -4,6 +4,7 @@ import type { Dataset, RubinColumnStatistic, ImputationSparseCell, ImputationMet
 import { numCell, getDataRows, getAnalysisRows, computeDescriptive } from "@/utils/stats";
 import { generateId } from "@/utils/helpers";
 import { t, aiAnswerLangHint } from "@/i18n";
+import { useUIStore } from "@/stores";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint } from "@/components/common/InfoHint";
 import {
@@ -117,6 +118,9 @@ export interface TransformTabProps {
   initialAction?: TransformAction;
   initialMiceM?: number;
   initialMiceMaxIter?: number;
+  initialIsMiceLoading?: boolean;
+  initialReplaceConfirm?: boolean;
+  initialInvalidateConfirm?: boolean;
   initialLastTransformResult?: {
     before: string[][];
     after: string[][];
@@ -136,6 +140,9 @@ export function TransformTab({
   initialAction,
   initialMiceM,
   initialMiceMaxIter,
+  initialIsMiceLoading = false,
+  initialReplaceConfirm = false,
+  initialInvalidateConfirm = false,
   initialLastTransformResult,
 }: TransformTabProps) {
   const [transformCol] = useState("");
@@ -157,8 +164,14 @@ export function TransformTab({
   const [recodeRules, setRecodeRules] = useState<{ from: string; to: string }[]>([{ from: "", to: "" }]);
   const [miceM, setMiceM] = useState<number>(clampMiceM(initialMiceM, 5));
   const [miceMaxIter, setMiceMaxIter] = useState<number>(clampMiceIterations(initialMiceMaxIter, 10));
-  const [isMiceLoading, setIsMiceLoading] = useState<boolean>(false);
+  const [isMiceLoading, setIsMiceLoading] = useState<boolean>(initialIsMiceLoading);
   const [miceError, setMiceError] = useState<string | null>(null);
+  const [replaceConfirm, setReplaceConfirm] = useState<null | (() => void)>(
+    initialReplaceConfirm ? () => () => {} : null
+  );
+  const [invalidateConfirm, setInvalidateConfirm] = useState<null | (() => void)>(
+    initialInvalidateConfirm ? () => () => {} : null
+  );
   const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(initialShowChoiceModal);
   const [lastTransformResult, setLastTransformResult] = useState<{
     before: string[][];
@@ -196,6 +209,11 @@ export function TransformTab({
   const analysisRows = getAnalysisRows(selectedDs);
   const cols = selectedDs.columnNames || [];
   const header = dataRows[0] || [];
+  const hasFullData =
+    Array.isArray(selectedDs.data) &&
+    selectedDs.data.length > 0 &&
+    selectedDs.data[0]?.[0] === selectedDs.columnNames?.[0] &&
+    selectedDs.data.length >= (selectedDs.rows ?? 0);
   const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode/hot-deck/MICE, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
 
   // Điền trung bình/trung vị lên cột không phải scale (thứ bậc/danh định) sẽ tự đổi sang MỐT: báo trước cho người dùng.
@@ -233,11 +251,31 @@ export function TransformTab({
         return;
       }
     }
+    if (transformAction === "fill_mice") {
+      const columnsToApply = transformColsMultiple.length > 0 ? transformColsMultiple : (transformCol ? [transformCol] : []);
+      let missingCount = 0;
+      for (let ri = 1; ri < dataRows.length; ri++) {
+        const r = dataRows[ri];
+        for (const c of columnsToApply) {
+          const ci = header.indexOf(c);
+          if (ci !== -1) {
+            const val = r[ci];
+            if (val === "" || val === null || val === undefined || isMissingValue(val, selectedDs.variables?.[c])) {
+              missingCount++;
+            }
+          }
+        }
+      }
+      if (missingCount === 0) {
+        useUIStore.getState().showToast(t("transformTab.mice.noMissing"));
+        return;
+      }
+    }
     setPrepNote(null);
     setShowTransformChoiceModal(true);
   };
 
-  const applyTransform = async (overwriteOriginal: boolean) => {
+  const applyTransform = async (overwriteOriginal: boolean, invalidateBundle = false) => {
     setShowTransformChoiceModal(false);
     if (dataRows.length < 2) return;
     let newRows: string[][];
@@ -355,6 +393,10 @@ export function TransformTab({
         }
         if (currentOpIdRef.current !== opId || selectedDsRef.current?.id !== dsId) return;
       } else if (transformAction === "fill_mice") {
+        const abortCtrl = new AbortController();
+        abortControllerRef.current = abortCtrl;
+        const opId = ++currentOpIdRef.current;
+        const dsId = selectedDs.id;
         setIsMiceLoading(true);
         setMiceError(null);
         try {
@@ -363,8 +405,12 @@ export function TransformTab({
             columnsToApply,
             selectedDs.variables,
             clampMiceIterations(miceMaxIter),
-            clampMiceM(miceM)
+            clampMiceM(miceM),
+            abortCtrl.signal
           );
+          if (abortCtrl.signal.aborted || currentOpIdRef.current !== opId || selectedDsRef.current?.id !== dsId) {
+            return;
+          }
           if (!res || !res.rows) {
             throw new Error(t("transformTab.mice.errEmptyResponse"));
           }
@@ -398,12 +444,17 @@ export function TransformTab({
             };
           }
         } catch (err: unknown) {
+          if (abortCtrl.signal.aborted || (err as any)?.name === "AbortError") {
+            return;
+          }
           const msg = err instanceof Error ? err.message : String(err);
           setMiceError(msg || t("transformTab.mice.errFailed"));
-          setIsMiceLoading(false);
           return;
         } finally {
-          setIsMiceLoading(false);
+          if (abortControllerRef.current === abortCtrl) {
+            abortControllerRef.current = null;
+            setIsMiceLoading(false);
+          }
         }
       } else if (transformAction === "z_score" || transformAction === "min_max") {
         const desc = computeDescriptive(analysisRows);
@@ -522,8 +573,11 @@ export function TransformTab({
         data: newRows,
         variables: baseVariables,
         updatedAt: now,
-        readOnly: transformAction === "fill_mice" ? true : selectedDs.readOnly,
-        imputationMeta: transformAction === "fill_mice" && imputationMetaForMice ? imputationMetaForMice : selectedDs.imputationMeta,
+        readOnly: transformAction === "fill_mice" ? true : (invalidateBundle ? false : selectedDs.readOnly),
+        imputationMeta:
+          transformAction === "fill_mice" && imputationMetaForMice
+            ? imputationMetaForMice
+            : (invalidateBundle ? undefined : selectedDs.imputationMeta),
       });
       setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
       setShowTransformChoiceModal(false);
@@ -694,10 +748,23 @@ export function TransformTab({
           </div>
         </div>
       )}
+      {!hasFullData && transformAction === "fill_mice" && (
+        <p role="status" className="mb-2 text-xs text-amber-600 dark:text-amber-400">
+          {t("transformTab.mice.needFullData")}
+        </p>
+      )}
       {isMiceLoading && (
-        <div className="flex items-center gap-2 text-sm text-sky-600 dark:text-sky-400 mb-3 animate-pulse">
+        <div role="status" className="flex flex-wrap items-center gap-3 mb-3 text-sm text-sky-600 dark:text-sky-400">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
           <span>{t("transformTab.mice.loading")}</span>
+          <button
+            type="button"
+            data-testid="mice-cancel-btn"
+            onClick={() => abortControllerRef.current?.abort()}
+            className="rounded-md border border-sky-300 px-2 py-0.5 text-xs font-medium hover:bg-sky-100 dark:border-sky-700 dark:hover:bg-sky-900 transition"
+          >
+            {t("transformTab.cancelButton")}
+          </button>
         </div>
       )}
       {miceError && (
@@ -776,6 +843,7 @@ export function TransformTab({
         disabled={
           isMiceLoading ||
           isHotDeckLoading ||
+          (transformAction === "fill_mice" && !hasFullData) ||
           (["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice", "z_score", "min_max", "coerce_numeric", "coerce_text", "log", "outlier_iqr"].includes(transformAction) &&
             transformColsMultiple.length === 0) ||
           (transformAction === "rename" && (!renameFrom || !renameTo.trim())) ||
@@ -810,16 +878,95 @@ export function TransformTab({
             <div className="p-5 space-y-4">
               <p className="text-neutral-600 dark:text-neutral-400">{t("transformTab.modalQuestion")}</p>
               <div className="flex flex-col gap-2">
-                <button type="button" onClick={() => applyTransform(true)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTransformChoiceModal(false);
+                    if (selectedDs.imputationMeta) {
+                      if (transformAction === "fill_mice") {
+                        setReplaceConfirm(() => () => applyTransform(true, false));
+                      } else {
+                        setInvalidateConfirm(() => () => applyTransform(true, true));
+                      }
+                    } else {
+                      applyTransform(true, false);
+                    }
+                  }}
+                  className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600"
+                >
                   {t("transformTab.overwriteOriginalButton")}
                 </button>
-                <button type="button" onClick={() => applyTransform(false)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600">
+                <button
+                  type="button"
+                  onClick={() => applyTransform(false, false)}
+                  className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-700 px-4 py-2.5 text-left font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-600"
+                >
                   {t("transformTab.createNewButton")}
                 </button>
                 <button type="button" onClick={() => setShowTransformChoiceModal(false)} className="rounded-md px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700">
                   {t("transformTab.cancelButton")}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {replaceConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setReplaceConfirm(null)}>
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-lg max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2 text-neutral-900 dark:text-neutral-100">{t("transformTab.mice.replaceConfirmTitle")}</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">{t("transformTab.mice.replaceConfirmBody")}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReplaceConfirm(null)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+              >
+                {t("transformTab.cancelButton")}
+              </button>
+              <button
+                type="button"
+                data-testid="replace-confirm-ok-btn"
+                onClick={() => {
+                  const run = replaceConfirm;
+                  setReplaceConfirm(null);
+                  run();
+                }}
+                className="rounded-md bg-brand text-white px-3 py-2 text-sm font-medium hover:opacity-90"
+              >
+                {t("transformTab.mice.replaceConfirmOk")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {invalidateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setInvalidateConfirm(null)}>
+          <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-lg max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2 text-neutral-900 dark:text-neutral-100">{t("mi.invalidateTitle")}</h3>
+            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4">
+              {t("mi.invalidateBody", { m: selectedDs.imputationMeta?.m ?? 0 })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setInvalidateConfirm(null)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700"
+              >
+                {t("mi.invalidateCancel")}
+              </button>
+              <button
+                type="button"
+                data-testid="invalidate-confirm-ok-btn"
+                onClick={() => {
+                  const run = invalidateConfirm;
+                  setInvalidateConfirm(null);
+                  run();
+                }}
+                className="rounded-md bg-red-600 text-white px-3 py-2 text-sm font-medium hover:bg-red-700"
+              >
+                {t("mi.invalidateConfirm")}
+              </button>
             </div>
           </div>
         </div>
