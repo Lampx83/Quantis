@@ -1,7 +1,60 @@
-import { Lock, Copy } from "lucide-react";
+import { Lock, Copy, Download } from "lucide-react";
 import type { Dataset } from "@/types";
 import { useDataStore } from "@/stores/useDataStore";
+import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { t } from "@/i18n";
+
+export function csvEscapeCell(value: unknown): string {
+  const s = String(value ?? "");
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Tái tạo long-format CSV chứa m bộ dữ liệu đã điền (MICE):
+ * Header: _imputation, col1, col2, ...
+ * Mỗi bộ k in [1..m] có n dòng dữ liệu với cột đầu là k.
+ */
+export function generateBundleCsv(dataset: Dataset): string {
+  if (!dataset?.imputationMeta) return "";
+  const { m, originalRows, sparsePatches } = dataset.imputationMeta;
+  const cols = dataset.columnNames || (originalRows[0] ?? []);
+  const header = ["_imputation", ...cols];
+  const lines: string[][] = [header];
+
+  const hasHeader =
+    (dataset.rows !== undefined && originalRows.length === dataset.rows + 1) ||
+    (cols.length > 0 && originalRows.length > 0 && originalRows[0]?.[0] === cols[0]);
+
+  for (let k = 1; k <= m; k++) {
+    const reconstructed = reconstructImputedRows(
+      originalRows,
+      dataset.columnNames,
+      sparsePatches,
+      k,
+      dataset.rows
+    );
+    const dataRows = hasHeader ? reconstructed.slice(1) : reconstructed;
+    for (const r of dataRows) {
+      lines.push([String(k), ...r]);
+    }
+  }
+
+  return lines.map((row) => row.map(csvEscapeCell).join(",")).join("\r\n");
+}
+
+export function downloadBundleCsv(dataset: Dataset): void {
+  const csv = generateBundleCsv(dataset);
+  if (!csv || typeof document === "undefined") return;
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${dataset.name || "dataset"}_MI_m${dataset.imputationMeta?.m || 5}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 export interface BundleNavigationBarProps {
   dataset: Dataset;
@@ -42,6 +95,10 @@ export function BundleNavigationBar({
         );
       }
     }
+  };
+
+  const handleExportCsv = () => {
+    downloadBundleCsv(dataset);
   };
 
   return (
@@ -85,7 +142,7 @@ export function BundleNavigationBar({
         })}
       </div>
 
-      {/* Read-only Badge & Clone Action */}
+      {/* Read-only Badge, Clone Action & Export CSV */}
       <div className="flex items-center gap-2">
         <span
           data-testid="bundle-readonly-badge"
@@ -104,6 +161,17 @@ export function BundleNavigationBar({
         >
           <Copy className="w-3.5 h-3.5" />
           <span>{t("dataGrid.bundleCloneBtn")}</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="bundle-export-csv-btn"
+          onClick={handleExportCsv}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 shadow-2xs transition"
+          title={t("dataGrid.bundleExportCsvBtn", { m })}
+        >
+          <Download className="w-3.5 h-3.5" />
+          <span>{t("dataGrid.bundleExportCsvBtn", { m })}</span>
         </button>
       </div>
     </div>

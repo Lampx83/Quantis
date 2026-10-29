@@ -4,7 +4,7 @@ import { useDataStore } from "@/stores/useDataStore";
 import { setLocale } from "@/i18n";
 import type { Dataset } from "@/types";
 import { DataGrid } from "../DataGrid";
-import { BundleNavigationBar } from "../BundleNavigationBar";
+import { BundleNavigationBar, generateBundleCsv } from "../BundleNavigationBar";
 import { DataView } from "../../DataView";
 
 const mockBundleDataset: Dataset = {
@@ -227,5 +227,82 @@ describe("Task 5: Bundle Navigation Bar & Imputed Cell Highlighting", () => {
     expect(html).toContain("Gốc (m=0)");
     expect(html).toContain("Chỉ đọc (MICE Bundle)");
     expect(html).toContain("Nhân bản để chỉnh sửa");
+  });
+
+  it("9. renders 'Xuất {m} bộ (CSV)' button on BundleNavigationBar beside clone button", () => {
+    const ds = useDataStore.getState().datasets[0];
+    const htmlVi = renderToStaticMarkup(<BundleNavigationBar dataset={ds} />);
+    expect(htmlVi).toContain("bundle-export-csv-btn");
+    expect(htmlVi).toContain("Xuất 5 bộ (CSV)");
+
+    setLocale("en");
+    const htmlEn = renderToStaticMarkup(<BundleNavigationBar dataset={ds} />);
+    expect(htmlEn).toContain("Export 5 sets (CSV)");
+  });
+
+  it("10. generateBundleCsv generates accurate long-format CSV with _imputation column and m * n data rows", () => {
+    const ds = useDataStore.getState().datasets[0];
+    const csv = generateBundleCsv(ds);
+
+    const lines = csv.split("\r\n");
+    // Header should be _imputation,ID,INCOME,GENDER
+    expect(lines[0]).toBe("_imputation,ID,INCOME,GENDER");
+
+    // Total rows: 1 header + m (5) * n (4 data rows) = 21 rows
+    expect(lines).toHaveLength(21);
+
+    // First data row of set 1: _imputation=1, ID=1, INCOME=1000, GENDER=Nam
+    expect(lines[1]).toBe("1,1,1000,Nam");
+
+    // Second data row of set 1: _imputation=1, ID=2, INCOME=1200 (patched!), GENDER=Nữ
+    expect(lines[2]).toBe("1,2,1200,Nữ");
+
+    // Third data row of set 1: _imputation=1, ID=3, INCOME=1400 (patched!), GENDER=Nam
+    expect(lines[3]).toBe("1,3,1400,Nam");
+
+    // Set 2 data row 2: _imputation=2, ID=2, INCOME=1250 (patched for set 2!)
+    expect(lines[6]).toBe("2,2,1250,Nữ");
+  });
+
+  it("11. clicking export CSV triggers download with correct filename", () => {
+    const ds = useDataStore.getState().datasets[0];
+    const createUrlSpy = vi.fn().mockReturnValue("blob:mock-url");
+    const revokeUrlSpy = vi.fn();
+    globalThis.URL.createObjectURL = createUrlSpy;
+    globalThis.URL.revokeObjectURL = revokeUrlSpy;
+
+    const clickedA: any[] = [];
+    const mockElement = {
+      href: "",
+      download: "",
+      click: vi.fn(function (this: any) {
+        clickedA.push({ href: this.href, download: this.download });
+      }),
+    };
+    (globalThis as any).document = {
+      createElement: vi.fn(() => mockElement),
+      body: {
+        appendChild: vi.fn(),
+        removeChild: vi.fn(),
+      },
+    };
+
+    let rendered: any = null;
+    function Harness() {
+      rendered = BundleNavigationBar({ dataset: ds });
+      return rendered;
+    }
+    renderToStaticMarkup(<Harness />);
+
+    const rightContainer = rendered.props.children[1];
+    const rightChildren = rightContainer.props.children;
+    const exportBtn = rightChildren.find((c: any) => c?.props?.["data-testid"] === "bundle-export-csv-btn");
+    expect(exportBtn).toBeDefined();
+
+    exportBtn.props.onClick();
+
+    expect(createUrlSpy).toHaveBeenCalledTimes(1);
+    expect(clickedA).toHaveLength(1);
+    expect(clickedA[0].download).toBe("Survey Data (MICE)_MI_m5.csv");
   });
 });
