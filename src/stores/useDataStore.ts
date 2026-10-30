@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Dataset, VariableMetadata } from "@/types";
 import { ensureDatasetMetadata } from "@/utils/metadata";
+import { generateId } from "@/utils/helpers";
+import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { useSyncStore, canSyncToServer, persistsWorkspaceLocally } from "./useSyncStore";
 
 export interface DataState {
@@ -26,6 +28,10 @@ export interface DataState {
   removeVariable: (varName: string, datasetId?: string) => void;
   addRow: (values?: string[], atIndex?: number, datasetId?: string) => void;
   removeRow: (rowIndex: number, datasetId?: string) => void;
+
+  // --- Imputed Bundle Actions ---
+  setActiveImputationIndex: (datasetId: string, index: number) => void;
+  cloneBundleAsStandardDataset: (datasetId: string, index: number) => Dataset | undefined;
 }
 
 export const useDataStore = create<DataState>()(
@@ -66,6 +72,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -111,6 +119,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId || updates.length === 0) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -161,6 +171,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -203,6 +215,8 @@ export const useDataStore = create<DataState>()(
           const targetId = datasetId ?? s.selectedDatasetId;
           const trimmedNew = newName.trim();
           if (!targetId || oldName === trimmedNew || !trimmedNew) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -263,6 +277,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId || !metadata.name) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -321,6 +337,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -357,6 +375,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId) return d;
@@ -412,6 +432,8 @@ export const useDataStore = create<DataState>()(
         set((s) => {
           const targetId = datasetId ?? s.selectedDatasetId;
           if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || target.readOnly || target.rows <= 0) return s;
           return {
             datasets: s.datasets.map((d) => {
               if (d.id !== targetId || d.rows <= 0) return d;
@@ -453,6 +475,95 @@ export const useDataStore = create<DataState>()(
             }),
           };
         }),
+      setActiveImputationIndex: (datasetId, index) =>
+        set((s) => {
+          const targetId = datasetId ?? s.selectedDatasetId;
+          if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || !target.imputationMeta) return s;
+          if (index < 0 || index > target.imputationMeta.m) return s;
+
+          const newRows = reconstructImputedRows(
+            target.imputationMeta.originalRows,
+            target.columnNames,
+            target.imputationMeta.sparsePatches,
+            index,
+            target.rows
+          );
+
+          const previewLength =
+            target.preview && target.preview.length < newRows.length && target.preview.length > 0
+              ? target.preview.length
+              : newRows.length;
+          const newPreview = newRows.slice(0, previewLength).map((r) => [...r]);
+
+          return {
+            datasets: s.datasets.map((d) => {
+              if (d.id !== targetId) return d;
+              return {
+                ...d,
+                data: newRows,
+                preview: newPreview,
+                imputationMeta: {
+                  ...d.imputationMeta!,
+                  activeImputationIndex: index,
+                },
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          };
+        }),
+
+      cloneBundleAsStandardDataset: (datasetId, index) => {
+        let created: Dataset | undefined;
+        set((s) => {
+          const targetId = datasetId ?? s.selectedDatasetId;
+          if (!targetId) return s;
+          const target = s.datasets.find((d) => d.id === targetId);
+          if (!target || !target.imputationMeta) return s;
+          if (index < 0 || index > target.imputationMeta.m) return s;
+
+          const reconstructedRows = reconstructImputedRows(
+            target.imputationMeta.originalRows,
+            target.columnNames,
+            target.imputationMeta.sparsePatches,
+            index,
+            target.rows
+          );
+
+          const previewLength =
+            target.preview &&
+            target.preview.length < reconstructedRows.length &&
+            target.preview.length > 0
+              ? target.preview.length
+              : reconstructedRows.length;
+          const newPreview = reconstructedRows.slice(0, previewLength).map((r) => [...r]);
+
+          const now = new Date().toISOString();
+          const cloned: Dataset = ensureDatasetMetadata({
+            id: generateId(),
+            name: `${target.name} (Imp ${index})`,
+            rows: target.rows,
+            columns: target.columns,
+            columnNames: [...target.columnNames],
+            preview: newPreview,
+            data: reconstructedRows,
+            variables: target.variables ? JSON.parse(JSON.stringify(target.variables)) : undefined,
+            sourceFormat: target.sourceFormat || "csv",
+            readOnly: false,
+            createdAt: now,
+            updatedAt: now,
+          });
+
+          delete (cloned as any).imputationMeta;
+          created = cloned;
+
+          return {
+            datasets: [...s.datasets, cloned],
+          };
+        });
+        return created;
+      },
     }),
     {
       name: "quantis_data",

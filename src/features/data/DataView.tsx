@@ -8,6 +8,7 @@ import { AIAssistPanel } from "@/features/ai";
 import { InfoHint } from "@/components/common/InfoHint";
 import { DataGrid } from "./grid/DataGrid";
 import { VariableViewGrid } from "./grid/VariableViewGrid";
+import { BundleNavigationBar } from "./grid/BundleNavigationBar";
 import { TransformTab } from "./TransformTab";
 import { DescriptiveStatsView } from "./DescriptiveStatsView";
 
@@ -27,9 +28,11 @@ export interface DataViewProps {
 function DualViewWorkspace({
   selectedDs,
   showToast,
+  onSelectDataset,
 }: {
   selectedDs: Dataset;
   showToast?: (msg: string) => void;
+  onSelectDataset?: (id: string | null) => void;
 }) {
   const uiHook = useUIStore();
   const {
@@ -40,6 +43,15 @@ function DualViewWorkspace({
 
   return (
     <div className="flex flex-col h-[calc(100vh-13rem)] min-h-[500px] w-full">
+      {/* Bundle Navigation Bar */}
+      {selectedDs.imputationMeta && (
+        <BundleNavigationBar
+          dataset={selectedDs}
+          showToast={showToast}
+          onSelectDataset={onSelectDataset}
+        />
+      )}
+
       {/* Main Active Grid View */}
       <div className="flex-1 min-h-0 w-full">
         {dataEditorView === "data" ? (
@@ -47,6 +59,7 @@ function DualViewWorkspace({
             dataset={selectedDs}
             showValueLabels={showValueLabels}
             showToast={showToast}
+            hideBundleNav={true}
           />
         ) : (
           <VariableViewGrid dataset={selectedDs} showToast={showToast} />
@@ -123,7 +136,7 @@ export function DataView({
         </div>
       );
     }
-    return <DualViewWorkspace selectedDs={selectedDs} showToast={showToast} />;
+    return <DualViewWorkspace selectedDs={selectedDs} showToast={showToast} onSelectDataset={onSelectDataset} />;
   }
 
   if (tab === "profiling") {
@@ -228,7 +241,7 @@ export function DataView({
         </div>
       );
     }
-    return <DualViewWorkspace selectedDs={selectedDs} showToast={showToast} />;
+    return <DualViewWorkspace selectedDs={selectedDs} showToast={showToast} onSelectDataset={onSelectDataset} />;
   }
 
   return null;

@@ -3,7 +3,7 @@
  * Khi backend không có hoặc chưa đăng nhập: dữ liệu chỉ lưu localStorage.
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
-import type { Dataset, Workflow, VariableMetadata } from "./types";
+import type { Dataset, Workflow, VariableMetadata, RubinColumnStatistic } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
@@ -556,14 +556,35 @@ export async function analyzeKruskalWallis(
 export async function analyzeOLS(
   rows: string[][],
   yCol: string,
-  xCols: string[]
-): Promise<{ coefficients: Record<string, number>; intercept: number; r2: number; adjR2: number; se: Record<string, number>; tStat: Record<string, number>; pValue: Record<string, number>; ciLower?: Record<string, number>; ciUpper?: Record<string, number>; n: number; df: number; s2: number; yName: string; xNames: string[] } | null> {
+  xCols: string[],
+  imputedDatasets?: string[][][]
+): Promise<{
+  coefficients: Record<string, number>;
+  intercept: number;
+  r2: number;
+  adjR2: number;
+  se: Record<string, number>;
+  tStat: Record<string, number>;
+  pValue: Record<string, number>;
+  ciLower?: Record<string, number>;
+  ciUpper?: Record<string, number>;
+  n: number;
+  df: number;
+  s2: number;
+  yName: string;
+  xNames: string[];
+  rubinPooled?: boolean;
+  rubinDf?: Record<string, number>;
+  fmi?: Record<string, number>;
+  withinVar?: Record<string, number>;
+  betweenVar?: Record<string, number>;
+} | null> {
   try {
     const res = await fetch(`${getANALYZE_BASE()}/ols`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      body: JSON.stringify({ rows, yCol, xCols }),
+      body: JSON.stringify({ rows, yCol, xCols, imputedDatasets }),
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -2032,11 +2053,24 @@ export interface MiceImputationResponse {
     max?: number | null;
   }>;
   iterations: number;
+  imputedDatasets?: string[][][];
+  m?: number;
+  rubinStatistics?: RubinColumnStatistic[];
 }
 
 /** Số vòng lặp MICE hợp lệ (khớp backend `MICE_MAX_ITER_LIMIT`). */
 export const MICE_MIN_ITER = 1;
 export const MICE_MAX_ITER = 50;
+
+/** Số bộ dữ liệu nội suy MICE hợp lệ (2 <= m <= 20). */
+export const MICE_MIN_M = 2;
+export const MICE_MAX_M = 20;
+
+export function clampMiceM(value: number | undefined | null, fallback = 5): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(MICE_MAX_M, Math.max(MICE_MIN_M, n));
+}
 
 export function clampMiceIterations(value: number | undefined | null, fallback = 10): number {
   const n = Math.round(Number(value));
@@ -2051,7 +2085,9 @@ export async function analyzeMiceImputation(
   rows: string[][],
   columns?: string[],
   variables?: Record<string, VariableMetadata>,
-  maxIter?: number
+  maxIter?: number,
+  m?: number,
+  signal?: AbortSignal
 ): Promise<MiceImputationResponse> {
   const base = getANALYZE_BASE();
   if (!base) {
@@ -2061,11 +2097,13 @@ export async function analyzeMiceImputation(
     method: "POST",
     credentials: "include",
     headers: getHeaders(),
+    signal,
     body: JSON.stringify({
       rows,
       columns: columns && columns.length > 0 ? columns : undefined,
       variables,
       maxIter: clampMiceIterations(maxIter),
+      m: clampMiceM(m, 5),
     }),
   });
   if (!res.ok) {

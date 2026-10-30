@@ -27,6 +27,7 @@ import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { MeasureIcon } from "./VariableViewGrid";
 import { GridContextMenu, type GridContextMenuTarget } from "./GridContextMenu";
+import { BundleNavigationBar } from "./BundleNavigationBar";
 import { t } from "@/i18n";
 
 export const DATA_GRID_PAGE_SIZE_DEFAULT = 100;
@@ -213,6 +214,7 @@ export interface DataGridProps {
   dataset?: Dataset | null;
   showValueLabels?: boolean;
   hideToolbar?: boolean;
+  hideBundleNav?: boolean;
   searchQuery?: string;
   onSearchQueryChange?: (q: string) => void;
   showToast?: (msg: string) => void;
@@ -222,6 +224,7 @@ export function DataGrid({
   dataset: propDataset,
   showValueLabels: propShowValueLabels,
   hideToolbar = false,
+  hideBundleNav = false,
   searchQuery: propSearchQuery,
   onSearchQueryChange,
   showToast,
@@ -257,6 +260,34 @@ export function DataGrid({
     if (!activeDataset) return null;
     return ensureDatasetMetadata(activeDataset);
   }, [activeDataset]);
+
+  const isReadOnly = Boolean(enrichedDataset?.readOnly);
+
+  const { activeImputationIndex, isBundleActive, imputedCellsLookup } = useMemo(() => {
+    const meta = enrichedDataset?.imputationMeta;
+    if (!meta || meta.activeImputationIndex === 0 || !meta.sparsePatches) {
+      return {
+        activeImputationIndex: meta?.activeImputationIndex ?? 0,
+        isBundleActive: false,
+        imputedCellsLookup: null,
+      };
+    }
+    const map = new Map<string, Set<number>>();
+    for (const [colName, patches] of Object.entries(meta.sparsePatches)) {
+      if (Array.isArray(patches)) {
+        const set = new Set<number>();
+        for (const p of patches) {
+          set.add(p.rowIndex);
+        }
+        map.set(colName, set);
+      }
+    }
+    return {
+      activeImputationIndex: meta.activeImputationIndex,
+      isBundleActive: true,
+      imputedCellsLookup: map,
+    };
+  }, [enrichedDataset?.imputationMeta]);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(DATA_GRID_PAGE_SIZE_DEFAULT);
@@ -356,6 +387,7 @@ export function DataGrid({
   };
 
   const startEditing = (originalRowIndex: number, colIndex: number, initialVal?: string) => {
+    if (isReadOnly) return;
     const currentVal =
       initialVal !== undefined
         ? initialVal
@@ -417,7 +449,7 @@ export function DataGrid({
   };
 
   const handleCommitColumnRename = () => {
-    if (!renamingCol) return;
+    if (!renamingCol || isReadOnly) return;
     const trimmed = renamingCol.draft.trim();
     if (trimmed && trimmed !== renamingCol.oldName) {
       const check = validateVariableName(
@@ -443,6 +475,7 @@ export function DataGrid({
   };
 
   const handleInsertVariable = () => {
+    if (isReadOnly) return;
     const existing = new Set(headers.map((h) => h.toUpperCase()));
     let idx = headers.length + 1;
     let newName = `VAR_${idx}`;
@@ -475,7 +508,7 @@ export function DataGrid({
         if (editingCell || renamingCol) return;
         if (!activeCell) return;
 
-        if (e.key === "Enter" || e.key === "F2") {
+        if ((e.key === "Enter" || e.key === "F2") && !isReadOnly) {
           e.preventDefault();
           startEditing(activeCell.originalRowIndex, activeCell.colIndex);
         } else if (e.key === "ArrowDown") {
@@ -519,7 +552,7 @@ export function DataGrid({
         }
       }}
       onPaste={(e) => {
-        if (editingCell || !activeCell) return;
+        if (editingCell || !activeCell || isReadOnly) return;
         const text = e.clipboardData?.getData("text/plain");
         if (!text) return;
         const updates = parseClipboardPasteMatrix(
@@ -609,17 +642,31 @@ export function DataGrid({
             <button
               type="button"
               onClick={() => {
+                if (isReadOnly) return;
                 addRow(undefined, undefined, enrichedDataset.id);
                 if (showToast) showToast(t("dataGrid.addRowSuccessToast"));
               }}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-md shadow-2xs transition"
-              title={t("dataGrid.addRowTitle")}
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-neutral-200 dark:border-neutral-700 rounded-md shadow-2xs transition ${
+                isReadOnly
+                  ? "opacity-50 cursor-not-allowed text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800"
+                  : "hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300"
+              }`}
+              disabled={isReadOnly}
+              title={isReadOnly ? t("dataGrid.readOnlyDisabled") : t("dataGrid.addRowTitle")}
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{t("dataGrid.addRowButton")}</span>
             </button>
           </div>
         </div>
+      )}
+
+      {/* Bundle Navigation Bar */}
+      {!hideBundleNav && enrichedDataset.imputationMeta && (
+        <BundleNavigationBar
+          dataset={enrichedDataset}
+          showToast={showToast}
+        />
       )}
 
       {/* Spreadsheet Grid Table */}
@@ -794,6 +841,10 @@ export function DataGrid({
                         isCellEditing &&
                         meta?.type === "numeric" &&
                         !isValidNumericValue(editDraft);
+                      const isImputedCell = Boolean(
+                        isBundleActive &&
+                          imputedCellsLookup?.get(colName)?.has(originalRowIndex)
+                      );
 
                       return (
                         <td
@@ -802,7 +853,7 @@ export function DataGrid({
                             setActiveCell({ originalRowIndex, colIndex: ci })
                           }
                           onDoubleClick={() =>
-                            startEditing(originalRowIndex, ci, rawValue)
+                            !isReadOnly && startEditing(originalRowIndex, ci, rawValue)
                           }
                           onContextMenu={(e) => {
                             e.preventDefault();
@@ -819,7 +870,9 @@ export function DataGrid({
                               ? "ring-2 ring-inset ring-brand bg-brand/5 dark:bg-brand/15 z-1"
                               : ""
                           } ${
-                            isInvalidNumber
+                            isImputedCell
+                              ? "bg-brand/10 text-brand-dark dark:bg-brand/20 ring-1 ring-inset ring-brand/30"
+                              : isInvalidNumber
                               ? "bg-amber-50/80 dark:bg-amber-950/30"
                               : isMissing
                               ? "bg-rose-50/40 dark:bg-rose-950/20"
@@ -879,7 +932,9 @@ export function DataGrid({
                           ) : (
                             <div
                               className={`px-2 py-1 min-h-[26px] truncate ${alignClass} ${
-                                formatted.isLabel
+                                isImputedCell
+                                  ? "text-brand font-semibold dark:text-brand"
+                                  : formatted.isLabel
                                   ? "text-brand font-medium"
                                   : isMissing && rawValue.trim() === ""
                                   ? "text-neutral-400 dark:text-neutral-500 italic text-[11px]"
@@ -888,7 +943,9 @@ export function DataGrid({
                                   : "text-neutral-900 dark:text-neutral-100 font-mono"
                               }`}
                               title={
-                                formatted.isLabel
+                                isImputedCell
+                                  ? t("dataGrid.imputedCellTooltip", { i: activeImputationIndex })
+                                  : formatted.isLabel
                                   ? t("dataGrid.rawCodeTooltip", { value: rawValue })
                                   : formatted.isMissingCode
                                   ? t("dataGrid.missingCodeTooltip", { code: rawValue })

@@ -2,6 +2,7 @@
 Phân tích thống kê — scipy, statsmodels, pandas.
 Trả về dict/list giống format frontend (DescriptiveRow, TTestResult, ...).
 """
+import math
 import os
 import re
 import numpy as np
@@ -489,9 +490,141 @@ def run_kruskal_wallis(rows: list, factor_col: str, value_col: str):
     }
 
 
-def run_ols(rows: list, y_col: str, x_cols: list):
+def run_ols(rows: list, y_col: str, x_cols: list, imputed_datasets: list | None = None):
     from statsmodels.regression.linear_model import OLS
     from statsmodels.tools import add_constant
+
+    if imputed_datasets and len(imputed_datasets) >= 2:
+        models = []
+        n_obs = None
+        for dataset in imputed_datasets:
+            try:
+                df_i = _rows_to_df(dataset)
+            except Exception:
+                return None
+            for c in [y_col] + x_cols:
+                if c not in df_i.columns:
+                    return None
+            df_sub = df_i[[y_col] + x_cols].copy().apply(pd.to_numeric, errors="coerce").dropna()
+            if len(df_sub) <= len(x_cols) + 1:
+                return None
+            if n_obs is None:
+                n_obs = len(df_sub)
+            elif len(df_sub) != n_obs:
+                return None
+            y_i = df_sub[y_col]
+            X_i = add_constant(df_sub[x_cols])
+            try:
+                mod_i = OLS(y_i, X_i).fit()
+                if "const" not in mod_i.params or any(c not in mod_i.params for c in x_cols):
+                    return None
+                models.append(mod_i)
+            except Exception:
+                return None
+
+        m = len(models)
+        if m < 2:
+            return None
+
+        var_list = [("const", "(Intercept)")] + [(c, c) for c in x_cols]
+        k = len(x_cols) + 1
+        nu_0 = float(max(1, n_obs - k))
+
+        coeff = {}
+        se = {}
+        t_stat = {}
+        p_val = {}
+        ci_lower = {}
+        ci_upper = {}
+        rubin_df = {}
+        within_var = {}
+        between_var = {}
+        fmi = {}
+
+        for var_sm, var_key in var_list:
+            betas = [float(mod.params[var_sm]) for mod in models]
+            bse_sqs = [float(mod.bse[var_sm]) ** 2 for mod in models]
+
+            beta_bar = float(sum(betas) / m)
+            u_bar = float(sum(bse_sqs) / m)
+            b = float(sum((beta_val - beta_bar) ** 2 for beta_val in betas) / (m - 1))
+            t = float(u_bar + (1.0 + 1.0 / m) * b)
+            rubin_se = float(math.sqrt(max(0.0, t)))
+
+            if b > 0.0 and u_bar > 0.0 and t > 0.0:
+                nu_m = (m - 1.0) * ((1.0 + u_bar / ((1.0 + 1.0 / m) * b)) ** 2)
+                gamma = ((1.0 + 1.0 / m) * b) / t
+                nu_obs = ((nu_0 + 1.0) / (nu_0 + 3.0)) * nu_0 * (1.0 - gamma)
+                if (nu_m + nu_obs) > 0.0:
+                    nu_adj = float((nu_m * nu_obs) / (nu_m + nu_obs))
+                else:
+                    nu_adj = nu_0
+            else:
+                nu_adj = nu_0
+
+            nu_adj = max(1.0, float(nu_adj))
+
+            t_val = (beta_bar / rubin_se) if rubin_se > 0.0 else 0.0
+            p_val_item = 2.0 * float(scipy_stats.t.sf(abs(t_val), df=nu_adj))
+            if math.isnan(p_val_item):
+                p_val_item = 0.0
+
+            try:
+                t_crit = float(scipy_stats.t.ppf(0.975, df=nu_adj))
+                ci_low = float(beta_bar - t_crit * rubin_se)
+                ci_up = float(beta_bar + t_crit * rubin_se)
+                if math.isnan(ci_low) or math.isinf(ci_low):
+                    ci_low = beta_bar
+                if math.isnan(ci_up) or math.isinf(ci_up):
+                    ci_up = beta_bar
+            except Exception:
+                ci_low = beta_bar
+                ci_up = beta_bar
+
+            if b > 0.0 and u_bar > 0.0:
+                r = ((1.0 + 1.0 / m) * b) / u_bar
+                fmi_val = float((r + 2.0 / (nu_adj + 3.0)) / (r + 1.0)) if (r + 1.0) > 0.0 else 0.0
+            else:
+                r = 0.0
+                fmi_val = 0.0
+            fmi_val = max(0.0, min(1.0, fmi_val))
+
+            coeff[var_key] = beta_bar
+            within_var[var_key] = u_bar
+            between_var[var_key] = b
+            se[var_key] = rubin_se
+            t_stat[var_key] = t_val
+            p_val[var_key] = p_val_item
+            ci_lower[var_key] = ci_low
+            ci_upper[var_key] = ci_up
+            rubin_df[var_key] = nu_adj
+            fmi[var_key] = fmi_val
+
+        return {
+            "coefficients": coeff,
+            "intercept": float(coeff["(Intercept)"]),
+            "r2": float(np.mean([mod.rsquared for mod in models])),
+            "adjR2": float(np.mean([mod.rsquared_adj for mod in models])),
+            "se": se,
+            "tStat": t_stat,
+            "pValue": p_val,
+            "ciLower": ci_lower,
+            "ciUpper": ci_upper,
+            "n": int(n_obs),
+            "df": float(nu_0),
+            "s2": float(np.mean([mod.mse_resid for mod in models])),
+            "yName": y_col,
+            "xNames": x_cols,
+            "rubinPooled": True,
+            "rubinDf": rubin_df,
+            "fmi": fmi,
+            "withinVar": within_var,
+            "betweenVar": between_var,
+        }
+
+    # Fallback to single dataset
+    if imputed_datasets and len(imputed_datasets) == 1:
+        rows = imputed_datasets[0]
 
     df = _rows_to_df(rows)
     for c in [y_col] + x_cols:
@@ -502,7 +635,12 @@ def run_ols(rows: list, y_col: str, x_cols: list):
         return None
     y = df[y_col]
     X = add_constant(df[x_cols])
-    model = OLS(y, X).fit()
+    try:
+        model = OLS(y, X).fit()
+        if "const" not in model.params or any(c not in model.params for c in x_cols):
+            return None
+    except Exception:
+        return None
     coeff = {"(Intercept)": float(model.params["const"])}
     for c in x_cols:
         coeff[c] = float(model.params[c])
@@ -536,6 +674,7 @@ def run_ols(rows: list, y_col: str, x_cols: list):
         "s2": float(model.mse_resid),
         "yName": y_col,
         "xNames": x_cols,
+        "rubinPooled": False,
     }
 
 
@@ -1844,26 +1983,130 @@ def missing_code_mask(series: pd.Series, meta: dict | None) -> pd.Series:
     return mask
 
 
+def _compute_rubin_descriptive(
+    imputed_dfs: list[pd.DataFrame],
+    original_numeric_df: pd.DataFrame,
+) -> list[dict]:
+    """
+    Tính thống kê mô tả gộp theo luật Rubin (Rubin's Rules) và hiệu chỉnh cỡ mẫu
+    hữu hạn theo Barnard & Rubin (1999).
+    """
+    m = len(imputed_dfs)
+    if m < 2:
+        raise ValueError("Rubin's rules require at least m >= 2 datasets")
+    n = len(original_numeric_df)
+    rubin_stats = []
+
+    for col in original_numeric_df.columns:
+        orig_s = original_numeric_df[col]
+        missing_count = int(orig_s.isna().sum())
+        orig_mean = float(orig_s.mean()) if orig_s.notna().sum() > 0 else None
+        orig_std = float(orig_s.std(ddof=1)) if orig_s.notna().sum() > 1 else None
+
+        y_bar_l = [float(df[col].mean()) for df in imputed_dfs]
+        s_l_sq = [float(df[col].var(ddof=1)) if len(df[col]) > 1 else 0.0 for df in imputed_dfs]
+
+        # Pooled mean: Q_bar = sum(y_bar_l) / m
+        q_bar = float(sum(y_bar_l) / m)
+
+        # Within-imputation variance: U_bar = sum(s_l^2 / n) / m
+        u_l = [s2 / n if n > 0 else 0.0 for s2 in s_l_sq]
+        u_bar = float(sum(u_l) / m)
+
+        # Between-imputation variance: B = sum((y_bar_l - Q_bar)^2) / (m - 1)
+        b = float(sum((y - q_bar) ** 2 for y in y_bar_l) / (m - 1))
+
+        # Total variance: T = U_bar + (1 + 1/m) * B
+        t = float(u_bar + (1.0 + 1.0 / m) * b)
+
+        # Rubin SE = sqrt(T)
+        rubin_se = float(math.sqrt(max(0.0, t)))
+
+        # Degrees of freedom (Barnard & Rubin 1999)
+        nu_0 = float(max(1, n - 1))
+        if b > 0.0 and u_bar > 0.0 and t > 0.0:
+            nu_m = (m - 1.0) * ((1.0 + u_bar / ((1.0 + 1.0 / m) * b)) ** 2)
+            gamma = ((1.0 + 1.0 / m) * b) / t
+            nu_obs = ((nu_0 + 1.0) / (nu_0 + 3.0)) * nu_0 * (1.0 - gamma)
+            if (nu_m + nu_obs) > 0.0:
+                nu_adj = float((nu_m * nu_obs) / (nu_m + nu_obs))
+            else:
+                nu_adj = nu_0
+        else:
+            nu_adj = nu_0
+
+        # Relative increase in variance: r = (1 + 1/m) * B / U_bar if U_bar > 0 else 0
+        # Fraction of missing information: fmi = (r + 2 / (nu_adj + 3)) / (r + 1) if (r + 1) > 0 else 0
+        if b > 0.0 and u_bar > 0.0:
+            r = ((1.0 + 1.0 / m) * b) / u_bar
+            fmi = max(0.0, min(1.0, float((r + 2.0 / (nu_adj + 3.0)) / (r + 1.0)))) if (r + 1.0) > 0.0 else 0.0
+        else:
+            r = 0.0
+            fmi = 0.0
+        fmi = max(0.0, min(1.0, fmi))
+
+        # 95% Confidence Interval
+        try:
+            t_crit = float(scipy_stats.t.ppf(0.975, df=nu_adj))
+            ci_lower = float(q_bar - t_crit * rubin_se)
+            ci_upper = float(q_bar + t_crit * rubin_se)
+        except Exception:
+            ci_lower = q_bar
+            ci_upper = q_bar
+
+        rubin_stats.append({
+            "column": col,
+            "missingCount": missing_count,
+            "originalMean": orig_mean,
+            "originalStd": orig_std,
+            "pooledMean": q_bar,
+            "withinVariance": u_bar,
+            "betweenVariance": b,
+            "totalVariance": t,
+            "rubinSe": rubin_se,
+            "df": nu_adj,
+            "fmi": fmi,
+            "ciLower": ci_lower,
+            "ciUpper": ci_upper,
+        })
+
+    return rubin_stats
+
+
 def run_mice_imputation(
     rows: list,
     columns: list[str] | None = None,
     variables: dict[str, dict] | None = None,
     max_iter: int = 10,
+    m: int = 5,
     random_state: int = 42,
 ) -> dict:
     """
     Multiple Imputation by Chained Equations (MICE) sử dụng IterativeImputer với BayesianRidge.
     - Quy đổi các giá trị trùng với missingValues trong metadata hoặc rỗng/NaN thành np.nan.
-    - Nội suy các biến định lượng đa biến.
-    - Xử lý ngoại lệ an toàn khi ma trận suy biến.
-    - Trả về bảng dữ liệu đã điền (dạng string[][]) kèm thống kê trước và sau nội suy.
+    - Bật sample_posterior=True để sinh m bộ dữ liệu (2 <= m <= 20).
+    - Tính toán thống kê mô tả gộp theo luật Rubin (Barnard & Rubin 1999).
+    - Kẹp giá trị nội suy trong [min_obs, max_obs] của từng cột quan sát được.
+    - Tôn trọng mã khuyết SPSS (discrete & range missing codes) đã khai báo trong metadata variables.
+    - Trả về m bộ dữ liệu đã điền (imputedDatasets), thống kê gộp Rubin (rubinStatistics)
+      và giữ tương thích ngược (rows, statistics).
     """
-    # Kẹp số vòng lặp: maxIter quá lớn (vd 100000) làm chạy rất lâu hoặc lỗi 500.
     try:
         max_iter = int(max_iter)
     except (TypeError, ValueError):
         max_iter = 10
     max_iter = max(1, min(MICE_MAX_ITER_LIMIT, max_iter))
+
+    try:
+        m = int(m)
+    except (TypeError, ValueError):
+        m = 5
+    m = max(2, min(20, m))
+
+    try:
+        random_state = int(random_state)
+    except (TypeError, ValueError):
+        random_state = 42
 
     df = _rows_to_df(rows)
     if df.empty or len(df.columns) == 0:
@@ -1923,72 +2166,98 @@ def run_mice_imputation(
     # If no missing values across all target columns, return original rows
     total_missing = sum(item["missingCount"] for item in statistics)
     if total_missing == 0:
+        imputed_datasets = [rows for _ in range(m)]
+        rubin_stats = _compute_rubin_descriptive([numeric_df] * m, numeric_df)
         return {
-            "rows": rows,
+            "imputedDatasets": imputed_datasets,
             "imputedColumns": numeric_target_cols,
-            "statistics": statistics,
+            "m": m,
             "iterations": 0,
+            "rubinStatistics": rubin_stats,
+            "rows": rows,
+            "statistics": statistics,
         }
 
-    # Run IterativeImputer
+    # Run IterativeImputer m times with sample_posterior=True
+    min_vals = numeric_df.min(skipna=True).to_numpy(dtype=float)
+    max_vals = numeric_df.max(skipna=True).to_numpy(dtype=float)
+    imputed_dfs = []
+    iterations_list = []
+
     try:
         from sklearn.experimental import enable_iterative_imputer  # noqa: F401
         from sklearn.impute import IterativeImputer
         from sklearn.linear_model import BayesianRidge
 
-        imputer = IterativeImputer(
-            estimator=BayesianRidge(),
-            max_iter=max_iter,
-            random_state=random_state,
-            initial_strategy="mean",
-            # Giá trị điền không vượt khoảng quan sát của từng cột (vd thang Likert 1–5 không ra 5,4).
-            min_value=numeric_df.min(skipna=True).to_numpy(dtype=float),
-            max_value=numeric_df.max(skipna=True).to_numpy(dtype=float),
-        )
-        imputed_array = imputer.fit_transform(numeric_df)
+        for i in range(m):
+            seed = random_state + i
+            imputer = IterativeImputer(
+                estimator=BayesianRidge(),
+                sample_posterior=True,
+                max_iter=max_iter,
+                random_state=seed,
+                initial_strategy="mean",
+                # Giá trị điền không vượt khoảng quan sát của từng cột (vd thang Likert 1–5 không ra 5,4).
+                min_value=min_vals,
+                max_value=max_vals,
+            )
+            imputed_array = imputer.fit_transform(numeric_df)
+            imputed_df = pd.DataFrame(imputed_array, columns=numeric_target_cols, index=numeric_df.index)
+            # Kẹp chặt trong [min_obs, max_obs]
+            for col_idx, col in enumerate(numeric_target_cols):
+                imputed_df[col] = imputed_df[col].clip(lower=min_vals[col_idx], upper=max_vals[col_idx])
+            imputed_dfs.append(imputed_df)
+            iterations_list.append(int(getattr(imputer, "n_iter_", max_iter)))
     except Exception as e:
         raise ValueError(f"Thuật toán MICE gặp lỗi trong quá trình hội tụ: {str(e)}")
 
-    imputed_df = pd.DataFrame(imputed_array, columns=numeric_target_cols, index=numeric_df.index)
+    # Tính toán thống kê gộp Rubin
+    rubin_stats = _compute_rubin_descriptive(imputed_dfs, numeric_df)
 
-    # Update statistics with post-imputation metrics
+    # Cập nhật statistics cho tương thích ngược (lấy từ bộ đầu tiên imputed_dfs[0])
     for item in statistics:
         col = item["column"]
-        s = imputed_df[col]
+        s = imputed_dfs[0][col]
         item["imputedMean"] = float(s.mean())
         item["imputedStd"] = float(s.std()) if len(s) > 1 else 0.0
         item["min"] = float(s.min())
         item["max"] = float(s.max())
 
     # Build final rows: chỉ ô khuyết của các cột đã chọn được thay bằng giá trị điền; mọi ô khác giữ nguyên.
-    final_df = df.copy().astype(object)
-    for col in numeric_target_cols:
-        meta = variables.get(col) if variables else None
-        decimals = 2
-        if meta and isinstance(meta, dict) and "decimals" in meta:
-            try:
-                decimals = int(meta["decimals"])
-            except (ValueError, TypeError):
-                decimals = 2
-
-        miss = cleaned_df[col].isna()
-        if not miss.any():
-            continue
-        vals = imputed_df.loc[miss, col]
-        if decimals == 0:
-            final_df.loc[miss, col] = vals.map(lambda x: str(int(round(x))))
-        else:
-            final_df.loc[miss, col] = vals.map(lambda x: f"{x:.{decimals}f}")
-
     header = list(df.columns)
-    # Ô trống ở cột KHÔNG được chọn là NaN: phải đổi về "" trước khi ép chuỗi (NaN không mã hoá được thành JSON → 500).
-    data_rows = final_df.fillna("").astype(str).values.tolist()
-    out_rows = [header] + data_rows
+    imputed_datasets = []
+    for imputed_df in imputed_dfs:
+        final_df = df.copy().astype(object)
+        for col in numeric_target_cols:
+            meta = variables.get(col) if variables else None
+            decimals = 2
+            if meta and isinstance(meta, dict) and "decimals" in meta:
+                try:
+                    decimals = int(meta["decimals"])
+                except (ValueError, TypeError):
+                    decimals = 2
+
+            miss = cleaned_df[col].isna()
+            if not miss.any():
+                continue
+            vals = imputed_df.loc[miss, col]
+            if decimals == 0:
+                final_df.loc[miss, col] = vals.map(lambda x: str(int(round(x))))
+            else:
+                final_df.loc[miss, col] = vals.map(lambda x: f"{x:.{decimals}f}")
+
+        # Ô trống ở cột KHÔNG được chọn là NaN: phải đổi về "" trước khi ép chuỗi (NaN không mã hoá được thành JSON → 500).
+        data_rows = final_df.fillna("").astype(str).values.tolist()
+        imputed_datasets.append([header] + data_rows)
+
+    max_iterations = max(iterations_list) if iterations_list else max_iter
 
     return {
-        "rows": out_rows,
+        "imputedDatasets": imputed_datasets,
         "imputedColumns": numeric_target_cols,
+        "m": m,
+        "iterations": max_iterations,
+        "rubinStatistics": rubin_stats,
+        "rows": imputed_datasets[0],
         "statistics": statistics,
-        "iterations": int(getattr(imputer, "n_iter_", max_iter)),
     }
-
