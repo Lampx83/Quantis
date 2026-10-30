@@ -1164,7 +1164,7 @@ export function TransformTab({
         {/* RIGHT PANE: Active Operation Workspace */}
         <section className="flex-1 min-w-0 flex flex-col bg-white dark:bg-neutral-900">
           {/* Operation Header Bar with Primary CTA */}
-          <div className="p-4 sm:p-5 border-b border-neutral-200 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-neutral-50/30 dark:bg-neutral-850/20">
+          <div className="p-4 sm:p-5 border-b border-neutral-200 dark:border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-neutral-50/30 dark:bg-neutral-800/20">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <div className="p-1.5 rounded-md bg-brand/10 text-brand dark:bg-brand/20">
@@ -1295,7 +1295,7 @@ export function TransformTab({
                         className={`flex items-center gap-2 p-2 rounded-md border text-xs cursor-pointer select-none transition-colors ${
                           isChecked
                             ? "border-brand bg-brand/5 dark:bg-brand/10 text-neutral-900 dark:text-neutral-100 font-semibold ring-1 ring-brand/30"
-                            : "border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/40 text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-700"
+                            : "border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/40 text-neutral-700 dark:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-700"
                         }`}
                       >
                         <input
@@ -1770,7 +1770,7 @@ export function TransformTab({
           </div>
 
           {/* Bottom Action Footer Bar */}
-          <div className="p-3 sm:px-6 sm:py-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-850/30 flex items-center justify-between gap-3 text-xs">
+          <div className="p-3 sm:px-6 sm:py-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 flex items-center justify-between gap-3 text-xs">
             <div>
               {usesMultiColumns && transformColsMultiple.length === 0 && (
                 <span className="text-amber-600 dark:text-amber-400 font-medium">
@@ -2133,7 +2133,7 @@ export function TransformTab({
                   </table>
                 </div>
                 {lastTransformResult.before.length > 16 && (
-                  <p className="px-3 py-1 text-xs text-neutral-500 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
+                  <p className="px-3 py-1 text-xs text-neutral-500 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800">
                     {t("transformTab.rowsTruncatedPrefix")} {lastTransformResult.before.length - 1}{" "}
                     {t("transformTab.rowsTruncatedSuffix")}
                   </p>
@@ -2175,7 +2175,7 @@ export function TransformTab({
                   </table>
                 </div>
                 {lastTransformResult.after.length > 16 && (
-                  <p className="px-3 py-1 text-xs text-neutral-500 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-850">
+                  <p className="px-3 py-1 text-xs text-neutral-500 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800">
                     {t("transformTab.rowsTruncatedPrefix")} {lastTransformResult.after.length - 1}{" "}
                     {t("transformTab.rowsTruncatedSuffix")}
                   </p>
