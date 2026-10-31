@@ -22,7 +22,6 @@ import {
   Search,
   CheckSquare,
   Square,
-  Wand2,
   Plus,
   ArrowRight,
   CheckCircle2,
@@ -940,8 +939,6 @@ export function TransformTab({
 
   const currentActionMeta = ACTION_DEFINITIONS.find((a) => a.id === transformAction) ?? ACTION_DEFINITIONS[0];
   const CurrentIcon = currentActionMeta.icon;
-  const currentCategoryMeta =
-    CATEGORIES.find((c) => c.id === currentActionMeta.category) ?? CATEGORIES[0];
 
   const filteredCols = useMemo(() => {
     if (!colSearchQuery.trim()) return cols;
@@ -999,25 +996,14 @@ export function TransformTab({
           setTransformAction(act.id);
         }}
         title={t(act.titleKey)}
-        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between gap-2 transition-colors cursor-pointer select-none text-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center gap-2 transition-colors cursor-pointer select-none text-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
           isSelected
             ? "bg-brand/10 text-brand font-semibold dark:bg-brand/20 dark:text-brand-300 ring-1 ring-brand/25 shadow-2xs"
             : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/60"
         }`}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <Icon aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400 dark:text-neutral-500"}`} />
-          <span className="truncate">{t(act.titleKey)}</span>
-        </div>
-        <span
-          className={`font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
-            isSelected
-              ? "bg-brand/15 text-brand font-bold dark:bg-brand/25 dark:text-brand-200"
-              : "bg-neutral-200/60 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-          }`}
-        >
-          {act.badge}
-        </span>
+        <Icon aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400 dark:text-neutral-500"}`} />
+        <span className="truncate">{t(act.titleKey)}</span>
       </button>
     );
   };
@@ -1027,15 +1013,9 @@ export function TransformTab({
       {/* Top Header bar with clean typography & AI guide button */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-neutral-200 dark:border-neutral-800">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-              <Wand2 aria-hidden="true" className="w-4 h-4 text-brand" />
-              <span>{t("transformTab.pipelineTitle")}</span>
-            </h2>
-            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-300">
-              {ACTION_DEFINITIONS.length} {t("transformTab.categoryAll")}
-            </span>
-          </div>
+          <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 mb-1">
+            {t("transformTab.pipelineTitle")}
+          </h2>
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             {t("transformTab.description")}
           </p>
@@ -1091,14 +1071,11 @@ export function TransformTab({
         {/* LEFT PANE: Operations Navigator Rail (~280px) */}
         <aside className="w-full md:w-72 lg:w-80 shrink-0 border-b md:border-b-0 md:border-r border-neutral-200/90 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex flex-col">
           {/* Operations Rail Header */}
-          <div className="px-3.5 py-2.5 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/70 dark:bg-neutral-900/80 select-none">
+          <div className="px-3.5 py-2.5 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center bg-neutral-50/70 dark:bg-neutral-900/80 select-none">
             <div className="flex items-center gap-2 font-semibold text-neutral-800 dark:text-neutral-200 text-xs tracking-tight">
               <Layers aria-hidden="true" className="w-3.5 h-3.5 text-brand" />
               <span>{t("transformTab.categoryAll")}</span>
             </div>
-            <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-full bg-neutral-200/60 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
-              {ACTION_DEFINITIONS.length}
-            </span>
           </div>
 
           {/* Flush edge-to-edge accordion sections separated by hairline dividers */}
@@ -1132,9 +1109,6 @@ export function TransformTab({
                       />
                       <span className="truncate tracking-tight font-medium text-neutral-900 dark:text-neutral-100">
                         {t(cat.titleKey)}
-                      </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-neutral-200/50 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 shrink-0">
-                        {catActions.length}
                       </span>
                     </span>
                     <ChevronDown
@@ -1173,9 +1147,6 @@ export function TransformTab({
                 <h3 className="font-semibold text-base text-neutral-900 dark:text-neutral-100">
                   {t(currentActionMeta.titleKey)}
                 </h3>
-                <span className="text-xs font-mono px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400">
-                  {t(currentCategoryMeta.titleKey)}
-                </span>
                 {transformAction === "fill_mice" && <InfoHint term="mice" />}
                 {transformAction === "z_score" && <InfoHint term="zScore" />}
                 {transformAction === "outlier_iqr" && <InfoHint term="iqr" />}
