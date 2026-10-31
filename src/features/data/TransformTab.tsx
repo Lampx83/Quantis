@@ -27,6 +27,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Info,
+  ChevronDown,
 } from "lucide-react";
 import type { Dataset, RubinColumnStatistic, ImputationSparseCell, ImputationMeta, VariableMetadata } from "@/types";
 import { numCell, getDataRows, getAnalysisRows, computeDescriptive } from "@/utils/stats";
@@ -282,8 +283,8 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
   },
 ];
 
-const CATEGORIES: { id: TransformCategory | "all"; titleKey: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "all", titleKey: "transformTab.categoryAll", icon: Layers },
+const CATEGORIES: { id: TransformCategory; titleKey: string; icon: React.ComponentType<{ className?: string }> }[] = [
+
   { id: "missing", titleKey: "transformTab.categoryMissing", icon: Trash2 },
   { id: "scale", titleKey: "transformTab.categoryScale", icon: SlidersHorizontal },
   { id: "clean", titleKey: "transformTab.categoryClean", icon: Filter },
@@ -408,10 +409,24 @@ export function TransformTab({
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>(initialColsMultiple);
   const [transformAction, setTransformAction] = useState<TransformAction>(initialAction ?? "drop_missing");
-  const [activeCategory, setActiveCategory] = useState<TransformCategory | "all">(
-    initialAction ? getCategoryForAction(initialAction) : "all"
-  );
-  const [searchQuery, setSearchQuery] = useState("");
+  const [openCategories, setOpenCategories] = useState<Record<TransformCategory, boolean>>({
+    missing: true,
+    scale: true,
+    clean: true,
+    variables: true,
+  });
+
+  const toggleCategory = (catId: TransformCategory) => {
+    setOpenCategories((prev) => ({
+      ...prev,
+      [catId]: !prev[catId],
+    }));
+  };
+
+  useEffect(() => {
+    const cat = getCategoryForAction(transformAction);
+    setOpenCategories((prev) => (prev[cat] ? prev : { ...prev, [cat]: true }));
+  }, [transformAction]);
   const [colSearchQuery, setColSearchQuery] = useState("");
 
   const [renameFrom, setRenameFrom] = useState("");
@@ -906,28 +921,10 @@ export function TransformTab({
   const removeRecodeRule = (i: number) =>
     setRecodeRules((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : [{ from: "", to: "" }]));
 
-  // Filter actions based on search or category
-  const visibleActions = useMemo(() => {
-    let list = ACTION_DEFINITIONS;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      list = list.filter((act) => {
-        const title = t(act.titleKey).toLowerCase();
-        const desc = act.descKey ? t(act.descKey).toLowerCase() : "";
-        const badge = act.badge.toLowerCase();
-        const matchesKeyword = act.keywords.some((k) => k.toLowerCase().includes(q));
-        return title.includes(q) || desc.includes(q) || badge.includes(q) || matchesKeyword;
-      });
-    } else if (activeCategory !== "all") {
-      list = list.filter((act) => act.category === activeCategory);
-    }
-    return list;
-  }, [activeCategory, searchQuery]);
-
   const currentActionMeta = ACTION_DEFINITIONS.find((a) => a.id === transformAction) ?? ACTION_DEFINITIONS[0];
   const CurrentIcon = currentActionMeta.icon;
   const currentCategoryMeta =
-    CATEGORIES.find((c) => c.id === currentActionMeta.category) ?? CATEGORIES[1];
+    CATEGORIES.find((c) => c.id === currentActionMeta.category) ?? CATEGORIES[0];
 
   const filteredCols = useMemo(() => {
     if (!colSearchQuery.trim()) return cols;
@@ -984,20 +981,21 @@ export function TransformTab({
         onClick={() => {
           setTransformAction(act.id);
         }}
-        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between gap-2 transition-colors cursor-pointer select-none ${
+        title={t(act.titleKey)}
+        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between gap-2 transition-all cursor-pointer select-none text-xs ${
           isSelected
-            ? "bg-brand/10 text-brand font-semibold dark:bg-brand/20 dark:text-brand-300 ring-1 ring-brand/30"
-            : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/60"
+            ? "bg-brand/10 text-brand font-semibold dark:bg-brand/20 dark:text-brand-300 ring-1 ring-brand/25 shadow-2xs"
+            : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/60"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400"}`} />
-          <span className="truncate text-xs">{t(act.titleKey)}</span>
+          <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400 dark:text-neutral-500"}`} />
+          <span className="truncate">{t(act.titleKey)}</span>
         </div>
         <span
-          className={`font-mono text-xs px-1.5 py-0.2 rounded shrink-0 ${
+          className={`font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0 ${
             isSelected
-              ? "bg-brand/20 text-brand font-bold dark:bg-brand/30 dark:text-brand-200"
+              ? "bg-brand/15 text-brand font-bold dark:bg-brand/25 dark:text-brand-200"
               : "bg-neutral-200/60 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
           }`}
         >
@@ -1048,7 +1046,6 @@ export function TransformTab({
           onChange={(e) => {
             const val = e.target.value as TransformAction;
             setTransformAction(val);
-            setActiveCategory(getCategoryForAction(val));
           }}
         >
           <option value="drop_missing">{t("transformTab.actionDropMissing")}</option>
@@ -1075,89 +1072,66 @@ export function TransformTab({
       {/* UNIFIED WORKBENCH: Two-column Studio Layout (No boxes inside boxes) */}
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-xs overflow-hidden flex flex-col md:flex-row min-h-[580px]">
         {/* LEFT PANE: Operations Navigator Rail (~280px) */}
-        <aside className="w-full md:w-72 lg:w-80 shrink-0 border-b md:border-b-0 md:border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-950/40 flex flex-col">
-          {/* Search box & Category Pills */}
-          <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 space-y-2">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t("transformTab.searchPlaceholder")}
-                aria-label={t("transformTab.searchLabel")}
-                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand transition"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 p-0.5"
-                  aria-label={t("transformTab.clearSearch")}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
+        <aside className="w-full md:w-72 lg:w-80 shrink-0 border-b md:border-b-0 md:border-r border-neutral-200/90 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex flex-col">
+          {/* Operations Rail Header */}
+          <div className="px-3.5 py-2.5 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/70 dark:bg-neutral-900/80 select-none">
+            <div className="flex items-center gap-2 font-semibold text-neutral-800 dark:text-neutral-200 text-xs tracking-tight">
+              <Layers className="w-3.5 h-3.5 text-brand" />
+              <span>{t("transformTab.categoryAll")}</span>
             </div>
-
-            {/* Compact Category Switcher */}
-            {!searchQuery && (
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                {CATEGORIES.map((cat) => {
-                  const isActive = activeCategory === cat.id;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setActiveCategory(cat.id)}
-                      className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap transition-colors ${
-                        isActive
-                          ? "bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900 font-semibold"
-                          : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-neutral-800"
-                      }`}
-                    >
-                      {t(cat.titleKey)}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-full bg-neutral-200/60 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
+              {ACTION_DEFINITIONS.length}
+            </span>
           </div>
 
-          {/* Operation List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
-            {activeCategory === "all" && !searchQuery ? (
-              CATEGORIES.filter((c) => c.id !== "all").map((cat) => {
-                const catActions = ACTION_DEFINITIONS.filter((a) => a.category === cat.id);
-                const CatIcon = cat.icon;
-                return (
-                  <div key={cat.id} className="space-y-0.5">
-                    <div className="flex items-center gap-1.5 px-2 pt-1 pb-1 text-xs font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                      <CatIcon className="w-3 h-3" />
-                      <span>{t(cat.titleKey)}</span>
-                    </div>
-                    {catActions.map((act) => renderActionRow(act))}
-                  </div>
-                );
-              })
-            ) : (
-              <div className="space-y-0.5">
-                {visibleActions.map((act) => renderActionRow(act))}
-              </div>
-            )}
+          {/* Flush edge-to-edge accordion sections separated by hairline dividers */}
+          <div className="flex-1 overflow-y-auto divide-y divide-neutral-200/80 dark:divide-neutral-800 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.4)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-neutral-300 dark:[&::-webkit-scrollbar-thumb]:bg-neutral-700 hover:[&::-webkit-scrollbar-thumb]:bg-neutral-400 dark:hover:[&::-webkit-scrollbar-thumb]:bg-neutral-600 [&::-webkit-scrollbar-track]:bg-transparent">
+            {CATEGORIES.map((cat) => {
+              const catActions = ACTION_DEFINITIONS.filter((a) => a.category === cat.id);
+              const CatIcon = cat.icon;
+              const isOpen = !!openCategories[cat.id];
+              const hasSelectedAction = catActions.some((a) => a.id === transformAction);
 
-            {visibleActions.length === 0 && (
-              <div className="py-8 text-center text-xs text-neutral-500">
-                <p className="mb-2">{t("transformTab.noOperationsFound")}</p>
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="text-brand font-medium hover:underline"
-                >
-                  {t("transformTab.clearSearch")}
-                </button>
-              </div>
-            )}
+              return (
+                <div key={cat.id} className="select-none">
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(cat.id)}
+                    className={`w-full px-3.5 py-2.5 flex items-center justify-between font-semibold text-xs text-left transition-colors cursor-pointer select-none focus:outline-none focus-visible:bg-neutral-100/70 dark:focus-visible:bg-neutral-800/60 ${
+                      hasSelectedAction
+                        ? "text-neutral-900 dark:text-neutral-100 bg-neutral-100/60 dark:bg-neutral-800/40"
+                        : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/30"
+                    }`}
+                    aria-expanded={isOpen}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <CatIcon
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          hasSelectedAction ? "text-brand" : "text-neutral-400 dark:text-neutral-500"
+                        } transition-colors`}
+                      />
+                      <span className="truncate tracking-tight font-medium text-neutral-900 dark:text-neutral-100">
+                        {t(cat.titleKey)}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-neutral-200/50 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 shrink-0">
+                        {catActions.length}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ease-out ${
+                        isOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-2 pb-2.5 pt-0.5 space-y-0.5 bg-neutral-50/40 dark:bg-neutral-950/20">
+                      {catActions.map((act) => renderActionRow(act))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </aside>
 
@@ -1191,6 +1165,11 @@ export function TransformTab({
                 type="button"
                 onClick={requestApply}
                 disabled={isApplyDisabled}
+                title={
+                  usesMultiColumns && transformColsMultiple.length === 0
+                    ? "* Please select at least one column above to proceed."
+                    : undefined
+                }
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand text-white text-xs sm:text-sm font-semibold hover:bg-brand-hover shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
                 {isMiceLoading || isHotDeckLoading ? (
@@ -1769,31 +1748,7 @@ export function TransformTab({
             )}
           </div>
 
-          {/* Bottom Action Footer Bar */}
-          <div className="p-3 sm:px-6 sm:py-3 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/30 flex items-center justify-between gap-3 text-xs">
-            <div>
-              {usesMultiColumns && transformColsMultiple.length === 0 && (
-                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                  * Please select at least one column above to proceed.
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={requestApply}
-              disabled={isApplyDisabled}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-brand text-white font-medium hover:bg-brand-hover shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isMiceLoading || isHotDeckLoading ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {t("transformTab.processing")}
-                </span>
-              ) : (
-                t("transformTab.applyButton")
-              )}
-            </button>
-          </div>
+
         </section>
       </div>
 
