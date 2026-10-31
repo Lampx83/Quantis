@@ -409,4 +409,147 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(datasets).toHaveLength(1);
     expect(datasets[0].id).toBe("ds_transform_test");
   });
+
+  it("associates form labels with controls and provides accessibility attributes", () => {
+    const dsWithManyCols: Dataset = {
+      ...sampleDatasetWithMissing,
+      columnNames: ["C1", "C2", "C3", "C4", "C5", "C6", "C7"],
+      preview: [["C1", "C2", "C3", "C4", "C5", "C6", "C7"]],
+      data: [["C1", "C2", "C3", "C4", "C5", "C6", "C7"]],
+    };
+
+    const htmlMice = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={dsWithManyCols}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="fill_mice"
+      />
+    );
+    expect(htmlMice).toContain('id="transform-col-search"');
+    expect(htmlMice).toContain('for="transform-col-search"');
+    expect(htmlMice).toContain('id="transform-mice-m"');
+    expect(htmlMice).toContain('for="transform-mice-m"');
+    expect(htmlMice).toContain('id="transform-mice-max-iter"');
+    expect(htmlMice).toContain('for="transform-mice-max-iter"');
+
+    const htmlRename = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="rename"
+      />
+    );
+    expect(htmlRename).toContain('id="transform-rename-from"');
+    expect(htmlRename).toContain('for="transform-rename-from"');
+    expect(htmlRename).toContain('id="transform-rename-to"');
+    expect(htmlRename).toContain('for="transform-rename-to"');
+    expect(htmlRename).toContain('autoComplete="off"');
+
+    const htmlCompute = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="compute"
+      />
+    );
+    expect(htmlCompute).toContain('id="transform-compute-name"');
+    expect(htmlCompute).toContain('for="transform-compute-name"');
+    expect(htmlCompute).toContain('id="transform-compute-formula"');
+    expect(htmlCompute).toContain('for="transform-compute-formula"');
+
+    const htmlFilter = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="filter"
+      />
+    );
+    expect(htmlFilter).toContain('id="transform-filter-col"');
+    expect(htmlFilter).toContain('for="transform-filter-col"');
+    expect(htmlFilter).toContain('id="transform-filter-op"');
+    expect(htmlFilter).toContain('for="transform-filter-op"');
+    expect(htmlFilter).toContain('id="transform-filter-val"');
+    expect(htmlFilter).toContain('for="transform-filter-val"');
+
+    const htmlSort = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="sort"
+      />
+    );
+    expect(htmlSort).toContain('id="transform-sort-col"');
+    expect(htmlSort).toContain('for="transform-sort-col"');
+    expect(htmlSort).toContain('id="transform-sort-order"');
+    expect(htmlSort).toContain('for="transform-sort-order"');
+
+    const htmlRecode = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="recode"
+      />
+    );
+    expect(htmlRecode).toContain('id="transform-recode-col"');
+    expect(htmlRecode).toContain('for="transform-recode-col"');
+    expect(htmlRecode).toContain('aria-label="Old value 1"');
+    expect(htmlRecode).toContain('aria-label="New value 1"');
+  });
+
+  it("provides dialog semantics, backdrop accessibility, and scroll chaining containment for modals", () => {
+    // 1. Choice Modal
+    const htmlChoice = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialShowChoiceModal={true}
+      />
+    );
+    expect(htmlChoice).toContain('role="dialog"');
+    expect(htmlChoice).toContain('aria-modal="true"');
+    expect(htmlChoice).toContain('aria-labelledby="transform-choice-modal-title"');
+    expect(htmlChoice).toContain('id="transform-choice-modal-title"');
+    expect(htmlChoice).toContain("overscroll-contain");
+    expect(htmlChoice).toContain("focus-visible:ring-brand");
+    expect(htmlChoice).toContain('aria-hidden="true"');
+
+    // 2. Replace Confirm Modal
+    const htmlReplace = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialReplaceConfirm={true}
+      />
+    );
+    expect(htmlReplace).toContain('role="dialog"');
+    expect(htmlReplace).toContain('aria-modal="true"');
+    expect(htmlReplace).toContain('aria-labelledby="transform-replace-modal-title"');
+    expect(htmlReplace).toContain('id="transform-replace-modal-title"');
+    expect(htmlReplace).toContain("overscroll-contain");
+    expect(htmlReplace).toContain("focus-visible:ring-brand");
+
+    // 3. Invalidate Confirm Modal
+    const htmlInvalidate = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialInvalidateConfirm={true}
+      />
+    );
+    expect(htmlInvalidate).toContain('role="dialog"');
+    expect(htmlInvalidate).toContain('aria-modal="true"');
+    expect(htmlInvalidate).toContain('aria-labelledby="transform-invalidate-modal-title"');
+    expect(htmlInvalidate).toContain('id="transform-invalidate-modal-title"');
+    expect(htmlInvalidate).toContain("overscroll-contain");
+    expect(htmlInvalidate).toContain("focus-visible:ring-brand");
+  });
 });

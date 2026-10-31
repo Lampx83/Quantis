@@ -314,7 +314,7 @@ export function HotDeckLoadingBanner({ onCancel }: { onCancel: () => void }) {
       role="status"
       className="flex items-center gap-2.5 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs sm:text-sm text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
     >
-      <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />
+      <Loader2 className="h-4 w-4 animate-spin shrink-0 motion-reduce:animate-none" aria-hidden="true" />
       <span className="flex-1">{t("transformTab.hotDeck.loading")}</span>
       <button
         type="button"
@@ -474,6 +474,23 @@ export function TransformTab({
       abortControllerRef.current?.abort();
     };
   }, [selectedDs?.id]);
+
+  useEffect(() => {
+    if (!showTransformChoiceModal && !replaceConfirm && !invalidateConfirm) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (invalidateConfirm) {
+          setInvalidateConfirm(null);
+        } else if (replaceConfirm) {
+          setReplaceConfirm(null);
+        } else if (showTransformChoiceModal) {
+          setShowTransformChoiceModal(false);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showTransformChoiceModal, replaceConfirm, invalidateConfirm]);
 
   if (!selectedDs) {
     return (
@@ -982,14 +999,14 @@ export function TransformTab({
           setTransformAction(act.id);
         }}
         title={t(act.titleKey)}
-        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between gap-2 transition-all cursor-pointer select-none text-xs ${
+        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between gap-2 transition-colors cursor-pointer select-none text-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
           isSelected
             ? "bg-brand/10 text-brand font-semibold dark:bg-brand/20 dark:text-brand-300 ring-1 ring-brand/25 shadow-2xs"
             : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/60"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400 dark:text-neutral-500"}`} />
+          <Icon aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400 dark:text-neutral-500"}`} />
           <span className="truncate">{t(act.titleKey)}</span>
         </div>
         <span
@@ -1012,7 +1029,7 @@ export function TransformTab({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
-              <Wand2 className="w-4 h-4 text-brand" />
+              <Wand2 aria-hidden="true" className="w-4 h-4 text-brand" />
               <span>{t("transformTab.pipelineTitle")}</span>
             </h2>
             <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-300">
@@ -1076,7 +1093,7 @@ export function TransformTab({
           {/* Operations Rail Header */}
           <div className="px-3.5 py-2.5 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/70 dark:bg-neutral-900/80 select-none">
             <div className="flex items-center gap-2 font-semibold text-neutral-800 dark:text-neutral-200 text-xs tracking-tight">
-              <Layers className="w-3.5 h-3.5 text-brand" />
+              <Layers aria-hidden="true" className="w-3.5 h-3.5 text-brand" />
               <span>{t("transformTab.categoryAll")}</span>
             </div>
             <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-full bg-neutral-200/60 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400">
@@ -1096,8 +1113,10 @@ export function TransformTab({
                 <div key={cat.id} className="select-none">
                   <button
                     type="button"
+                    id={`accordion-header-${cat.id}`}
+                    aria-controls={`accordion-panel-${cat.id}`}
                     onClick={() => toggleCategory(cat.id)}
-                    className={`w-full px-3.5 py-2.5 flex items-center justify-between font-semibold text-xs text-left transition-colors cursor-pointer select-none focus:outline-none focus-visible:bg-neutral-100/70 dark:focus-visible:bg-neutral-800/60 ${
+                    className={`w-full px-3.5 py-2.5 flex items-center justify-between font-semibold text-xs text-left transition-colors cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none focus-visible:bg-neutral-100/70 dark:focus-visible:bg-neutral-800/60 ${
                       hasSelectedAction
                         ? "text-neutral-900 dark:text-neutral-100 bg-neutral-100/60 dark:bg-neutral-800/40"
                         : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/30"
@@ -1106,6 +1125,7 @@ export function TransformTab({
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <CatIcon
+                        aria-hidden="true"
                         className={`w-3.5 h-3.5 shrink-0 ${
                           hasSelectedAction ? "text-brand" : "text-neutral-400 dark:text-neutral-500"
                         } transition-colors`}
@@ -1118,14 +1138,20 @@ export function TransformTab({
                       </span>
                     </span>
                     <ChevronDown
-                      className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ease-out ${
+                      aria-hidden="true"
+                      className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none ${
                         isOpen ? "rotate-180" : ""
                       }`}
                     />
                   </button>
 
                   {isOpen && (
-                    <div className="px-2 pb-2.5 pt-0.5 space-y-0.5 bg-neutral-50/40 dark:bg-neutral-950/20">
+                    <div
+                      id={`accordion-panel-${cat.id}`}
+                      role="region"
+                      aria-labelledby={`accordion-header-${cat.id}`}
+                      className="px-2 pb-2.5 pt-0.5 space-y-0.5 bg-neutral-50/40 dark:bg-neutral-950/20"
+                    >
                       {catActions.map((act) => renderActionRow(act))}
                     </div>
                   )}
@@ -1142,7 +1168,7 @@ export function TransformTab({
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <div className="p-1.5 rounded-md bg-brand/10 text-brand dark:bg-brand/20">
-                  <CurrentIcon className="w-4 h-4" />
+                  <CurrentIcon aria-hidden="true" className="w-4 h-4" />
                 </div>
                 <h3 className="font-semibold text-base text-neutral-900 dark:text-neutral-100">
                   {t(currentActionMeta.titleKey)}
@@ -1167,14 +1193,14 @@ export function TransformTab({
                 disabled={isApplyDisabled}
                 title={
                   usesMultiColumns && transformColsMultiple.length === 0
-                    ? "* Please select at least one column above to proceed."
+                    ? t("transformTab.selectColToProceed")
                     : undefined
                 }
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-brand text-white text-xs sm:text-sm font-semibold hover:bg-brand-hover shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
               >
                 {isMiceLoading || isHotDeckLoading ? (
                   <span className="inline-flex items-center gap-1.5">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 aria-hidden="true" className="w-3.5 h-3.5 animate-spin motion-reduce:animate-none" />
                     {t("transformTab.processing")}
                   </span>
                 ) : (
@@ -1191,9 +1217,9 @@ export function TransformTab({
               <div className="space-y-2.5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                       {t("transformTab.columnsMultiLabel")}
-                    </label>
+                    </span>
                     <span
                       className={`text-xs font-mono px-2 py-0.2 rounded-full font-medium ${
                         transformColsMultiple.length > 0
@@ -1215,7 +1241,7 @@ export function TransformTab({
                       onClick={() => setTransformColsMultiple([...cols])}
                       className="inline-flex items-center gap-1 text-brand hover:underline font-medium"
                     >
-                      <CheckSquare className="w-3 h-3" />
+                      <CheckSquare aria-hidden="true" className="w-3 h-3" />
                       <span>{t("transformTab.selectAllCols")}</span>
                     </button>
                     {numericCols.length > 0 && numericCols.length !== cols.length && (
@@ -1226,7 +1252,7 @@ export function TransformTab({
                           onClick={() => setTransformColsMultiple([...numericCols])}
                           className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
                         >
-                          <Hash className="w-3 h-3" />
+                          <Hash aria-hidden="true" className="w-3 h-3" />
                           <span>{t("transformTab.selectNumericOnly")}</span>
                         </button>
                       </>
@@ -1239,7 +1265,7 @@ export function TransformTab({
                           onClick={() => setTransformColsMultiple([])}
                           className="inline-flex items-center gap-1 text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
                         >
-                          <Square className="w-3 h-3" />
+                          <Square aria-hidden="true" className="w-3 h-3" />
                           <span>{t("transformTab.deselectAllCols")}</span>
                         </button>
                       </>
@@ -1250,13 +1276,21 @@ export function TransformTab({
                 {/* Column Search Filter if > 6 columns */}
                 {cols.length > 6 && (
                   <div className="relative max-w-xs">
-                    <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                    <label htmlFor="transform-col-search" className="sr-only">
+                      {t("transformTab.filterColsPlaceholder")}
+                    </label>
+                    <Search aria-hidden="true" className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
                     <input
+                      id="transform-col-search"
+                      name="transformColSearch"
                       type="text"
+                      aria-label={t("transformTab.filterColsPlaceholder")}
                       value={colSearchQuery}
                       onChange={(e) => setColSearchQuery(e.target.value)}
                       placeholder={t("transformTab.filterColsPlaceholder")}
-                      className="w-full pl-7 pr-3 py-1 text-xs rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full pl-7 pr-3 py-1 text-xs rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                     />
                   </div>
                 )}
@@ -1325,7 +1359,7 @@ export function TransformTab({
                 role="status"
                 className="p-3 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/30 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5"
               >
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                <AlertTriangle aria-hidden="true" className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                 <div className="leading-relaxed">
                   {t("transformTab.modeFallbackHint", { cols: modeFallbackCols.join(", "), strategy: strategyLabel })}
                 </div>
@@ -1341,45 +1375,49 @@ export function TransformTab({
                 </h4>
                 <div className="flex flex-wrap gap-5 items-center">
                   <div>
-                    <label className="flex items-center gap-1 text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    <label htmlFor="transform-mice-m" className="flex items-center gap-1 text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                       <span>{t("transformTab.mice.mLabel")}</span>
                       <InfoHint term="miceM" />
                     </label>
                     <input
+                      id="transform-mice-m"
+                      name="miceM"
                       type="number"
                       min={MICE_MIN_M}
                       max={MICE_MAX_M}
                       value={miceM}
                       onChange={(e) => setMiceM(clampMiceM(parseInt(e.target.value, 10), 5))}
-                      className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs sm:text-sm w-32 font-mono text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                      className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs sm:text-sm w-32 font-mono text-neutral-900 dark:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                     />
                   </div>
                   <div>
-                    <label className="flex items-center gap-1 text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    <label htmlFor="transform-mice-max-iter" className="flex items-center gap-1 text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                       <span>{t("transformTab.mice.maxIterLabel")}</span>
                       <InfoHint term="miceMaxIter" />
                     </label>
                     <input
+                      id="transform-mice-max-iter"
+                      name="miceMaxIter"
                       type="number"
                       min={MICE_MIN_ITER}
                       max={MICE_MAX_ITER}
                       value={miceMaxIter}
                       onChange={(e) => setMiceMaxIter(clampMiceIterations(parseInt(e.target.value, 10), 10))}
-                      className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs sm:text-sm w-32 font-mono text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                      className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs sm:text-sm w-32 font-mono text-neutral-900 dark:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                     />
                   </div>
                 </div>
 
                 {!hasFullData && (
                   <p role="status" className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <AlertTriangle aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />
                     <span>{t("transformTab.mice.needFullData")}</span>
                   </p>
                 )}
 
                 {isMiceLoading && (
                   <div role="status" className="flex items-center gap-3 text-xs sm:text-sm text-sky-700 dark:text-sky-300 p-2.5 rounded-md bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800">
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0 text-sky-600" />
+                    <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin shrink-0 text-sky-600 motion-reduce:animate-none" />
                     <span className="flex-1">{t("transformTab.mice.loading")}</span>
                     <button
                       type="button"
@@ -1404,13 +1442,15 @@ export function TransformTab({
             {transformAction === "rename" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-rename-from" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.renameFrom")}
                   </label>
                   <select
+                    id="transform-rename-from"
+                    name="renameFrom"
                     value={renameFrom}
                     onChange={(e) => setRenameFrom(e.target.value)}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   >
                     <option value="">{t("transformTab.selectPlaceholder")}</option>
                     {cols.map((c) => (
@@ -1421,15 +1461,19 @@ export function TransformTab({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-rename-to" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.renameTo")}
                   </label>
                   <input
+                    id="transform-rename-to"
+                    name="renameTo"
                     type="text"
                     value={renameTo}
                     onChange={(e) => setRenameTo(e.target.value)}
                     placeholder="NEW_COLUMN_NAME"
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   />
                 </div>
               </div>
@@ -1439,27 +1483,35 @@ export function TransformTab({
             {transformAction === "compute" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-3">
                 <div className="max-w-md">
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-compute-name" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.computeName")}
                   </label>
                   <input
+                    id="transform-compute-name"
+                    name="computeName"
                     type="text"
                     value={computeName}
                     onChange={(e) => setComputeName(e.target.value)}
                     placeholder="TOTAL_SCORE"
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-compute-formula" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.computeFormula")}
                   </label>
                   <input
+                    id="transform-compute-formula"
+                    name="computeFormula"
                     type="text"
                     value={computeFormula}
                     onChange={(e) => setComputeFormula(e.target.value)}
                     placeholder="([x1] + [x2]) / 2"
-                    className="w-full max-w-xl rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm font-mono focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full max-w-xl rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   />
                   <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 max-w-xl">
                     {t("transformTab.computeHint")}
@@ -1486,9 +1538,9 @@ export function TransformTab({
             {/* Log Transform */}
             {transformAction === "log" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
-                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                <span className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                   {t("transformTab.logKind")}
-                </label>
+                </span>
                 <div className="flex flex-wrap gap-2.5">
                   {[
                     { id: "ln" as const, label: t("transformTab.logLn"), desc: "ln(x)" },
@@ -1522,16 +1574,19 @@ export function TransformTab({
             {/* Outlier IQR Controls */}
             {transformAction === "outlier_iqr" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
-                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                <label htmlFor="transform-iqr-k" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                   {t("transformTab.iqrK")}
                 </label>
                 <div className="flex items-center gap-3">
                   <input
+                    id="transform-iqr-k"
+                    name="iqrK"
                     type="text"
                     inputMode="decimal"
                     value={iqrK}
                     onChange={(e) => setIqrK(e.target.value)}
-                    className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm w-24 font-mono focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    autoComplete="off"
+                    className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm w-24 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   />
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-neutral-500">{t("transformTab.iqrPresetLabel")}</span>
@@ -1575,13 +1630,15 @@ export function TransformTab({
             {transformAction === "filter" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-filter-col" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.columnLabel")}
                   </label>
                   <select
+                    id="transform-filter-col"
+                    name="filterCol"
                     value={filterCol}
                     onChange={(e) => setFilterCol(e.target.value)}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   >
                     <option value="">{t("transformTab.selectPlaceholder")}</option>
                     {cols.map((c) => (
@@ -1592,13 +1649,15 @@ export function TransformTab({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-filter-op" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.conditionLabel")}
                   </label>
                   <select
+                    id="transform-filter-op"
+                    name="filterOp"
                     value={filterOp}
                     onChange={(e) => setFilterOp(e.target.value as typeof filterOp)}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand font-mono"
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand font-mono"
                   >
                     <option value="==">{t("transformTab.opEquals")}</option>
                     <option value="!=">{t("transformTab.opNotEquals")}</option>
@@ -1610,15 +1669,19 @@ export function TransformTab({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-filter-val" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.valueLabel")}
                   </label>
                   <input
+                    id="transform-filter-val"
+                    name="filterValue"
                     type="text"
                     value={filterValue}
                     onChange={(e) => setFilterValue(e.target.value)}
                     placeholder={t("transformTab.valuePlaceholder")}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   />
                 </div>
               </div>
@@ -1628,13 +1691,15 @@ export function TransformTab({
             {transformAction === "sort" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-sort-col" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.sortByColumnLabel")}
                   </label>
                   <select
+                    id="transform-sort-col"
+                    name="sortCol"
                     value={sortCol}
                     onChange={(e) => setSortCol(e.target.value)}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   >
                     <option value="">{t("transformTab.selectPlaceholder")}</option>
                     {cols.map((c) => (
@@ -1645,13 +1710,15 @@ export function TransformTab({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-sort-order" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.orderLabel")}
                   </label>
                   <select
+                    id="transform-sort-order"
+                    name="sortOrder"
                     value={sortOrder}
                     onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   >
                     <option value="asc">{t("transformTab.orderAsc")}</option>
                     <option value="desc">{t("transformTab.orderDesc")}</option>
@@ -1664,13 +1731,15 @@ export function TransformTab({
             {transformAction === "recode" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-3">
                 <div className="max-w-xs">
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  <label htmlFor="transform-recode-col" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
                     {t("transformTab.recodeColumnLabel")}
                   </label>
                   <select
+                    id="transform-recode-col"
+                    name="recodeCol"
                     value={recodeCol}
                     onChange={(e) => setRecodeCol(e.target.value)}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand"
+                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                   >
                     <option value="">{t("transformTab.selectPlaceholder")}</option>
                     {cols.map((c) => (
@@ -1693,15 +1762,21 @@ export function TransformTab({
                         value={r.from}
                         onChange={(e) => setRecodeRule(i, "from", e.target.value)}
                         placeholder={t("transformTab.oldValuePlaceholder")}
-                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1 text-xs w-36 font-mono focus:outline-none focus:ring-1 focus:ring-brand"
+                        aria-label={`${t("transformTab.oldValuePlaceholder")} ${i + 1}`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1 text-xs w-36 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                       />
-                      <ArrowRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      <ArrowRight aria-hidden="true" className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                       <input
                         type="text"
                         value={r.to}
                         onChange={(e) => setRecodeRule(i, "to", e.target.value)}
                         placeholder={t("transformTab.newValuePlaceholder")}
-                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1 text-xs w-36 font-mono focus:outline-none focus:ring-1 focus:ring-brand"
+                        aria-label={`${t("transformTab.newValuePlaceholder")} ${i + 1}`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1 text-xs w-36 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                       />
                       {recodeRules.length > 1 && (
                         <button
@@ -1710,7 +1785,7 @@ export function TransformTab({
                           className="p-1 text-neutral-400 hover:text-red-500 transition-colors"
                           aria-label="Delete rule"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -1722,7 +1797,7 @@ export function TransformTab({
                   onClick={addRecodeRule}
                   className="inline-flex items-center gap-1 text-xs text-brand font-medium hover:underline"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus aria-hidden="true" className="w-3 h-3" />
                   <span>{t("transformTab.addRuleButton")}</span>
                 </button>
               </div>
@@ -1757,22 +1832,33 @@ export function TransformTab({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setShowTransformChoiceModal(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setShowTransformChoiceModal(false);
+            }
+          }}
         >
           <div
-            className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full flex flex-col overflow-hidden border border-neutral-200 dark:border-neutral-700"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transform-choice-modal-title"
+            className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full flex flex-col overflow-hidden overscroll-contain border border-neutral-200 dark:border-neutral-700"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 shrink-0">
-              <h3 className="text-sm sm:text-base font-semibold text-neutral-900 dark:text-neutral-100">
+              <h3
+                id="transform-choice-modal-title"
+                className="text-sm sm:text-base font-semibold text-neutral-900 dark:text-neutral-100"
+              >
                 {t("transformTab.modalTitle")}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowTransformChoiceModal(false)}
-                className="p-1 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition"
+                className="p-1 rounded-md text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
                 aria-label={t("transformTab.closeAriaLabel")}
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
             <div className="p-4 sm:p-5 space-y-4">
@@ -1794,21 +1880,21 @@ export function TransformTab({
                       applyTransform(true, false);
                     }
                   }}
-                  className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3.5 py-2.5 text-left text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition"
+                  className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3.5 py-2.5 text-left text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
                 >
                   {t("transformTab.overwriteOriginalButton")}
                 </button>
                 <button
                   type="button"
                   onClick={() => applyTransform(false, false)}
-                  className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3.5 py-2.5 text-left text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition"
+                  className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3.5 py-2.5 text-left text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
                 >
                   {t("transformTab.createNewButton")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowTransformChoiceModal(false)}
-                  className="rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 text-center transition"
+                  className="rounded-md px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none text-center transition"
                 >
                   {t("transformTab.cancelButton")}
                 </button>
@@ -1823,12 +1909,23 @@ export function TransformTab({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setReplaceConfirm(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setReplaceConfirm(null);
+            }
+          }}
         >
           <div
-            className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-5 border border-neutral-200 dark:border-neutral-700"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transform-replace-modal-title"
+            className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-5 border border-neutral-200 dark:border-neutral-700 overscroll-contain"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm sm:text-base font-semibold mb-2 text-neutral-900 dark:text-neutral-100">
+            <h3
+              id="transform-replace-modal-title"
+              className="text-sm sm:text-base font-semibold mb-2 text-neutral-900 dark:text-neutral-100"
+            >
               {t("transformTab.mice.replaceConfirmTitle")}
             </h3>
             <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 mb-4">
@@ -1838,7 +1935,7 @@ export function TransformTab({
               <button
                 type="button"
                 onClick={() => setReplaceConfirm(null)}
-                className="rounded-md px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition"
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
               >
                 {t("transformTab.cancelButton")}
               </button>
@@ -1850,7 +1947,7 @@ export function TransformTab({
                   setReplaceConfirm(null);
                   run();
                 }}
-                className="rounded-md bg-brand text-white px-3.5 py-1.5 text-xs font-semibold hover:bg-brand-hover shadow-xs transition"
+                className="rounded-md bg-brand text-white px-3.5 py-1.5 text-xs font-semibold hover:bg-brand-hover shadow-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
               >
                 {t("transformTab.mice.replaceConfirmOk")}
               </button>
@@ -1864,12 +1961,23 @@ export function TransformTab({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => setInvalidateConfirm(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setInvalidateConfirm(null);
+            }
+          }}
         >
           <div
-            className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-5 border border-neutral-200 dark:border-neutral-700"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="transform-invalidate-modal-title"
+            className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-md w-full p-5 border border-neutral-200 dark:border-neutral-700 overscroll-contain"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm sm:text-base font-semibold mb-2 text-neutral-900 dark:text-neutral-100">
+            <h3
+              id="transform-invalidate-modal-title"
+              className="text-sm sm:text-base font-semibold mb-2 text-neutral-900 dark:text-neutral-100"
+            >
               {t("mi.invalidateTitle")}
             </h3>
             <p className="text-xs sm:text-sm text-neutral-600 dark:text-neutral-400 mb-4">
@@ -1879,7 +1987,7 @@ export function TransformTab({
               <button
                 type="button"
                 onClick={() => setInvalidateConfirm(null)}
-                className="rounded-md px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition"
+                className="rounded-md px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
               >
                 {t("mi.invalidateCancel")}
               </button>
@@ -1891,7 +1999,7 @@ export function TransformTab({
                   setInvalidateConfirm(null);
                   run();
                 }}
-                className="rounded-md bg-red-600 text-white px-3.5 py-1.5 text-xs font-semibold hover:bg-red-700 shadow-xs transition"
+                className="rounded-md bg-red-600 text-white px-3.5 py-1.5 text-xs font-semibold hover:bg-red-700 shadow-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none transition"
               >
                 {t("mi.invalidateConfirm")}
               </button>
