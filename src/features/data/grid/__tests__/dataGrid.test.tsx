@@ -332,4 +332,70 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     currentDs = useDataStore.getState().datasets.find((d) => d.id === mockDataset.id);
     expect(currentDs?.rows).toBe(2);
   });
+
+  it("highlights invalid non-numeric cells in numeric columns with amber warning style, AlertTriangle, and localized tooltip", () => {
+    const dsWithInvalidCell: Dataset = {
+      ...mockDataset,
+      preview: [
+        ["ID", "GENDER", "SCORE"],
+        ["1", "1", "invalid_text"],
+      ],
+      data: [
+        ["ID", "GENDER", "SCORE"],
+        ["1", "1", "invalid_text"],
+      ],
+    };
+
+    setLocale("vi");
+    const htmlVi = renderToStaticMarkup(
+      <DataGrid dataset={dsWithInvalidCell} showValueLabels={false} />
+    );
+    expect(htmlVi).toContain("bg-amber-50");
+    expect(htmlVi).toContain("Giá trị không hợp lệ");
+    expect(htmlVi).toContain("invalid_text");
+
+    setLocale("en");
+    const htmlEn = renderToStaticMarkup(
+      <DataGrid dataset={dsWithInvalidCell} showValueLabels={false} />
+    );
+    expect(htmlEn).toContain("bg-amber-50");
+    expect(htmlEn).toContain("Invalid value");
+  });
+
+  it("does not flag empty cells, valid numbers, or text in string columns as invalid", () => {
+    const dsMixed: Dataset = {
+      ...mockDataset,
+      preview: [
+        ["ID", "GENDER", "SCORE", "COMMENT"],
+        ["1", "1", "", "Good student"],
+        ["2", "2", "95.5", "Excellent"],
+      ],
+      data: [
+        ["ID", "GENDER", "SCORE", "COMMENT"],
+        ["1", "1", "", "Good student"],
+        ["2", "2", "95.5", "Excellent"],
+      ],
+      columnNames: ["ID", "GENDER", "SCORE", "COMMENT"],
+      variables: {
+        ...mockDataset.variables,
+        COMMENT: {
+          name: "COMMENT",
+          type: "string",
+          label: "Bình luận",
+          align: "left",
+          measure: "nominal",
+          decimals: 0,
+        },
+      },
+    };
+
+    setLocale("vi");
+    const html = renderToStaticMarkup(
+      <DataGrid dataset={dsMixed} showValueLabels={false} />
+    );
+    expect(html).not.toContain("bg-amber-50");
+    expect(html).toContain("(khuyết)");
+    expect(html).toContain("Good student");
+    expect(html).toContain("95.50");
+  });
 });

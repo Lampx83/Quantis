@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Search,
-  Tags,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +9,7 @@ import {
   Eye,
   EyeOff,
   ArrowUpDown,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import type { Dataset, VariableMetadata } from "@/types";
@@ -20,6 +20,8 @@ import {
   isMissingValue,
   hasMissingRule,
   validateVariableName,
+  isValidNumericValue,
+  isInvalidNumericCell,
 } from "@/utils/metadata";
 import { useDataStore } from "@/stores/useDataStore";
 import { useUIStore } from "@/stores/useUIStore";
@@ -372,6 +374,16 @@ export function DataGrid({
 
     if (editDraft !== previousValue) {
       updateCell(originalRowIndex, colIndex, editDraft, enrichedDataset.id);
+      const colName = headers[colIndex];
+      const meta = colName ? variablesMap[colName] : undefined;
+      if (meta?.type === "numeric" && !isValidNumericValue(editDraft) && showToast) {
+        showToast(
+          t("dataGrid.invalidNumericToast", {
+            row: originalRowIndex + 1,
+            col: colName || colIndex + 1,
+          })
+        );
+      }
     }
 
     setEditingCell(null);
@@ -777,6 +789,11 @@ export function DataGrid({
                           : "text-left";
 
                       const isMissing = isMissingValue(rawValue, meta);
+                      const isInvalidNumber = isInvalidNumericCell(rawValue, meta);
+                      const isDraftInvalidNumber =
+                        isCellEditing &&
+                        meta?.type === "numeric" &&
+                        !isValidNumericValue(editDraft);
 
                       return (
                         <td
@@ -801,7 +818,13 @@ export function DataGrid({
                             isCellActive
                               ? "ring-2 ring-inset ring-brand bg-brand/5 dark:bg-brand/15 z-1"
                               : ""
-                          } ${isMissing ? "bg-rose-50/40 dark:bg-rose-950/20" : ""}`}
+                          } ${
+                            isInvalidNumber
+                              ? "bg-amber-50/80 dark:bg-amber-950/30"
+                              : isMissing
+                              ? "bg-rose-50/40 dark:bg-rose-950/20"
+                              : ""
+                          }`}
                         >
                           {isCellEditing ? (
                             <input
@@ -825,8 +848,34 @@ export function DataGrid({
                                   cancelCellEdit();
                                 }
                               }}
-                              className={`w-full px-2 py-1.5 text-xs font-mono border-2 border-brand focus:outline-none bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 rounded ${alignClass}`}
+                              className={`w-full px-2 py-1.5 text-xs font-mono border-2 focus:outline-none bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 rounded ${alignClass} ${
+                                isDraftInvalidNumber
+                                  ? "border-amber-500 ring-1 ring-amber-500/50"
+                                  : "border-brand"
+                              }`}
+                              title={
+                                isDraftInvalidNumber
+                                  ? t("dataGrid.invalidNumericCellTooltip")
+                                  : undefined
+                              }
                             />
+                          ) : isInvalidNumber ? (
+                            <div
+                              className={`px-2 py-1 min-h-[26px] truncate flex items-center gap-1.5 ${
+                                meta?.align === "center"
+                                  ? "justify-center"
+                                  : meta?.align === "right"
+                                  ? "justify-end"
+                                  : "justify-start"
+                              } text-amber-900 dark:text-amber-200 font-mono`}
+                              title={t("dataGrid.invalidNumericCellTooltip")}
+                            >
+                              <AlertTriangle
+                                className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 inline-block"
+                                aria-hidden="true"
+                              />
+                              <span className="truncate">{rawValue}</span>
+                            </div>
                           ) : (
                             <div
                               className={`px-2 py-1 min-h-[26px] truncate ${alignClass} ${

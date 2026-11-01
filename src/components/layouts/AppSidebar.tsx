@@ -13,6 +13,7 @@ import { generateId } from "@/utils/helpers";
 import { getSampleWorkflowStandalone } from "@/sample-data";
 import {
   parseFileContent,
+  describeParseAssumptions,
   getFormatFromFilename,
   isBackendParseFormat,
   MAX_ROWS_STORED,
@@ -134,8 +135,11 @@ export function AppSidebar() {
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          const { rows, format: fmt } = parseFileContent(String(reader.result), file.name);
-          applyRows(rows, fmt);
+          const parsed = parseFileContent(String(reader.result), file.name);
+          applyRows(parsed.rows, parsed.format);
+          // Báo ngắn khi Quantis tự đoán dấu phân cách (; / tab) hoặc đổi dấu phẩy thập phân thành dấu chấm
+          const note = parsed.rows.length >= 2 ? describeParseAssumptions(parsed) : null;
+          if (note) showToast?.(note);
         } catch (_) {
           /* ignore */
         }

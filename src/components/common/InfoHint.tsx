@@ -11,7 +11,7 @@ export type GlossaryTerm =
   | "cronbachAlpha" | "correctedItemTotal" | "alphaIfDeleted" | "kmo" | "bartlett" | "efa"
   | "pValue" | "coefficient" | "r2" | "vif" | "ttest" | "anova" | "cohensD" | "correlationMatrix"
   | "panelData" | "pooledOls" | "fixedEffects" | "randomEffects" | "hausman" | "withinBetween"
-  | "zScore" | "iqr";
+  | "zScore" | "iqr" | "nonNumeric";
 
 /** Dải thuật ngữ: «Giải thích thuật ngữ: p-value (i) · t-test (i) …» — đặt ngay dưới tiêu đề của một chức năng. */
 export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {

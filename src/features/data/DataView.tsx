@@ -5,6 +5,7 @@ import { useUIStore, type DataTab } from "@/stores";
 import { type DescriptiveRow, getAnalysisRows, computeProfileWithOutliers } from "@/utils/stats";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
+import { InfoHint } from "@/components/common/InfoHint";
 import { DataGrid } from "./grid/DataGrid";
 import { VariableViewGrid } from "./grid/VariableViewGrid";
 import { TransformTab } from "./TransformTab";
@@ -132,9 +133,10 @@ export function DataView({
     } catch {
       rows = [];
     }
-    const profiles = Array.isArray(rows) && rows.length >= 2 ? computeProfileWithOutliers(rows) : [];
+    const profiles = Array.isArray(rows) && rows.length >= 2 ? computeProfileWithOutliers(rows, selectedDs?.variables) : [];
+    const nonNumericCols = profiles.filter((p) => (p?.nonNumeric ?? 0) > 0).map((p) => String(p.column));
     const aiContextProfiling = profiles.length > 0
-      ? profiles.map((p) => `Cột ${p?.column}: kiểu ${p?.type}, missing ${p?.missing} (${typeof p?.missingPct === "number" ? p.missingPct.toFixed(1) : "—"}%), unique ${p?.unique}, mean ${p?.mean != null ? Number(p.mean).toFixed(2) : "—"}, std ${p?.std != null ? Number(p.std).toFixed(2) : "—"}, skew ${p?.skew != null ? Number(p.skew).toFixed(3) : "—"}, outlier ${p?.outlierCount ?? "?"}`).join("\n")
+      ? profiles.map((p) => `Cột ${p?.column}: kiểu ${p?.type}, missing ${p?.missing} (${typeof p?.missingPct === "number" ? p.missingPct.toFixed(1) : "—"}%), unique ${p?.unique}, ${p?.nonNumeric != null ? `không phải số ${p.nonNumeric}, ` : ""}mean ${p?.mean != null ? Number(p.mean).toFixed(2) : "—"}, std ${p?.std != null ? Number(p.std).toFixed(2) : "—"}, skew ${p?.skew != null ? Number(p.skew).toFixed(3) : "—"}, outlier ${p?.outlierCount ?? "?"}`).join("\n")
       : "";
     return (
       <div className="w-full max-w-full">
@@ -149,6 +151,11 @@ export function DataView({
           ) : null}
         </div>
         <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("dataView.profiling.subtitle")} <span className="text-neutral-500 dark:text-neutral-500" title={t("dataView.profiling.naTooltip")}>{t("dataView.profiling.naLabel")}</span></p>
+        {selectedDs && profiles.length > 0 && nonNumericCols.length > 0 && (
+          <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" data-testid="nonnumeric-note">
+            {t("dataView.profiling.nonNumericNote", { n: nonNumericCols.length, cols: nonNumericCols.join(", ") })}
+          </p>
+        )}
         {selectedDs && profiles.length > 0 ? (
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto">
             <table className="w-full text-sm">
@@ -158,6 +165,7 @@ export function DataView({
                   <th className="text-left p-2">{t("dataView.profiling.table.type")}</th>
                   <th className="text-right p-2">Missing</th>
                   <th className="text-right p-2">%</th>
+                  <th className="text-right p-2">{t("dataView.profiling.table.nonNumeric")}<InfoHint term="nonNumeric" /></th>
                   <th className="text-right p-2">Unique</th>
                   <th className="text-right p-2">Min</th>
                   <th className="text-right p-2">Max</th>
@@ -174,6 +182,7 @@ export function DataView({
                     <td className="p-2">{p?.type ?? "—"}</td>
                     <td className="p-2 text-right">{p?.missing ?? "—"}</td>
                     <td className="p-2 text-right">{typeof p?.missingPct === "number" ? p.missingPct.toFixed(1) : "—"}%</td>
+                    <td className={`p-2 text-right ${(p?.nonNumeric ?? 0) > 0 ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`} title={p?.nonNumeric == null ? t("dataView.profiling.naCellTooltip") : undefined} data-testid={`nonnumeric-${p?.column}`}>{p?.nonNumeric != null ? p.nonNumeric : "—"}</td>
                     <td className="p-2 text-right">{p?.unique ?? "—"}</td>
                     <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.min != null ? Number(p.min).toFixed(2) : "—"}</td>
                     <td className="p-2 text-right" title={p?.type === "categorical" ? t("dataView.profiling.naCellTooltip") : undefined}>{p?.max != null ? Number(p.max).toFixed(2) : "—"}</td>

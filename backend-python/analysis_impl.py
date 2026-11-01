@@ -3,6 +3,7 @@ Phân tích thống kê — scipy, statsmodels, pandas.
 Trả về dict/list giống format frontend (DescriptiveRow, TTestResult, ...).
 """
 import os
+import re
 import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
@@ -85,23 +86,44 @@ def _json_safe_cfa_fit_value(v):
         return str(v)
 
 
-def run_descriptive(rows: list) -> list:
+# Số hợp lệ theo quy ước của Quantis (giống STRICT_NUMERIC_REGEX ở frontend): dấu chấm thập phân, không "3,5", không hex.
+_STRICT_NUMERIC = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
+
+
+def _strict_numeric_series(s: pd.Series) -> tuple[pd.Series, int]:
+    """(giá trị số hợp lệ, số ô không trống nhưng không phải số) của một cột đã dropna."""
+    text = s.astype(str).str.strip()
+    ok = text.map(lambda v: bool(_STRICT_NUMERIC.match(v)))
+    return pd.to_numeric(text[ok], errors="coerce").dropna(), int((~ok).sum())
+
+
+def run_descriptive(rows: list, numeric_columns: list | None = None) -> list:
+    """Thống kê mô tả từng cột. `numeric_columns`: cột khai báo kiểu số — ô không phải số hợp lệ (chữ, "3,5") bị bỏ qua
+    khi tính và được đếm riêng ở `nonNumeric`, KHÔNG tính vào `missing` (missing = ô trống)."""
     df = _rows_to_df(rows)
+    declared = {str(c).strip() for c in (numeric_columns or [])}
     out = []
     for col in df.columns:
         s = df[col].dropna()
         n = len(df[col])
         missing = n - len(s)
         try:
-            num = pd.to_numeric(s, errors="coerce")
-            valid = num.dropna()
-            if len(valid) == len(s) and len(valid) > 0:
+            non_numeric = None
+            if str(col) in declared:
+                valid, non_numeric = _strict_numeric_series(s)
+                is_num = len(valid) > 0
+            else:
+                num = pd.to_numeric(s, errors="coerce")
+                valid = num.dropna()
+                is_num = len(valid) == len(s) and len(valid) > 0
+            if is_num:
                 q = valid.quantile([0.25, 0.5, 0.75])
                 out.append({
                     "column": col,
                     "type": "numeric",
                     "n": n,
                     "missing": int(missing),
+                    **({"nonNumeric": non_numeric} if non_numeric is not None else {}),
                     "mean": float(valid.mean()),
                     "median": float(valid.median()),
                     "std": float(valid.std()) if len(valid) > 1 else 0.0,

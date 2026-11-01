@@ -1,5 +1,7 @@
 # Quantis & AI Portal — học theo SurveyLab
 
+> Tài liệu kỹ thuật cho nhà phát triển (không phải hướng dẫn người dùng). Cập nhật 25/10/2026 (đối chiếu `main`, commit `a646810`): đường dẫn mã đã đổi theo cấu trúc module mới; AI chạy qua vLLM (không còn Ollama cho chat); dữ liệu của người dùng Portal lưu theo tài khoản, khách (`guest@…`) không được ghi lên server.
+
 Tài liệu này tóm tắt **cách SurveyLab triển khai** (tham chiếu `Surveylab/backend/`, `Surveylab/src/`) và **cách Quantis đã căn chỉnh**, để cài lên **AI Portal** ổn định, **migration an toàn**, và **UX không “treo”** khi tác vụ lâu.
 
 ## 1. Backend: hai chế độ giống SurveyLab
@@ -32,9 +34,9 @@ Tài liệu này tóm tắt **cách SurveyLab triển khai** (tham chiếu `Surv
 ## 4. Hiệu năng (không chậm vô cớ)
 
 - **Embed:** `ensureDatabase()` chạy **background** — không đợi xong mới `listen` (SurveyLab/Quantis đều `.catch(log)`).
-- **Payload:** Quantis `express.json({ limit: "50mb" })` cho bảng lớn; SurveyLab 10mb — chỉnh theo nhu cầu Portal / reverse proxy (`client_max_body_size`).
-- **Frontend:** tránh **full-screen blocking** không cần thiết; với tác vụ lâu (đồng bộ workspace, parse file backend) dùng **thanh/banner loading** hoặc **overlay có nhãn** (xem code `App.tsx`: `workspacePullLoading`, `sidebarImportBusy`).
-- **Đồng bộ:** debounce `saveData` (đã có) — tránh POST liên tục khi kéo thả / gõ.
+- **Payload:** Quantis `express.json({ limit: "50mb" })` cho bảng lớn (mỗi dataset giữ tối đa 50.000 dòng khi nhập; phân tích qua Python tối đa 100.000 dòng); SurveyLab 10mb — chỉnh theo nhu cầu Portal / reverse proxy (`client_max_body_size`). Mọi chuỗi gửi lên được lọc `\u0000` và ký tự điều khiển trước khi ghi PostgreSQL (`jsonb`).
+- **Frontend:** tránh **full-screen blocking** không cần thiết; với tác vụ lâu (đồng bộ workspace, parse file backend) dùng **thanh/banner loading** hoặc **overlay có nhãn** (xem `src/hooks/useServerSync.ts` — `workspacePullLoading` — và `src/components/layouts/AppSidebar.tsx` — import qua backend).
+- **Đồng bộ:** debounce `saveData` (đã có) — tránh POST liên tục khi gõ / sửa ô. Điều kiện ghi lên server là `canSyncToServer()` (`src/stores/useSyncStore.ts`); khách Portal chỉ lưu cục bộ.
 
 ## 5. Loading — tác vụ dài (checklist)
 
@@ -42,7 +44,7 @@ Tài liệu này tóm tắt **cách SurveyLab triển khai** (tham chiếu `Surv
 - **Đồng bộ workspace (GET /data):** banner “Đang tải workspace từ máy chủ…”.
 - **Import Excel/SPSS/… qua backend:** overlay “Đang đọc file trên máy chủ…”.
 - **Phân tích / AI:** nút disabled + “Đang xử lý…” / spinner (nhiều tab Analysis & AI Assist đã có).
-- **Cài đặt / Ollama:** nút “Kiểm tra…” trạng thái loading (Settings modal).
+- **Cấu hình kết nối / vLLM:** nút “Kiểm tra Backend”, “Kiểm tra vLLM” có trạng thái loading (`src/components/modals/SettingsModal.tsx`).
 
 ## 6. Kiểm tra nhanh sau khi cài Portal
 
@@ -50,7 +52,7 @@ Tài liệu này tóm tắt **cách SurveyLab triển khai** (tham chiếu `Surv
 2. Trình duyệt: app mở không lỗi CORS; cookie / `credentials: "include"` đúng domain.
 3. Request `GET .../api/quantis/data` có **`X-User-Id`** từ proxy (UUID).
 4. Tạo dataset nhỏ → refresh → dữ liệu còn (đồng bộ user).
-5. Mở **Cài đặt** → Kiểm tra backend + Ollama.
+5. Mở menu **⋮ → Cấu hình kết nối** → *Kiểm tra Backend* + *Kiểm tra vLLM*.
 
 ## 7. Tham chiếu mã SurveyLab (trong monorepo)
 
@@ -58,4 +60,4 @@ Tài liệu này tóm tắt **cách SurveyLab triển khai** (tham chiếu `Surv
 - `Surveylab/backend/src/ensure-db.ts` — migration / CREATE DATABASE standalone.
 - `Surveylab/src/api.ts` — `getApiBase`, `checkBackendHealth`, `clearAllSurveylabStorage`.
 
-Quantis tương đương: `backend/src/embed.ts`, `ensure-db.ts`, `src/api.ts`, `src/App.tsx`.
+Quantis tương đương: `backend/src/embed.ts`, `ensure-db.ts`, `src/api.ts`, `src/hooks/useServerSync.ts`, `src/stores/useSyncStore.ts` (từ commit `767b027` `src/App.tsx` chỉ còn là khung ~135 dòng).

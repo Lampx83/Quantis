@@ -85,6 +85,8 @@ export interface DataProfile {
   type: string;
   missing: number;
   missingPct: number;
+  /** Cột số khai báo: số ô không trống nhưng không phải số hợp lệ (bỏ qua khi tính, không tính vào `missing`). */
+  nonNumeric?: number;
   unique: number;
   min?: number;
   max?: number;
