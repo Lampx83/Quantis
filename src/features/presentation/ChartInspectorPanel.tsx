@@ -1,6 +1,6 @@
 import React from "react";
 import { t } from "@/i18n";
-import type { Dataset, ChartConfig, ChartControls, BarMode, ErrorBarType, ColorPaletteName } from "@/types";
+import type { Dataset, ChartConfig, ChartControls, BarMode, ErrorBarType, ColorPaletteName, ChartSortOrder } from "@/types";
 import { DEFAULT_CHART_CONTROLS } from "@/types";
 import type { AggregateFunction } from "@/utils/aggregation";
 import { PALETTES } from "./colorPalettes";
@@ -233,7 +233,7 @@ export function ChartInspectorPanel({
                       data-testid="legend-col-select"
                       disabled={disabled || categoricalColumns.length === 0}
                       value={config.legendCol}
-                      onChange={(e) => onChange({ legendCol: e.target.value })}
+                      onChange={(e) => onChange({ legendCol: e.target.value, ...(e.target.value && (config.sortOrder === "value-asc" || config.sortOrder === "value-desc") ? { sortOrder: "category-asc" } : {}) })}
                       className={inputControlClass}
                     >
                       <option value="">{t("presentationView.noneOption")}</option>
@@ -242,6 +242,58 @@ export function ChartInspectorPanel({
                           {getColDisplayName(col)}
                         </option>
                       ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Sort Order - for bar and barH */}
+                {["bar", "barH"].includes(chartType) && (
+                  <div>
+                    <label className={labelClass}>
+                      {t("presentationView.sortOrderLabel")}
+                    </label>
+                    <select
+                      data-testid="sort-order-select"
+                      disabled={disabled}
+                      value={
+                        hasLegend &&
+                        config.legendCol &&
+                        (config.sortOrder === "value-asc" || config.sortOrder === "value-desc")
+                          ? "category-asc"
+                          : config.sortOrder || "category-asc"
+                      }
+                      onChange={(e) =>
+                        onChange({ sortOrder: e.target.value as ChartSortOrder })
+                      }
+                      className={inputControlClass}
+                    >
+                      <option value="category-asc">
+                        {t("presentationView.sortCategoryAsc")}
+                      </option>
+                      <option value="category-desc">
+                        {t("presentationView.sortCategoryDesc")}
+                      </option>
+                      <option
+                        value="value-asc"
+                        disabled={Boolean(hasLegend && config.legendCol)}
+                      >
+                        {t("presentationView.sortValueAsc")}
+                        {hasLegend && config.legendCol
+                          ? ` (${t("presentationView.sortValueDisabledWithLegend")})`
+                          : ""}
+                      </option>
+                      <option
+                        value="value-desc"
+                        disabled={Boolean(hasLegend && config.legendCol)}
+                      >
+                        {t("presentationView.sortValueDesc")}
+                        {hasLegend && config.legendCol
+                          ? ` (${t("presentationView.sortValueDisabledWithLegend")})`
+                          : ""}
+                      </option>
+                      <option value="none">
+                        {t("presentationView.sortOriginal")}
+                      </option>
                     </select>
                   </div>
                 )}

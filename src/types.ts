@@ -106,6 +106,12 @@ export interface AIRecommendation {
 export type BarMode = "clustered" | "stacked";
 export type ErrorBarType = "none" | "ci95" | "se" | "sd";
 export type ColorPaletteName = "academic" | "colorblind" | "grayscale";
+export type ChartSortOrder =
+  | "category-asc"
+  | "category-desc"
+  | "value-asc"
+  | "value-desc"
+  | "none";
 
 export interface ChartConfig {
   xCol: string;
@@ -121,6 +127,7 @@ export interface ChartConfig {
   decimals: number;
   exportBackground: "white" | "transparent";
   exportScale: 3 | 4;
+  sortOrder: ChartSortOrder;
 }
 
 export const DEFAULT_CHART_CONFIG: ChartConfig = {
@@ -137,6 +144,7 @@ export const DEFAULT_CHART_CONFIG: ChartConfig = {
   decimals: 2,
   exportBackground: "white",
   exportScale: 3,
+  sortOrder: "category-asc",
 };
 
 export interface ChartControls {

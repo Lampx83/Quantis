@@ -303,4 +303,68 @@ describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
 
     expect(original).toEqual(deepClone);
   });
+  describe("Sorting behavior (sortOrder)", () => {
+    const numericIdRows = [
+      ["id", "val"],
+      ["1", "10"],
+      ["10", "20"],
+      ["2", "30"],
+      ["20", "40"],
+      ["3", "50"],
+    ];
+
+    it("applies natural alphanumeric sort by default (1, 2, 3, 10, 20)", () => {
+      const res = aggregateData(numericIdRows, {
+        groupByCols: ["id"],
+        measureCol: "val",
+        func: "mean",
+      });
+      const names = res.map((r) => r.name);
+      expect(names).toEqual(["1", "2", "3", "10", "20"]);
+    });
+
+    it("supports category-desc sortOrder (20, 10, 3, 2, 1)", () => {
+      const res = aggregateData(numericIdRows, {
+        groupByCols: ["id"],
+        measureCol: "val",
+        func: "mean",
+        sortOrder: "category-desc",
+      });
+      const names = res.map((r) => r.name);
+      expect(names).toEqual(["20", "10", "3", "2", "1"]);
+    });
+
+    it("supports value-asc sortOrder", () => {
+      const res = aggregateData(numericIdRows, {
+        groupByCols: ["id"],
+        measureCol: "val",
+        func: "mean",
+        sortOrder: "value-asc",
+      });
+      const values = res.map((r) => r.value);
+      expect(values).toEqual([10, 20, 30, 40, 50]);
+    });
+
+    it("supports value-desc sortOrder", () => {
+      const res = aggregateData(numericIdRows, {
+        groupByCols: ["id"],
+        measureCol: "val",
+        func: "mean",
+        sortOrder: "value-desc",
+      });
+      const values = res.map((r) => r.value);
+      expect(values).toEqual([50, 40, 30, 20, 10]);
+    });
+
+    it("supports none (preserves insertion order)", () => {
+      const res = aggregateData(numericIdRows, {
+        groupByCols: ["id"],
+        measureCol: "val",
+        func: "mean",
+        sortOrder: "none",
+      });
+      const names = res.map((r) => r.name);
+      expect(names).toEqual(["1", "10", "2", "20", "3"]);
+    });
+  });
 });

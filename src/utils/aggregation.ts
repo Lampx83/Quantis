@@ -42,6 +42,8 @@ export interface AggregateOptions {
   skipEmpty?: boolean;
   /** Giới hạn số lượng nhóm tối đa trả về (mặc định: 30) */
   limit?: number;
+  /** Thứ tự sắp xếp kết quả (mặc định: category-asc) */
+  sortOrder?: "category-asc" | "category-desc" | "value-asc" | "value-desc" | "none";
 }
 
 /**
@@ -165,8 +167,22 @@ export function aggregateData(
     });
   }
 
-  // Sắp xếp tự nhiên theo tên nhóm
-  results.sort((a, b) => a.name.localeCompare(b.name));
+    // Sắp xếp kết quả theo sortOrder (mặc định: category-asc với so sánh số/chữ tự nhiên)
+  const sortOrder = options.sortOrder ?? "category-asc";
+  if (sortOrder === "category-asc") {
+    results.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+    );
+  } else if (sortOrder === "category-desc") {
+    results.sort((a, b) =>
+      b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" })
+    );
+  } else if (sortOrder === "value-asc") {
+    results.sort((a, b) => a.value - b.value);
+  } else if (sortOrder === "value-desc") {
+    results.sort((a, b) => b.value - a.value);
+  }
+  // "none" giữ nguyên thứ tự xuất hiện ban đầu
 
   const limit = options.limit ?? 30;
   return results.slice(0, limit);

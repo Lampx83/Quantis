@@ -555,4 +555,79 @@ describe("ChartInspectorPanel Component", () => {
       }
     });
   });
+  describe("Sort order controls in Data & Axes", () => {
+    it("renders sort-order-select strictly for bar and barH charts", () => {
+      const allowed = ["bar", "barH"];
+      const excluded = ["line", "scatter", "pie", "donut", "histogram", "box", "area", "heatmap", "density", "radar"];
+
+      for (const chartType of allowed) {
+        const html = renderToStaticMarkup(
+          <ChartInspectorPanel
+            chartType={chartType}
+            dataset={mockDataset}
+            config={DEFAULT_CHART_CONFIG}
+            onChange={() => {}}
+          />
+        );
+        expect(html, `${chartType} should render sort-order-select`).toContain('data-testid="sort-order-select"');
+        expect(html).toContain('value="category-asc"');
+        expect(html).toContain('value="category-desc"');
+        expect(html).toContain('value="value-asc"');
+        expect(html).toContain('value="value-desc"');
+        expect(html).toContain('value="none"');
+      }
+
+      for (const chartType of excluded) {
+        const html = renderToStaticMarkup(
+          <ChartInspectorPanel
+            chartType={chartType}
+            dataset={mockDataset}
+            config={DEFAULT_CHART_CONFIG}
+            onChange={() => {}}
+          />
+        );
+        expect(html, `${chartType} should NOT render sort-order-select`).not.toContain('data-testid="sort-order-select"');
+      }
+    });
+
+    it("disables value-asc and value-desc when a legend column is selected", () => {
+      const htmlWithLegend = renderToStaticMarkup(
+        <ChartInspectorPanel
+          chartType="bar"
+          dataset={mockDataset}
+          config={{
+            ...DEFAULT_CHART_CONFIG,
+            xCol: "gender",
+            yCol: "score",
+            legendCol: "department",
+          }}
+          onChange={() => {}}
+        />
+      );
+
+      // Verify disabled attribute on value-asc and value-desc
+      expect(htmlWithLegend).toContain('<option value="value-asc" disabled=""');
+      expect(htmlWithLegend).toContain('<option value="value-desc" disabled=""');
+    });
+
+    it("auto-falls back to category-asc if sortOrder was value-asc and legend is selected", () => {
+      const html = renderToStaticMarkup(
+        <ChartInspectorPanel
+          chartType="bar"
+          dataset={mockDataset}
+          config={{
+            ...DEFAULT_CHART_CONFIG,
+            xCol: "gender",
+            yCol: "score",
+            legendCol: "department",
+            sortOrder: "value-asc",
+          }}
+          onChange={() => {}}
+        />
+      );
+
+      // The select element value should not remain value-asc when legend is selected
+      expect(html).not.toContain('<option value="value-asc" selected');
+    });
+  });
 });

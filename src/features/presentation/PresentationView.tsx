@@ -119,7 +119,6 @@ export function PresentationView({
   const [multiLineYCols, setMultiLineYCols] = useState<string[]>([]);
   const [crosstabCol1, setCrosstabCol1] = useState("");
   const [crosstabCol2, setCrosstabCol2] = useState("");
-  const [barSortOrder, setBarSortOrder] = useState<"none" | "asc" | "desc">("none");
   const [densityGroupCol, setDensityGroupCol] = useState(initialControls?.densityGroupCol ?? "");
   const [densityValueCol, setDensityValueCol] = useState(initialControls?.densityValueCol ?? "");
   const [pieBinNumeric, setPieBinNumeric] = useState(initialControls?.pieBinNumeric ?? false);
@@ -191,15 +190,38 @@ export function PresentationView({
               measureCol: yCol,
               func: activeYAggregation,
               limit: 30,
+              sortOrder: chartConfig.sortOrder,
             }).map((g) => ({
               name: g.name,
               count: g.value,
               metrics: g.metrics,
               error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
             }))
-          : (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 24); })())
+          : (() => {
+              const counts: Record<string, number> = {};
+              rows.slice(1).forEach((r) => {
+                const v = r[xIdx] ?? "";
+                counts[v] = (counts[v] || 0) + 1;
+              });
+              let entries = Object.entries(counts).map(([name, count]) => ({ name, count }));
+              const sortMode = chartConfig.sortOrder || "category-asc";
+              if (sortMode === "category-asc") {
+                entries.sort((a, b) =>
+                  a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+                );
+              } else if (sortMode === "category-desc") {
+                entries.sort((a, b) =>
+                  b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" })
+                );
+              } else if (sortMode === "value-asc") {
+                entries.sort((a, b) => a.count - b.count);
+              } else if (sortMode === "value-desc") {
+                entries.sort((a, b) => b.count - a.count);
+              }
+              return entries.slice(0, 30);
+            })())
       : barData;
-    const barDataSorted = barSortOrder === "none" ? barChartData : [...barChartData].sort((a, b) => (barSortOrder === "asc" ? a.count - b.count : b.count - a.count));
+    const barDataSorted = barChartData;
     const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
       ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
       : [];
@@ -426,9 +448,23 @@ export function PresentationView({
 
         const allKeys = new Set<string>();
         countsMap.forEach((m) => m.forEach((_, k) => allKeys.add(k)));
-        const keys = Array.from(allKeys).sort((a, b) => a.localeCompare(b));
+        const keys = Array.from(allKeys).sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+        );
 
-        const barDataList = xOrder.slice(0, 30).map((name) => {
+        const sortMode = chartConfig.sortOrder || "category-asc";
+        const sortedXOrder = [...xOrder];
+        if (sortMode === "category-asc") {
+          sortedXOrder.sort((a, b) =>
+            a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+          );
+        } else if (sortMode === "category-desc") {
+          sortedXOrder.sort((a, b) =>
+            b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" })
+          );
+        }
+
+        const barDataList = sortedXOrder.slice(0, 30).map((name) => {
           const m = countsMap.get(name)!;
           const item: Record<string, any> = { name, _errors: {} };
           for (const k of keys) {
@@ -448,11 +484,24 @@ export function PresentationView({
         groupByCols: [xCol, chartConfig.legendCol],
         measureCol: yCol,
         func: activeYAggregation,
-        limit: 100,
+        limit: 1000,
       });
       const pivoted = pivotByLegend(multiAgg, chartConfig.legendCol, chartConfig.errorBar);
       const keys = getSeriesKeys(pivoted);
-      const barDataList = pivoted.map((p) => {
+
+      const sortMode = chartConfig.sortOrder || "category-asc";
+      const sortedPivoted = [...pivoted];
+      if (sortMode === "category-asc") {
+        sortedPivoted.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+        );
+      } else if (sortMode === "category-desc") {
+        sortedPivoted.sort((a, b) =>
+          b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" })
+        );
+      }
+
+      const barDataList = sortedPivoted.slice(0, 30).map((p) => {
         const item: Record<string, any> = {
           name: p.name,
           ...p.series,
@@ -463,7 +512,7 @@ export function PresentationView({
         }
         return item;
       });
-      const lineDataList = pivoted.map((p) => {
+      const lineDataList = sortedPivoted.slice(0, 30).map((p) => {
         const item: Record<string, any> = {
           name: p.name,
           x: p.name,

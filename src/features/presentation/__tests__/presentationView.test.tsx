@@ -1459,5 +1459,135 @@ describe("PresentationView Component — Aggregation Integration", () => {
       expect(htmlDonutAgg).toContain('data-testid="pie-chart"');
       expect(htmlDonutAgg).toContain('data-testid="pie-series"');
     });
+    describe("Bar & Horizontal Bar column sorting", () => {
+      const numericSortDataset: Dataset = {
+        id: "ds-numeric-sort",
+        name: "Numeric Sort Dataset",
+        rows: 5,
+        columns: 2,
+        columnNames: ["id", "val"],
+        columnTypes: { id: "nominal", val: "continuous" },
+        data: [
+          ["id", "val"],
+          ["1", "10"],
+          ["10", "50"],
+          ["2", "30"],
+          ["20", "20"],
+          ["3", "40"],
+        ],
+        preview: [
+          ["id", "val"],
+          ["1", "10"],
+          ["10", "50"],
+          ["2", "30"],
+          ["20", "20"],
+          ["3", "40"],
+        ],
+        type: "survey",
+        createdAt: "2026-01-01",
+      };
+
+      it("naturally sorts categories ascending (1, 2, 3, 10, 20) by default", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={numericSortDataset}
+            chartType="bar"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "id", yCol: "val", aggregation: "mean", sortOrder: "category-asc" }}
+          />
+        );
+        const match = html.match(/data-testid="bar-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const names = data.map((d: any) => d.name);
+        expect(names).toEqual(["1", "2", "3", "10", "20"]);
+      });
+
+      it("sorts categories descending (20, 10, 3, 2, 1) when sortOrder is category-desc", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={numericSortDataset}
+            chartType="bar"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "id", yCol: "val", aggregation: "mean", sortOrder: "category-desc" }}
+          />
+        );
+        const match = html.match(/data-testid="bar-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const names = data.map((d: any) => d.name);
+        expect(names).toEqual(["20", "10", "3", "2", "1"]);
+      });
+
+      it("sorts by value ascending when sortOrder is value-asc", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={numericSortDataset}
+            chartType="bar"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "id", yCol: "val", aggregation: "mean", sortOrder: "value-asc" }}
+          />
+        );
+        const match = html.match(/data-testid="bar-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const values = data.map((d: any) => d.count);
+        expect(values).toEqual([10, 20, 30, 40, 50]);
+      });
+
+      it("sorts by value descending when sortOrder is value-desc", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={numericSortDataset}
+            chartType="bar"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "id", yCol: "val", aggregation: "mean", sortOrder: "value-desc" }}
+          />
+        );
+        const match = html.match(/data-testid="bar-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const values = data.map((d: any) => d.count);
+        expect(values).toEqual([50, 40, 30, 20, 10]);
+      });
+
+      it("preserves original data order when sortOrder is none", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={numericSortDataset}
+            chartType="bar"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "id", yCol: "val", aggregation: "mean", sortOrder: "none" }}
+          />
+        );
+        const match = html.match(/data-testid="bar-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const names = data.map((d: any) => d.name);
+        expect(names).toEqual(["1", "10", "2", "20", "3"]);
+      });
+
+      it("sorts Horizontal Bar (barH) categories naturally", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={numericSortDataset}
+            chartType="barH"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "id", yCol: "val", aggregation: "mean", sortOrder: "category-asc" }}
+          />
+        );
+        const match = html.match(/data-testid="bar-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const names = data.map((d: any) => d.name);
+        expect(names).toEqual(["1", "2", "3", "10", "20"]);
+      });
+    });
   });
 });

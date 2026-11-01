@@ -112,7 +112,7 @@ export function pivotByLegend(
     if (!row) continue;
 
     const sortedLegendKeys = Array.from(row.series.keys()).sort((a, b) =>
-      a.localeCompare(b)
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
     );
 
     const seriesRecord: Record<string, number> = {};
@@ -150,5 +150,5 @@ export function getSeriesKeys(pivoted: PivotedSeries[]): string[] {
     }
   }
 
-  return Array.from(keySet).sort((a, b) => a.localeCompare(b));
+  return Array.from(keySet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
 }
