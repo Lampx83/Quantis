@@ -26,7 +26,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Info,
-  ChevronDown,
 } from "lucide-react";
 import type { Dataset, RubinColumnStatistic, ImputationSparseCell, ImputationMeta, VariableMetadata } from "@/types";
 import { numCell, getDataRows, getAnalysisRows, computeDescriptive } from "@/utils/stats";
@@ -85,6 +84,7 @@ interface ActionDefinition {
   id: TransformAction;
   category: TransformCategory;
   titleKey: string;
+  shortTitleKey: string;
   descKey: string;
   badge: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -98,6 +98,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "drop_missing",
     category: "missing",
     titleKey: "transformTab.actionDropMissing",
+    shortTitleKey: "transformTab.shortActionDropMissing",
     descKey: "transformTab.actionDropMissingDesc",
     badge: "Listwise",
     icon: Trash2,
@@ -108,6 +109,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "fill_mean",
     category: "missing",
     titleKey: "transformTab.actionFillMean",
+    shortTitleKey: "transformTab.shortActionFillMean",
     descKey: "transformTab.actionFillMeanDesc",
     badge: "Mean",
     icon: Calculator,
@@ -118,6 +120,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "fill_median",
     category: "missing",
     titleKey: "transformTab.actionFillMedian",
+    shortTitleKey: "transformTab.shortActionFillMedian",
     descKey: "transformTab.actionFillMedianDesc",
     badge: "Median",
     icon: SlidersHorizontal,
@@ -128,6 +131,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "fill_mode",
     category: "missing",
     titleKey: "transformTab.actionFillMode",
+    shortTitleKey: "transformTab.shortActionFillMode",
     descKey: "transformTab.actionFillModeDesc",
     badge: "Mode",
     icon: Hash,
@@ -138,8 +142,9 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "fill_hot_deck",
     category: "missing",
     titleKey: "transformTab.actionFillHotDeck",
+    shortTitleKey: "transformTab.shortActionFillHotDeck",
     descKey: "transformTab.actionFillHotDeckDesc",
-    badge: "Worker",
+    badge: "KNN",
     icon: Sparkles,
     needsColumns: true,
     keywords: ["hot deck", "knn", "lân cận", "donor", "tương đồng", "worker"],
@@ -148,8 +153,9 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "fill_mice",
     category: "missing",
     titleKey: "transformTab.actionFillMice",
+    shortTitleKey: "transformTab.shortActionFillMice",
     descKey: "transformTab.actionFillMiceDesc",
-    badge: "Python MICE",
+    badge: "MICE",
     icon: Layers,
     needsColumns: true,
     keywords: ["mice", "multiple imputation", "rubin", "đa biến", "nội suy", "python"],
@@ -160,6 +166,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "z_score",
     category: "scale",
     titleKey: "transformTab.actionZScore",
+    shortTitleKey: "transformTab.shortActionZScore",
     descKey: "transformTab.actionZScoreDesc",
     badge: "Z-Score",
     icon: SlidersHorizontal,
@@ -170,6 +177,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "min_max",
     category: "scale",
     titleKey: "transformTab.actionMinMax",
+    shortTitleKey: "transformTab.shortActionMinMax",
     descKey: "transformTab.actionMinMaxDesc",
     badge: "Min-Max",
     icon: Maximize2,
@@ -180,6 +188,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "log",
     category: "scale",
     titleKey: "transformTab.actionLog",
+    shortTitleKey: "transformTab.shortActionLog",
     descKey: "transformTab.actionLogDesc",
     badge: "Log",
     icon: Sigma,
@@ -192,6 +201,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "filter",
     category: "clean",
     titleKey: "transformTab.actionFilter",
+    shortTitleKey: "transformTab.shortActionFilter",
     descKey: "transformTab.actionFilterDesc",
     badge: "Filter",
     icon: Filter,
@@ -202,6 +212,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "outlier_iqr",
     category: "clean",
     titleKey: "transformTab.actionOutlierIqr",
+    shortTitleKey: "transformTab.shortActionOutlierIqr",
     descKey: "transformTab.actionOutlierIqrDesc",
     badge: "IQR",
     icon: AlertTriangle,
@@ -212,6 +223,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "dedupe",
     category: "clean",
     titleKey: "transformTab.actionDedupe",
+    shortTitleKey: "transformTab.shortActionDedupe",
     descKey: "transformTab.actionDedupeDesc",
     badge: "Dedupe",
     icon: Copy,
@@ -222,6 +234,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "sort",
     category: "clean",
     titleKey: "transformTab.actionSort",
+    shortTitleKey: "transformTab.shortActionSort",
     descKey: "transformTab.actionSortDesc",
     badge: "Sort",
     icon: ArrowUpDown,
@@ -234,6 +247,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "compute",
     category: "variables",
     titleKey: "transformTab.actionCompute",
+    shortTitleKey: "transformTab.shortActionCompute",
     descKey: "transformTab.actionComputeDesc",
     badge: "Formula",
     icon: FileSpreadsheet,
@@ -244,6 +258,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "recode",
     category: "variables",
     titleKey: "transformTab.actionRecode",
+    shortTitleKey: "transformTab.shortActionRecode",
     descKey: "transformTab.actionRecodeDesc",
     badge: "Recode",
     icon: Shuffle,
@@ -254,6 +269,7 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "rename",
     category: "variables",
     titleKey: "transformTab.actionRename",
+    shortTitleKey: "transformTab.shortActionRename",
     descKey: "transformTab.actionRenameDesc",
     badge: "Rename",
     icon: Edit3,
@@ -264,8 +280,9 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "coerce_numeric",
     category: "variables",
     titleKey: "transformTab.actionCoerceNumeric",
+    shortTitleKey: "transformTab.shortActionCoerceNumeric",
     descKey: "transformTab.actionCoerceNumericDesc",
-    badge: "→ Number",
+    badge: "Numeric",
     icon: Binary,
     needsColumns: true,
     keywords: ["coerce", "number", "số", "chuyển kiểu", "numeric"],
@@ -274,20 +291,25 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     id: "coerce_text",
     category: "variables",
     titleKey: "transformTab.actionCoerceText",
+    shortTitleKey: "transformTab.shortActionCoerceText",
     descKey: "transformTab.actionCoerceTextDesc",
-    badge: "→ Text",
+    badge: "Text",
     icon: Type,
     needsColumns: true,
     keywords: ["coerce", "text", "chữ", "chuỗi", "trim", "string"],
   },
 ];
 
-const CATEGORIES: { id: TransformCategory; titleKey: string; icon: React.ComponentType<{ className?: string }> }[] = [
-
-  { id: "missing", titleKey: "transformTab.categoryMissing", icon: Trash2 },
-  { id: "scale", titleKey: "transformTab.categoryScale", icon: SlidersHorizontal },
-  { id: "clean", titleKey: "transformTab.categoryClean", icon: Filter },
-  { id: "variables", titleKey: "transformTab.categoryVariables", icon: FileSpreadsheet },
+const CATEGORIES: {
+  id: TransformCategory;
+  titleKey: string;
+  tabKey: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: "missing", titleKey: "transformTab.categoryMissing", tabKey: "transformTab.tabMissing", icon: Trash2 },
+  { id: "scale", titleKey: "transformTab.categoryScale", tabKey: "transformTab.tabScale", icon: SlidersHorizontal },
+  { id: "clean", titleKey: "transformTab.categoryClean", tabKey: "transformTab.tabClean", icon: Filter },
+  { id: "variables", titleKey: "transformTab.categoryVariables", tabKey: "transformTab.tabVariables", icon: FileSpreadsheet },
 ];
 
 const getCategoryForAction = (act: TransformAction): TransformCategory => {
@@ -408,24 +430,55 @@ export function TransformTab({
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>(initialColsMultiple);
   const [transformAction, setTransformAction] = useState<TransformAction>(initialAction ?? "drop_missing");
-  const [openCategories, setOpenCategories] = useState<Record<TransformCategory, boolean>>({
-    missing: true,
-    scale: true,
-    clean: true,
-    variables: true,
-  });
+  const [activeCategory, setActiveCategory] = useState<TransformCategory>(() =>
+    getCategoryForAction(initialAction ?? "drop_missing")
+  );
 
-  const toggleCategory = (catId: TransformCategory) => {
-    setOpenCategories((prev) => ({
-      ...prev,
-      [catId]: !prev[catId],
-    }));
-  };
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     const cat = getCategoryForAction(transformAction);
-    setOpenCategories((prev) => (prev[cat] ? prev : { ...prev, [cat]: true }));
+    setActiveCategory(cat);
   }, [transformAction]);
+
+  const handleCategoryClick = (catId: TransformCategory) => {
+    setActiveCategory(catId);
+    const catActions = ACTION_DEFINITIONS.filter((a) => a.category === catId);
+    if (!catActions.some((a) => a.id === transformAction) && catActions.length > 0) {
+      setTransformAction(catActions[0].id);
+    }
+  };
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const currentIndex = CATEGORIES.findIndex((c) => c.id === activeCategory);
+    if (currentIndex === -1) return;
+
+    let nextIndex = -1;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      nextIndex = (currentIndex + 1) % CATEGORIES.length;
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      nextIndex = (currentIndex - 1 + CATEGORIES.length) % CATEGORIES.length;
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      nextIndex = 0;
+    } else if (e.key === "End") {
+      e.preventDefault();
+      nextIndex = CATEGORIES.length - 1;
+    }
+
+    if (nextIndex !== -1) {
+      const nextCat = CATEGORIES[nextIndex];
+      handleCategoryClick(nextCat.id);
+      tabRefs.current[nextIndex]?.focus();
+    }
+  };
+
+  const visibleActions = useMemo(
+    () => ACTION_DEFINITIONS.filter((a) => a.category === activeCategory),
+    [activeCategory]
+  );
   const [colSearchQuery, setColSearchQuery] = useState("");
 
   const [renameFrom, setRenameFrom] = useState("");
@@ -987,6 +1040,9 @@ export function TransformTab({
   const renderActionRow = (act: ActionDefinition) => {
     const isSelected = transformAction === act.id;
     const Icon = act.icon;
+    const shortTitle = t(act.shortTitleKey || act.titleKey);
+    const fullTitle = t(act.titleKey);
+
     return (
       <button
         key={act.id}
@@ -995,15 +1051,33 @@ export function TransformTab({
         onClick={() => {
           setTransformAction(act.id);
         }}
-        title={t(act.titleKey)}
-        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center gap-2 transition-colors cursor-pointer select-none text-xs focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+        title={fullTitle}
+        className={`group w-full text-left px-2.5 py-2 rounded-md flex items-center justify-between gap-2 transition-all cursor-pointer select-none text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-900 ${
           isSelected
-            ? "bg-brand/10 text-brand font-semibold dark:bg-brand/20 dark:text-brand-300 ring-1 ring-brand/25 shadow-2xs"
-            : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-200/50 dark:hover:bg-neutral-800/60"
+            ? "bg-brand/10 text-brand font-semibold ring-1 ring-brand/30 dark:bg-brand/20 dark:text-brand-300 dark:ring-brand/40 shadow-2xs"
+            : "text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800/60"
         }`}
       >
-        <Icon aria-hidden="true" className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-brand" : "text-neutral-400 dark:text-neutral-500"}`} />
-        <span className="truncate">{t(act.titleKey)}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon
+            aria-hidden="true"
+            className={`w-4 h-4 shrink-0 transition-colors ${
+              isSelected
+                ? "text-brand dark:text-brand-400"
+                : "text-neutral-400 dark:text-neutral-500 group-hover:text-neutral-600 dark:group-hover:text-neutral-300"
+            }`}
+          />
+          <span className="truncate text-xs font-medium">{shortTitle}</span>
+        </div>
+        <span
+          className={`font-mono text-[10px] px-1.5 py-0.5 rounded shrink-0 transition-colors ${
+            isSelected
+              ? "bg-brand/15 text-brand font-semibold dark:bg-brand/25 dark:text-brand-200"
+              : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400 group-hover:bg-neutral-200/70 dark:group-hover:bg-neutral-700/60"
+          }`}
+        >
+          {act.badge}
+        </span>
       </button>
     );
   };
@@ -1068,70 +1142,61 @@ export function TransformTab({
 
       {/* UNIFIED WORKBENCH: Two-column Studio Layout (No boxes inside boxes) */}
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-xs overflow-hidden flex flex-col md:flex-row min-h-[580px]">
-        {/* LEFT PANE: Operations Navigator Rail (~280px) */}
+        {/* LEFT PANE: Operations Navigator Rail (~280px to ~320px) */}
         <aside className="w-full md:w-72 lg:w-80 shrink-0 border-b md:border-b-0 md:border-r border-neutral-200/90 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex flex-col">
-          {/* Operations Rail Header */}
-          <div className="px-3.5 py-2.5 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center bg-neutral-50/70 dark:bg-neutral-900/80 select-none">
-            <div className="flex items-center gap-2 font-semibold text-neutral-800 dark:text-neutral-200 text-xs tracking-tight">
-              <Layers aria-hidden="true" className="w-3.5 h-3.5 text-brand" />
-              <span>{t("transformTab.categoryAll")}</span>
+          {/* Top Segmented Category Switcher */}
+          <div className="p-2.5 border-b border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-900/80">
+            <div
+              role="tablist"
+              aria-label={t("transformTab.categorySwitcherAria")}
+              className="grid grid-cols-4 p-1 bg-neutral-200/70 dark:bg-neutral-800/80 rounded-lg gap-1 border border-neutral-200/60 dark:border-neutral-700/60"
+              onKeyDown={handleTabKeyDown}
+            >
+              {CATEGORIES.map((cat, index) => {
+                const isCatActive = activeCategory === cat.id;
+                const CatIcon = cat.icon;
+                return (
+                  <button
+                    key={cat.id}
+                    ref={(el) => {
+                      tabRefs.current[index] = el;
+                    }}
+                    type="button"
+                    role="tab"
+                    id={`tab-${cat.id}`}
+                    aria-selected={isCatActive}
+                    aria-controls={`tabpanel-${cat.id}`}
+                    tabIndex={isCatActive ? 0 : -1}
+                    onClick={() => handleCategoryClick(cat.id)}
+                    className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-md text-[11px] transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                      isCatActive
+                        ? "bg-white dark:bg-neutral-800 text-brand shadow-2xs font-semibold"
+                        : "text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 font-medium"
+                    }`}
+                  >
+                    <CatIcon
+                      aria-hidden="true"
+                      className={`w-3.5 h-3.5 mb-0.5 shrink-0 transition-colors ${
+                        isCatActive ? "text-brand" : "text-neutral-400 dark:text-neutral-500"
+                      }`}
+                    />
+                    <span className="truncate w-full text-center tracking-tight leading-tight">
+                      {t(cat.tabKey)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Flush edge-to-edge accordion sections separated by hairline dividers */}
-          <div className="flex-1 overflow-y-auto divide-y divide-neutral-200/80 dark:divide-neutral-800 [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.4)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-neutral-300 dark:[&::-webkit-scrollbar-thumb]:bg-neutral-700 hover:[&::-webkit-scrollbar-thumb]:bg-neutral-400 dark:hover:[&::-webkit-scrollbar-thumb]:bg-neutral-600 [&::-webkit-scrollbar-track]:bg-transparent">
-            {CATEGORIES.map((cat) => {
-              const catActions = ACTION_DEFINITIONS.filter((a) => a.category === cat.id);
-              const CatIcon = cat.icon;
-              const isOpen = !!openCategories[cat.id];
-              const hasSelectedAction = catActions.some((a) => a.id === transformAction);
-
-              return (
-                <div key={cat.id} className="select-none">
-                  <button
-                    type="button"
-                    id={`accordion-header-${cat.id}`}
-                    aria-controls={`accordion-panel-${cat.id}`}
-                    onClick={() => toggleCategory(cat.id)}
-                    className={`w-full px-3.5 py-2.5 flex items-center justify-between font-semibold text-xs text-left transition-colors cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none focus-visible:bg-neutral-100/70 dark:focus-visible:bg-neutral-800/60 ${
-                      hasSelectedAction
-                        ? "text-neutral-900 dark:text-neutral-100 bg-neutral-100/60 dark:bg-neutral-800/40"
-                        : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/30"
-                    }`}
-                    aria-expanded={isOpen}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <CatIcon
-                        aria-hidden="true"
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          hasSelectedAction ? "text-brand" : "text-neutral-400 dark:text-neutral-500"
-                        } transition-colors`}
-                      />
-                      <span className="truncate tracking-tight font-medium text-neutral-900 dark:text-neutral-100">
-                        {t(cat.titleKey)}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      className={`w-3.5 h-3.5 text-neutral-400 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none ${
-                        isOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {isOpen && (
-                    <div
-                      id={`accordion-panel-${cat.id}`}
-                      role="region"
-                      aria-labelledby={`accordion-header-${cat.id}`}
-                      className="px-2 pb-2.5 pt-0.5 space-y-0.5 bg-neutral-50/40 dark:bg-neutral-950/20"
-                    >
-                      {catActions.map((act) => renderActionRow(act))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          {/* Compact Scannable Action List (3-6 actions for selected category) */}
+          <div
+            id={`tabpanel-${activeCategory}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${activeCategory}`}
+            className="p-2 space-y-1 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.4)_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-neutral-300 dark:[&::-webkit-scrollbar-thumb]:bg-neutral-700 hover:[&::-webkit-scrollbar-thumb]:bg-neutral-400 dark:hover:[&::-webkit-scrollbar-thumb]:bg-neutral-600 [&::-webkit-scrollbar-track]:bg-transparent"
+          >
+            {visibleActions.map((act) => renderActionRow(act))}
           </div>
         </aside>
 
@@ -1190,18 +1255,6 @@ export function TransformTab({
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-neutral-700 dark:text-neutral-300">
                       {t("transformTab.columnsMultiLabel")}
-                    </span>
-                    <span
-                      className={`text-xs font-mono px-2 py-0.2 rounded-full font-medium ${
-                        transformColsMultiple.length > 0
-                          ? "bg-brand/10 text-brand font-semibold dark:bg-brand/20 dark:text-brand-300"
-                          : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
-                      }`}
-                    >
-                      {tpl(t("transformTab.colsSelectedCount"), {
-                        selected: transformColsMultiple.length,
-                        total: cols.length,
-                      })}
                     </span>
                   </div>
 
@@ -1317,10 +1370,6 @@ export function TransformTab({
                     );
                   })}
                 </div>
-
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  {t("transformTab.columnsMultiHint")}
-                </p>
               </div>
             )}
 

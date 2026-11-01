@@ -552,4 +552,307 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(htmlInvalidate).toContain("overscroll-contain");
     expect(htmlInvalidate).toContain("focus-visible:ring-brand");
   });
+  it("renders the 4-tab segmented category switcher with role=\"tablist\" and correct category tabs", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('id="tab-missing"');
+    expect(html).toContain('id="tab-scale"');
+    expect(html).toContain('id="tab-clean"');
+    expect(html).toContain('id="tab-variables"');
+    expect(html).toContain("Missing");
+    expect(html).toContain("Scale");
+    expect(html).toContain("Clean");
+    expect(html).toContain("Variables");
+  });
+
+  it("marks active category tab with aria-selected=\"true\", tabIndex=0, and inactive tabs with aria-selected=\"false\", tabIndex=-1", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="drop_missing"
+      />
+    );
+
+    expect(html).toContain('id="tab-missing" aria-selected="true" aria-controls="tabpanel-missing" tabindex="0"');
+    expect(html).toContain('id="tab-scale" aria-selected="false" aria-controls="tabpanel-scale" tabindex="-1"');
+    expect(html).toContain('id="tab-clean" aria-selected="false" aria-controls="tabpanel-clean" tabindex="-1"');
+    expect(html).toContain('id="tab-variables" aria-selected="false" aria-controls="tabpanel-variables" tabindex="-1"');
+  });
+
+  it("associates category tabs with tabpanel via aria-controls and aria-labelledby", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="drop_missing"
+      />
+    );
+
+    expect(html).toContain('id="tabpanel-missing" role="tabpanel" aria-labelledby="tab-missing"');
+  });
+
+  it("displays only missing operations (6 items) when Missing category is active", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="drop_missing"
+      />
+    );
+
+    const panelMatch = html.match(/id="tabpanel-missing"[^>]*>([\s\S]*?)<\/div><\/aside>/);
+    expect(panelMatch).toBeTruthy();
+    const panelHtml = panelMatch![1];
+
+    expect(panelHtml).toContain('value="drop_missing"');
+    expect(panelHtml).toContain('value="fill_mean"');
+    expect(panelHtml).toContain('value="fill_median"');
+    expect(panelHtml).toContain('value="fill_mode"');
+    expect(panelHtml).toContain('value="fill_hot_deck"');
+    expect(panelHtml).toContain('value="fill_mice"');
+
+    expect(panelHtml).not.toContain('value="z_score"');
+    expect(panelHtml).not.toContain('value="min_max"');
+    expect(panelHtml).not.toContain('value="filter"');
+    expect(panelHtml).not.toContain('value="compute"');
+  });
+
+  it("displays only scale operations (3 items) when Scale category is active", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="z_score"
+      />
+    );
+
+    const panelMatch = html.match(/id="tabpanel-scale"[^>]*>([\s\S]*?)<\/div><\/aside>/);
+    expect(panelMatch).toBeTruthy();
+    const panelHtml = panelMatch![1];
+
+    expect(panelHtml).toContain('value="z_score"');
+    expect(panelHtml).toContain('value="min_max"');
+    expect(panelHtml).toContain('value="log"');
+
+    expect(panelHtml).not.toContain('value="drop_missing"');
+    expect(panelHtml).not.toContain('value="filter"');
+    expect(panelHtml).not.toContain('value="compute"');
+  });
+
+  it("displays only filter & clean operations (4 items) when Clean category is active", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="filter"
+      />
+    );
+
+    const panelMatch = html.match(/id="tabpanel-clean"[^>]*>([\s\S]*?)<\/div><\/aside>/);
+    expect(panelMatch).toBeTruthy();
+    const panelHtml = panelMatch![1];
+
+    expect(panelHtml).toContain('value="filter"');
+    expect(panelHtml).toContain('value="outlier_iqr"');
+    expect(panelHtml).toContain('value="dedupe"');
+    expect(panelHtml).toContain('value="sort"');
+
+    expect(panelHtml).not.toContain('value="drop_missing"');
+    expect(panelHtml).not.toContain('value="z_score"');
+    expect(panelHtml).not.toContain('value="compute"');
+  });
+
+  it("displays only variable & recode operations (5 items) when Variables category is active", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="compute"
+      />
+    );
+
+    const panelMatch = html.match(/id="tabpanel-variables"[^>]*>([\s\S]*?)<\/div><\/aside>/);
+    expect(panelMatch).toBeTruthy();
+    const panelHtml = panelMatch![1];
+
+    expect(panelHtml).toContain('value="compute"');
+    expect(panelHtml).toContain('value="recode"');
+    expect(panelHtml).toContain('value="rename"');
+    expect(panelHtml).toContain('value="coerce_numeric"');
+    expect(panelHtml).toContain('value="coerce_text"');
+
+    expect(panelHtml).not.toContain('value="drop_missing"');
+    expect(panelHtml).not.toContain('value="z_score"');
+    expect(panelHtml).not.toContain('value="filter"');
+  });
+
+  it("automatically syncs active category tab when initialAction prop points to different categories", () => {
+    const htmlScale = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="log"
+      />
+    );
+    expect(htmlScale).toContain('id="tab-scale" aria-selected="true"');
+
+    const htmlClean = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="dedupe"
+      />
+    );
+    expect(htmlClean).toContain('id="tab-clean" aria-selected="true"');
+
+    const htmlVars = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="coerce_text"
+      />
+    );
+    expect(htmlVars).toContain('id="tab-variables" aria-selected="true"');
+  });
+
+  it("renders concise action labels, operation icons, and subtle badges on action buttons", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="drop_missing"
+      />
+    );
+
+    // Concise labels
+    expect(html).toContain("Drop missing rows");
+    expect(html).toContain("Mean imputation");
+    expect(html).toContain("Median imputation");
+    expect(html).toContain("Mode imputation");
+    expect(html).toContain("Hot-deck (KNN)");
+    expect(html).toContain("MICE imputation");
+
+    // Badges
+    expect(html).toContain("Listwise");
+    expect(html).toContain("Mean");
+    expect(html).toContain("Median");
+    expect(html).toContain("Mode");
+    expect(html).toContain("KNN");
+    expect(html).toContain("MICE");
+  });
+
+  it("applies active styling to currently selected action button with value attribute preserved", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="drop_missing"
+      />
+    );
+
+    expect(html).toContain('value="drop_missing"');
+    expect(html).toContain("bg-brand/10 text-brand font-semibold ring-1 ring-brand/30");
+  });
+
+  it("preserves hidden accessible action-selector-dropdown with all 18 options intact", () => {
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+      />
+    );
+
+    const selectMatch = html.match(/<select id="action-selector-dropdown"[^>]*>([\s\S]*?)<\/select>/);
+    expect(selectMatch).toBeTruthy();
+    const selectHtml = selectMatch![1];
+
+    const all18Actions = [
+      "drop_missing",
+      "fill_mean",
+      "fill_median",
+      "fill_mode",
+      "fill_hot_deck",
+      "fill_mice",
+      "z_score",
+      "min_max",
+      "filter",
+      "sort",
+      "recode",
+      "rename",
+      "coerce_numeric",
+      "coerce_text",
+      "compute",
+      "log",
+      "outlier_iqr",
+      "dedupe",
+    ];
+
+    all18Actions.forEach((act) => {
+      expect(selectHtml).toContain(`value="${act}"`);
+    });
+  });
+
+  it("provides bilingual translations in English and Vietnamese for category tabs and concise action titles", () => {
+    // English
+    setLocale("en");
+    expect(t("transformTab.tabMissing")).toBe("Missing");
+    expect(t("transformTab.tabScale")).toBe("Scale");
+    expect(t("transformTab.tabClean")).toBe("Clean");
+    expect(t("transformTab.tabVariables")).toBe("Variables");
+
+    expect(t("transformTab.shortActionDropMissing")).toBe("Drop missing rows");
+    expect(t("transformTab.shortActionZScore")).toBe("Z-score standardize");
+    expect(t("transformTab.shortActionFilter")).toBe("Filter rows");
+    expect(t("transformTab.shortActionCompute")).toBe("Compute formula");
+
+    // Vietnamese
+    setLocale("vi");
+    expect(t("transformTab.tabMissing")).toBe("Khuyết");
+    expect(t("transformTab.tabScale")).toBe("Chuẩn hóa");
+    expect(t("transformTab.tabClean")).toBe("Làm sạch");
+    expect(t("transformTab.tabVariables")).toBe("Biến số");
+
+    expect(t("transformTab.shortActionDropMissing")).toBe("Loại bỏ dòng thiếu");
+    expect(t("transformTab.shortActionZScore")).toBe("Chuẩn hóa Z-score");
+    expect(t("transformTab.shortActionFilter")).toBe("Lọc dòng");
+    expect(t("transformTab.shortActionCompute")).toBe("Tính biến mới");
+  });
+
+  it("does not render redundant multi-column hint paragraph in any transform actions", () => {
+    setLocale("en");
+    const actionsTesting = ["drop_missing", "fill_mean", "z_score", "min_max", "log", "outlier_iqr"];
+    for (const act of actionsTesting) {
+      const html = renderToStaticMarkup(
+        <TransformTab
+          selectedDs={sampleDatasetWithMissing}
+          setDatasets={vi.fn()}
+          onSelectDataset={vi.fn()}
+          initialAction={act as any}
+        />
+      );
+      expect(html).not.toContain(t("transformTab.columnsMultiHint"));
+      expect(html).not.toContain("Select at least one column. With");
+      expect(html).not.toContain("columns selected");
+    }
+  });
 });
