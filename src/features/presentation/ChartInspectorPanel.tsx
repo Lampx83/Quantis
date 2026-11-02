@@ -78,19 +78,19 @@ export function ChartInspectorPanel({
     if (meta) {
       return meta.type === "numeric" || meta.measure === "scale";
     }
-    // Fallback inspect rows
+    // Fallback: numeric only if a sampled cell parses
     const rows = dataset?.data || dataset?.preview || [];
     const header = rows[0];
-    if (!header) return true;
+    if (!header) return false;
     const idx = header.indexOf(col);
-    if (idx === -1) return true;
+    if (idx === -1) return false;
     for (let r = 1; r < Math.min(rows.length, 10); r++) {
       const val = rows[r]?.[idx];
       if (val !== undefined && val !== "" && !Number.isNaN(Number(val))) {
         return true;
       }
     }
-    return true;
+    return false;
   });
 
   // Determine categorical columns
@@ -107,6 +107,7 @@ export function ChartInspectorPanel({
   const hasErrorBars = chartType === "bar" || chartType === "barH" || chartType === "line";
   const isMeanAggregation = config.aggregation === "mean";
   const hasConfigAxes = usesConfigAxes(chartType);
+  const activeRadarCols = (controls.radarNumericCols || []).filter((c) => numericColumns.includes(c));
 
   const aggregationOptions: { value: AggregateFunction; labelKey: string }[] = [
     { value: "mean", labelKey: "presentationView.aggLabel.mean" },
@@ -841,8 +842,8 @@ export function ChartInspectorPanel({
                       </label>
                       <div className="border border-neutral-200 dark:border-neutral-700/80 rounded-md max-h-48 overflow-y-auto divide-y divide-neutral-100 dark:divide-neutral-800/80 bg-neutral-50/30 dark:bg-neutral-900/40">
                         {numericColumns.slice(0, 16).map((col) => {
-                          const checked = controls.radarNumericCols.includes(col);
-                          const canAdd = checked || controls.radarNumericCols.length < 8;
+                          const checked = activeRadarCols.includes(col);
+                          const canAdd = checked || activeRadarCols.length < 8;
                           return (
                             <label
                               key={col}
@@ -857,10 +858,10 @@ export function ChartInspectorPanel({
                                 checked={checked}
                                 onChange={() => {
                                   const next = checked
-                                    ? controls.radarNumericCols.filter((x) => x !== col)
-                                    : controls.radarNumericCols.length < 8
-                                    ? [...controls.radarNumericCols, col]
-                                    : controls.radarNumericCols;
+                                    ? activeRadarCols.filter((x) => x !== col)
+                                    : activeRadarCols.length < 8
+                                    ? [...activeRadarCols, col]
+                                    : activeRadarCols;
                                   onControlsChange({ radarNumericCols: next });
                                 }}
                                 className="w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-600 focus:ring-primary-500/20 dark:bg-neutral-800 cursor-pointer"

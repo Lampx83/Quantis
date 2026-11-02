@@ -419,6 +419,66 @@ describe("ChartInspectorPanel Component", () => {
     expect(htmlRadar).toContain(t("presentationView.numericAxesLabel"));
   });
 
+  it("does not disable radar axis checkboxes when stale radarNumericCols from a previous dataset exceed limit", () => {
+    const radarDataset: Dataset = {
+      id: "ds_radar_stale_test",
+      name: "Radar Stale Test Dataset",
+      rows: 2,
+      columns: 2,
+      columnNames: ["Score", "Rating"],
+      preview: [
+        ["Score", "Rating"],
+        ["10", "20"],
+      ],
+      data: [
+        ["Score", "Rating"],
+        ["10", "20"],
+      ],
+      variables: {
+        Score: {
+          name: "Score",
+          label: "Score",
+          type: "numeric",
+          measure: "scale",
+          decimals: 0,
+          align: "right",
+        },
+        Rating: {
+          name: "Rating",
+          label: "Rating",
+          type: "numeric",
+          measure: "scale",
+          decimals: 0,
+          align: "right",
+        },
+      },
+      sourceFormat: "csv",
+      createdAt: "2026-10-22",
+      updatedAt: "2026-10-22",
+    };
+
+    const html = renderToStaticMarkup(
+      <ChartInspectorPanel
+        chartType="radar"
+        dataset={radarDataset}
+        config={DEFAULT_CHART_CONFIG}
+        controls={{
+          ...DEFAULT_CHART_CONTROLS,
+          radarNumericCols: ["A", "B", "C", "D", "E", "F", "G", "H"],
+        }}
+        onChange={() => {}}
+      />
+    );
+
+    const scoreCheckbox = html.match(/<input[^>]*data-testid="radar-axis-checkbox-Score"[^>]*>/)?.[0];
+    expect(scoreCheckbox).toBeDefined();
+    expect(scoreCheckbox).not.toContain("disabled");
+
+    const ratingCheckbox = html.match(/<input[^>]*data-testid="radar-axis-checkbox-Rating"[^>]*>/)?.[0];
+    expect(ratingCheckbox).toBeDefined();
+    expect(ratingCheckbox).not.toContain("disabled");
+  });
+
   describe("Task 1: Axis Unification in Inspector", () => {
     it("restricts usesConfigAxes strictly to academic charts", () => {
       expect(usesConfigAxes("bar")).toBe(true);
@@ -658,6 +718,46 @@ describe("ChartInspectorPanel Component", () => {
 
       // The select element value should not remain value-asc when legend is selected
       expect(html).not.toContain('<option value="value-asc" selected');
+    });
+
+    it("rejects non-numeric columns in y-axis fallback when dataset has no variable metadata (F10)", () => {
+      const datasetWithoutMeta: Dataset = {
+        id: "ds_no_meta",
+        name: "No Meta Dataset",
+        rows: 2,
+        columns: 2,
+        columnNames: ["Department", "Score"],
+        preview: [
+          ["Department", "Score"],
+          ["HR", "10"],
+          ["Sales", "20"],
+        ],
+        data: [
+          ["Department", "Score"],
+          ["HR", "10"],
+          ["Sales", "20"],
+        ],
+        variables: {},
+        sourceFormat: "csv",
+        createdAt: "2026-10-22",
+        updatedAt: "2026-10-22",
+      };
+
+      const html = renderToStaticMarkup(
+        <ChartInspectorPanel
+          chartType="bar"
+          dataset={datasetWithoutMeta}
+          config={DEFAULT_CHART_CONFIG}
+          onChange={() => {}}
+        />
+      );
+
+      const ySelectMatch = html.match(/<select[^>]*data-testid="y-col-select"[^>]*>([\s\S]*?)<\/select>/);
+      expect(ySelectMatch).toBeTruthy();
+      const ySelectHtml = ySelectMatch![0];
+
+      expect(ySelectHtml).toContain('value="Score"');
+      expect(ySelectHtml).not.toContain('value="Department"');
     });
   });
 });
