@@ -37,6 +37,7 @@ import {
 } from "./ChartInspectorPanel";
 import { pivotByLegend, getSeriesKeys, calculateErrorOffsets } from "@/utils/seriesPivot";
 import { computeAxisScale } from "@/utils/chartScale";
+import { ChartPlaceholderFrame } from "./ChartPlaceholderFrame";
 import { getPaletteColor } from "./colorPalettes";
 import type { PresentationTab, PresentationChartType } from "@/stores";
 import type {
@@ -715,6 +716,67 @@ export function PresentationView({
     ];
 
     const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && barChartData.length > 0) || (chartType === "barH" && barChartData.length > 0) || (chartType === "line" && lineChartData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
+
+    const isChartRendered =
+      (chartType === "scatter" && isScatter && (hasLegend ? groupedScatterData.length > 0 : chartData.length > 0)) ||
+      (chartType === "bar" && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0)) ||
+      (chartType === "barH" && xCol && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0)) ||
+      (chartType === "line" && (hasLegend ? pivotedLineData.length > 0 : lineChartData.length > 0)) ||
+      (chartType === "pie" && pieData.length > 0) ||
+      (chartType === "donut" && pieData.length > 0) ||
+      (chartType === "box" && boxChartData.length > 0) ||
+      (chartType === "histogram" && histChartData.length > 0) ||
+      (chartType === "area" && areaData.length > 0) ||
+      (chartType === "stackedBar" && stackedBarData.length > 0) ||
+      (chartType === "density" && densityData.length > 0) ||
+      (chartType === "radar" && radarData.length > 0) ||
+      (chartType === "multiLine" && multiLineData.length > 0 && multiLineYCols.length > 0) ||
+      (chartType === "crosstab" && crosstabResult !== null) ||
+      (chartType === "heatmap" && corrResult && corrResult.columnNames.length >= 2) ||
+      (chartType === "summary" && summaryStats.length > 0) ||
+      (chartType === "dashboard" && (dashboardStats.length > 0 || (dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2)));
+
+    const chartWarningMessage = (() => {
+      if (chartType === "scatter") {
+        if (xCol && !numericCols.includes(xCol)) {
+          return `${t("presentationView.scatterXNotNumericPart1")} "${xCol}" ${t("presentationView.scatterXNotNumericPart2")}`;
+        }
+        if (yCol && !numericCols.includes(yCol)) {
+          return `${t("presentationView.scatterYNotNumericPart1")} "${yCol}" ${t("presentationView.scatterYNotNumericPart2")}`;
+        }
+        if (xCol && yCol && chartData.length === 0) {
+          return `${t("presentationView.scatterNoDataPart1")} "${xCol}" ${t("presentationView.scatterNoDataPart2")} "${yCol}" ${t("presentationView.scatterNoDataPart3")}`;
+        }
+      }
+      if (chartType === "bar" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) {
+        return `${t("presentationView.barNoDataPart1")} "${xCol}"${yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. ${t("presentationView.barNoDataPart2")}`;
+      }
+      if (chartType === "barH" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) {
+        return `${t("presentationView.barNoDataPart1")} "${xCol}"${yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. ${t("presentationView.barNoDataPart2")}`;
+      }
+      if (chartType === "line" && xCol && yCol && lineChartData.length === 0) {
+        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
+      }
+      if (chartType === "area" && xCol && yCol && areaData.length === 0) {
+        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
+      }
+      if (chartType === "stackedBar" && xCol && stackByCol && yCol && stackedBarData.length === 0) {
+        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
+      }
+      if (chartType === "pie" && xCol && pieData.length === 0) {
+        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
+      }
+      if (chartType === "donut" && xCol && pieData.length === 0) {
+        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
+      }
+      if (chartType === "box" && xCol && yCol && boxChartData.length === 0) {
+        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
+      }
+      if (chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2)) {
+        return t("presentationView.placeholderNeedNumericCols");
+      }
+      return undefined;
+    })();
     const getChartSvgFromButton = (btn: HTMLElement): SVGElement | null => {
       const wrapper = btn.closest("[data-chart-export-wrapper]");
       if (!wrapper) return null;
@@ -911,13 +973,7 @@ export function PresentationView({
             </div>
           </div>
         )}
-        {chartType === "scatter" && (() => {
-          if (!xCol || !yCol) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterNoAxisWarningPart1")} <strong>{t("presentationView.axisXLabel")}</strong> {t("presentationView.scatterNoDataPart2")} <strong>{t("presentationView.axisYLabel")}</strong> {t("presentationView.scatterNoAxisWarningPart2")}</p>;
-          if (!numericCols.includes(xCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterXNotNumericPart1")} <strong>"{xCol}"</strong> {t("presentationView.scatterXNotNumericPart2")}</p>;
-          if (!numericCols.includes(yCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterYNotNumericPart1")} <strong>"{yCol}"</strong> {t("presentationView.scatterYNotNumericPart2")}</p>;
-          if (chartData.length === 0) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterNoDataPart1")} <strong>"{xCol}"</strong> {t("presentationView.scatterNoDataPart2")} <strong>"{yCol}"</strong> {t("presentationView.scatterNoDataPart3")}</p>;
-          return null;
-        })()}
+        
         {chartType === "density" && densityData.length > 0 && (() => {
           const keys = densityData.map((d) => d.group);
           const merged = densityData[0].points.map((_, i) => ({
@@ -1534,6 +1590,23 @@ export function PresentationView({
             )}
           </div>
         )}
+        {!isChartRendered && (
+          <ChartPlaceholderFrame
+            chartType={chartType}
+            datasetName={selectedDataset?.name}
+            xCol={xCol}
+            yCol={yCol}
+            histogramCol={histogramCol}
+            densityGroupCol={densityGroupCol}
+            densityValueCol={densityValueCol}
+            radarNumericCols={radarNumericCols}
+            stackByCol={stackByCol}
+            activeAggregation={activeYAggregation}
+            isInspectorOpen={isInspectorOpen}
+            onOpenInspector={() => setIsInspectorOpen(true)}
+            warningMessage={chartWarningMessage}
+          />
+        )}
         {chartType === "bar" && !xCol && <p className="text-neutral-500 text-sm">{t("presentationView.barEmptyHint")}</p>}
         {chartType === "bar" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0) && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.barNoDataPart1")} &quot;{xCol}&quot;{yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. {t("presentationView.barNoDataPart2")}</p>}
         {chartType === "line" && (!xCol || !yCol || (hasLegend ? pivotedLineData.length === 0 : lineChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}
@@ -1549,13 +1622,13 @@ export function PresentationView({
         {chartType === "donut" && pieData.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.donutEmptyHint")}</p>}
         {chartType === "barH" && (!xCol || (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.barHEmptyHint")}</p>}
         {chartType === "dashboard" && dashboardStats.length === 0 && !(dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2) && <p className="text-neutral-500 text-sm">{t("presentationView.dashboardEmptyHint")}</p>}
-          </div>
-          {isInspectorOpen ? (
-            <ChartInspectorPanel
-              chartType={chartType}
-              dataset={selectedDataset ?? null}
-              config={chartConfig}
-              onChange={(patch) => setChartConfig((prev) => ({ ...prev, ...patch }))}
+      </div>
+      {isInspectorOpen ? (
+        <ChartInspectorPanel
+          chartType={chartType}
+          dataset={selectedDataset ?? null}
+          config={chartConfig}
+          onChange={(patch) => setChartConfig((prev) => ({ ...prev, ...patch }))}
               controls={chartControls}
               onControlsChange={handleControlsChange}
               onExportCsv={chartType === "heatmap" ? handleExportHeatmapCsv : undefined}
