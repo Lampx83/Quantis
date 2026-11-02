@@ -127,8 +127,6 @@ export interface ChartConfig {
   subtitle: string;
   showDataLabels: boolean;
   decimals: number;
-  exportBackground: "white" | "transparent";
-  exportScale: 3 | 4;
   sortOrder: ChartSortOrder;
 }
 
@@ -144,8 +142,6 @@ export const DEFAULT_CHART_CONFIG: ChartConfig = {
   subtitle: "",
   showDataLabels: false,
   decimals: 2,
-  exportBackground: "white",
-  exportScale: 3,
   sortOrder: "category-asc",
 };
 
