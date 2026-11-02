@@ -78,19 +78,25 @@ export function ChartInspectorPanel({
     if (meta) {
       return meta.type === "numeric" || meta.measure === "scale";
     }
-    // Fallback: numeric only if a sampled cell parses
-    const rows = dataset?.data || dataset?.preview || [];
-    const header = rows[0];
+    // Fallback for datasets without metadata: numeric only if a sampled cell parses.
+    // Scan past blank cells and keep the column when there is nothing to judge from,
+    // so a numeric column with empty leading cells is not silently hidden.
+    const dataRows = dataset?.data && dataset.data.length > 0 ? dataset.data : dataset?.preview ?? [];
+    const header = dataRows[0];
     if (!header) return false;
     const idx = header.indexOf(col);
     if (idx === -1) return false;
-    for (let r = 1; r < Math.min(rows.length, 10); r++) {
-      const val = rows[r]?.[idx];
-      if (val !== undefined && val !== "" && !Number.isNaN(Number(val))) {
+    let sawValue = false;
+    for (let r = 1; r < Math.min(dataRows.length, 50); r++) {
+      const raw = dataRows[r]?.[idx];
+      const text = raw === undefined || raw === null ? "" : String(raw).trim();
+      if (text === "") continue;
+      sawValue = true;
+      if (!Number.isNaN(Number(text))) {
         return true;
       }
     }
-    return false;
+    return !sawValue;
   });
 
   // Determine categorical columns

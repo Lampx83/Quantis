@@ -759,5 +759,35 @@ describe("ChartInspectorPanel Component", () => {
       expect(ySelectHtml).toContain('value="Score"');
       expect(ySelectHtml).not.toContain('value="Department"');
     });
+
+    it("keeps a column the numeric fallback cannot judge (all sampled cells blank)", () => {
+      const emptySamples: Dataset = {
+        id: "ds_blank_samples",
+        name: "Blank Samples",
+        rows: 12,
+        columns: 2,
+        columnNames: ["Department", "Score"],
+        preview: [["Department", "Score"], ["HR", ""]],
+        data: [["Department", "Score"], ...Array.from({ length: 12 }, (_, i) => [`Dept ${i}`, ""])],
+        variables: {},
+        sourceFormat: "csv",
+        createdAt: "2026-10-22",
+        updatedAt: "2026-10-22",
+      };
+
+      const html = renderToStaticMarkup(
+        <ChartInspectorPanel
+          chartType="bar"
+          dataset={emptySamples}
+          config={DEFAULT_CHART_CONFIG}
+          onChange={() => {}}
+        />
+      );
+
+      const ySelectMatch = html.match(/<select[^>]*data-testid="y-col-select"[^>]*>([\s\S]*?)<\/select>/);
+      expect(ySelectMatch).toBeTruthy();
+      // Nothing to judge from: do not hide the column rather than guess it is text.
+      expect(ySelectMatch![0]).toContain('value="Score"');
+    });
   });
 });
