@@ -187,6 +187,9 @@ export function PresentationView({
     const yIdx = cols.indexOf(yCol);
     const isScatter = xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol);
     const isAggregated = Boolean(yCol && yIdx >= 0 && numericCols.includes(yCol));
+    const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
+      ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
+      : [];
     const hasLegend = Boolean(
       supportsLegend(chartType) &&
       chartConfig.legendCol &&
@@ -404,6 +407,7 @@ export function PresentationView({
       isScatter,
       isAggregated,
       hasLegend,
+      chartData,
       barData,
       barChartData,
       lineData,
@@ -439,6 +443,7 @@ export function PresentationView({
       isScatter,
       isAggregated,
       hasLegend,
+      chartData,
       barData,
       barChartData,
       lineData,
@@ -452,9 +457,6 @@ export function PresentationView({
     const setXCol = (val: string) => setChartConfig((c) => ({ ...c, xCol: val }));
     const yCol = chartConfig.yCol;
     const setYCol = (val: string) => setChartConfig((c) => ({ ...c, yCol: val }));
-    const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
-      : [];
     const barDataSorted = barChartData;
     const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
       ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
