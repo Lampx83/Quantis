@@ -1589,6 +1589,122 @@ describe("PresentationView Component — Aggregation Integration", () => {
         expect(names).toEqual(["1", "2", "3", "10", "20"]);
       });
     });
+
+    describe("Line chart source ordering and capacity regressions", () => {
+      beforeEach(() => {
+        setLocale("en");
+      });
+
+      const lineOrderDataset: Dataset = {
+        id: "ds-line-order",
+        name: "Line Order Dataset",
+        rows: 3,
+        columns: 2,
+        columnNames: ["Month", "Score"],
+        data: [
+          ["Month", "Score"],
+          ["Mar", "30"],
+          ["Jan", "10"],
+          ["Feb", "20"],
+        ],
+        preview: [
+          ["Month", "Score"],
+          ["Mar", "30"],
+          ["Jan", "10"],
+          ["Feb", "20"],
+        ],
+        variables: {
+          Month: {
+            name: "Month",
+            label: "Month",
+            type: "string",
+            measure: "nominal",
+            decimals: 0,
+            align: "left",
+          },
+          Score: {
+            name: "Score",
+            label: "Score",
+            type: "numeric",
+            measure: "scale",
+            decimals: 0,
+            align: "right",
+          },
+        },
+        sourceFormat: "csv",
+        createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
+      };
+
+      const categories35 = Array.from({ length: 35 }, (_, i) => `C${i + 1}`);
+      const rows35: string[][] = [
+        ["Category", "Score"],
+        ...categories35.map((c, i) => [c, String((i + 1) * 10)]),
+      ];
+      const lineCapacityDataset: Dataset = {
+        id: "ds-line-capacity",
+        name: "Line Capacity Dataset",
+        rows: 35,
+        columns: 2,
+        columnNames: ["Category", "Score"],
+        data: rows35,
+        preview: rows35,
+        variables: {
+          Category: {
+            name: "Category",
+            label: "Category",
+            type: "string",
+            measure: "nominal",
+            decimals: 0,
+            align: "left",
+          },
+          Score: {
+            name: "Score",
+            label: "Score",
+            type: "numeric",
+            measure: "scale",
+            decimals: 0,
+            align: "right",
+          },
+        },
+        sourceFormat: "csv",
+        createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
+      };
+
+      it("keeps source row order on line charts (F2)", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={lineOrderDataset}
+            chartType="line"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "Month", yCol: "Score" }}
+          />
+        );
+        const match = html.match(/data-testid="line-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        const xValues = data.map((d: any) => d.x);
+        expect(xValues).toEqual(["Mar", "Jan", "Feb"]);
+      });
+
+      it("does not truncate line charts at 30 categories (F4)", () => {
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={lineCapacityDataset}
+            chartType="line"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "Category", yCol: "Score" }}
+          />
+        );
+        const match = html.match(/data-testid="line-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        expect(data).toHaveLength(35);
+      });
+    });
   });
 
   describe("Synchronized Chart Instructions with Inspector UI", () => {
