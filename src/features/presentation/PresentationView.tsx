@@ -408,6 +408,37 @@ export function PresentationView({
       };
     })();
 
+    const groupedScatterData = (() => {
+      if (chartType !== "scatter" || !hasLegend || !isScatter) {
+        return [];
+      }
+      const legIdx = cols.indexOf(chartConfig.legendCol);
+      if (legIdx < 0) return [];
+
+      const map = new Map<string, Array<{ x: number; y: number }>>();
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const legVal = String(row[legIdx] ?? "").trim();
+        if (!legVal) continue;
+        const xVal = numCell(row[xIdx]);
+        const yVal = numCell(row[yIdx]);
+        if (Number.isNaN(xVal) || Number.isNaN(yVal)) continue;
+
+        let list = map.get(legVal);
+        if (!list) {
+          list = [];
+          map.set(legVal, list);
+        }
+        list.push({ x: xVal, y: yVal });
+      }
+
+      const sortedKeys = Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
+      return sortedKeys.map((key) => ({
+        key,
+        points: map.get(key)!,
+      }));
+    })();
+
     return {
       rows,
       cols,
@@ -426,6 +457,7 @@ export function PresentationView({
       pivotedBarData,
       pivotedLineData,
       legendSeriesKeys,
+      groupedScatterData,
     };
   }, [
     tab,
@@ -442,6 +474,174 @@ export function PresentationView({
     pieNumericCol,
     activeYAggregation,
   ]);
+
+  const rows = vizData?.rows;
+  const cols = vizData?.cols;
+  const numericCols = vizData?.numericCols;
+  const xCol = chartConfig.xCol;
+  const yCol = chartConfig.yCol;
+
+  const boxStats = useMemo(() => {
+    if (
+      tab !== "visualization" ||
+      !selectedDataset ||
+      chartType !== "box" ||
+      !xCol ||
+      !yCol ||
+      !rows ||
+      !numericCols ||
+      !numericCols.includes(yCol)
+    ) {
+      return [];
+    }
+    return analysisBackendAvailable && boxStatsBackendResult
+      ? boxStatsBackendResult
+      : getBoxStatsByGroup(rows, xCol, yCol);
+  }, [
+    tab,
+    chartType,
+    xCol,
+    yCol,
+    numericCols,
+    rows,
+    analysisBackendAvailable,
+    boxStatsBackendResult,
+  ]);
+
+  const boxChartData = useMemo(() => {
+    return boxStats.map((b) => ({
+      name: b.group,
+      median: b.median,
+      min: b.min,
+      max: b.max,
+      q1: b.q1,
+      q3: b.q3,
+      n: b.n,
+      boxLower: b.median - b.q1,
+      boxUpper: b.q3 - b.median,
+      whiskerLow: [b.q1 - b.min, 0] as [number, number],
+      whiskerHigh: [0, b.max - b.q3] as [number, number],
+    }));
+  }, [boxStats]);
+
+  const boxYDomain: [number, number] = useMemo(() => {
+    if (boxStats.length === 0) return [0, 1];
+    const lo = safeMin(boxStats.map((b) => b.min));
+    const hi = safeMax(boxStats.map((b) => b.max));
+    const pad = (hi - lo) * 0.05 || 1;
+    return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+  }, [boxStats]);
+
+  const densityData = useMemo(() => {
+    if (
+      tab !== "visualization" ||
+      !selectedDataset ||
+      chartType !== "density" ||
+      !densityGroupCol ||
+      !densityValueCol ||
+      !rows ||
+      !cols ||
+      !numericCols ||
+      !numericCols.includes(densityValueCol) ||
+      rows.length < 2
+    ) {
+      return [];
+    }
+    const densityGroupIdx = cols.indexOf(densityGroupCol);
+    const densityValueIdx = cols.indexOf(densityValueCol);
+    if (densityGroupIdx < 0 || densityValueIdx < 0) return [];
+
+    const groups: Record<string, number[]> = {};
+    rows.slice(1).forEach((r) => {
+      const g = String(r[densityGroupIdx] ?? "").trim();
+      const v = numCell(r[densityValueIdx]);
+      if (g === "" || Number.isNaN(v)) return;
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(v);
+    });
+    const allVals = Object.values(groups).flat();
+    if (allVals.length < 2) return [];
+    const [lo, hi] = safeMinMax(allVals);
+    const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
+    const series: { group: string; points: { x: number; density: number }[] }[] = [];
+    Object.entries(groups).forEach(([group, vals]) => {
+      if (vals.length < 2) return;
+      const pts = kernelDensityEstimate(vals, grid);
+      series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
+    });
+    return series;
+  }, [
+    tab,
+    selectedDataset,
+    chartType,
+    densityGroupCol,
+    densityValueCol,
+    rows,
+    cols,
+    numericCols,
+  ]);
+
+  const histValues = useMemo(() => {
+    if (
+      tab !== "visualization" ||
+      !selectedDataset ||
+      chartType !== "histogram" ||
+      !histogramCol ||
+      !rows ||
+      !cols
+    ) {
+      return [];
+    }
+    const histColIdx = cols.indexOf(histogramCol);
+    if (histColIdx < 0) return [];
+    return rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v));
+  }, [tab, selectedDataset, chartType, histogramCol, rows, cols]);
+
+  const histBins = useMemo(() => {
+    if (histValues.length === 0) return [];
+    return analysisBackendAvailable && histBinsBackendResult
+      ? histBinsBackendResult
+      : getHistogramBins(histValues);
+  }, [histValues, analysisBackendAvailable, histBinsBackendResult]);
+
+  const histChartData = useMemo(() => {
+    return histBins.map((b) => ({
+      name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1),
+      count: b.count,
+    }));
+  }, [histBins]);
+
+  const histDensityCurve = useMemo(() => {
+    if (chartType !== "histogram" || !showHistogramDensity || histValues.length < 2) {
+      return [];
+    }
+    const [lo, hi] = safeMinMax(histValues);
+    const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
+    return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
+  }, [chartType, showHistogramDensity, histValues]);
+
+  const histComboData = useMemo(() => {
+    if (
+      chartType !== "histogram" ||
+      !showHistogramDensity ||
+      histChartData.length === 0 ||
+      histDensityCurve.length === 0
+    ) {
+      return [];
+    }
+    const maxCount = safeMax(histChartData.map((d) => d.count));
+    const maxDens = safeMax(histDensityCurve.map((d) => d.density));
+    const scale = maxDens > 0 ? maxCount / maxDens : 1;
+    return histChartData.map((d, i) => {
+      const binStart = histBins[i].binStart;
+      const binEnd = histBins[i].binEnd;
+      const center = (binStart + binEnd) / 2;
+      const nearest = histDensityCurve.reduce((a, p) =>
+        Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a
+      );
+      return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
+    });
+  }, [chartType, showHistogramDensity, histChartData, histDensityCurve, histBins]);
 
   if (tab === "visualization" && selectedDataset) {
     const {
@@ -462,68 +662,11 @@ export function PresentationView({
       pivotedBarData,
       pivotedLineData,
       legendSeriesKeys,
+      groupedScatterData,
     } = vizData!;
-    const xCol = chartConfig.xCol;
     const setXCol = (val: string) => setChartConfig((c) => ({ ...c, xCol: val }));
-    const yCol = chartConfig.yCol;
     const setYCol = (val: string) => setChartConfig((c) => ({ ...c, yCol: val }));
     const barDataSorted = barChartData;
-    const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
-      ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
-      : [];
-    // Hộp xếp chồng: phần đệm trong suốt (0→Q1) + hộp Q1→Median + hộp Median→Q3; râu = ErrorBar (Q1→Min, Q3→Max).
-    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
-    const boxYDomain: [number, number] = (() => {
-      if (boxStats.length === 0) return [0, 1];
-      const lo = safeMin(boxStats.map((b) => b.min));
-      const hi = safeMax(boxStats.map((b) => b.max));
-      const pad = (hi - lo) * 0.05 || 1;
-      return [Math.floor(lo - pad), Math.ceil(hi + pad)];
-    })();
-    const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
-    const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
-    const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
-      const groups: Record<string, number[]> = {};
-      rows.slice(1).forEach((r) => {
-        const g = String(r[densityGroupIdx] ?? "").trim();
-        const v = numCell(r[densityValueIdx]);
-        if (g === "" || Number.isNaN(v)) return;
-        if (!groups[g]) groups[g] = [];
-        groups[g].push(v);
-      });
-      const allVals = Object.values(groups).flat();
-      if (allVals.length < 2) return [];
-      const [lo, hi] = safeMinMax(allVals);
-      const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
-      const series: { group: string; points: { x: number; density: number }[] }[] = [];
-      Object.entries(groups).forEach(([group, vals]) => {
-        if (vals.length < 2) return;
-        const pts = kernelDensityEstimate(vals, grid);
-        series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
-      });
-      return series;
-    })() : [];
-    const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
-    const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
-    const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
-    const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
-      const [lo, hi] = safeMinMax(histValues);
-      const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
-      return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
-    })() : [];
-    const histComboData = (chartType === "histogram" && showHistogramDensity && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
-      const maxCount = safeMax(histChartData.map((d) => d.count));
-      const maxDens = safeMax(histDensityCurve.map((d) => d.density));
-      const scale = maxDens > 0 ? maxCount / maxDens : 1;
-      return histChartData.map((d, i) => {
-        const binStart = histBins[i].binStart;
-        const binEnd = histBins[i].binEnd;
-        const center = (binStart + binEnd) / 2;
-        const nearest = histDensityCurve.reduce((a, p) => (Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a));
-        return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
-      });
-    })() : [];
     const areaData = lineData;
     const variables = selectedDataset?.variables ?? {};
     const xLabel = xCol ? (variables[xCol]?.label?.trim() || xCol) : "";
@@ -727,37 +870,6 @@ export function PresentationView({
       if (val === null || val === undefined || val === "" || Number.isNaN(Number(val))) return "";
       return Number(val).toFixed(activeDecimals);
     };
-
-    const groupedScatterData = (() => {
-      if (!hasLegend || !isScatter) {
-        return [];
-      }
-      const legIdx = cols.indexOf(chartConfig.legendCol);
-      if (legIdx < 0) return [];
-
-      const map = new Map<string, Array<{ x: number; y: number }>>();
-      for (let r = 1; r < rows.length; r++) {
-        const row = rows[r];
-        const legVal = String(row[legIdx] ?? "").trim();
-        if (!legVal) continue;
-        const xVal = numCell(row[xIdx]);
-        const yVal = numCell(row[yIdx]);
-        if (Number.isNaN(xVal) || Number.isNaN(yVal)) continue;
-
-        let list = map.get(legVal);
-        if (!list) {
-          list = [];
-          map.set(legVal, list);
-        }
-        list.push({ x: xVal, y: yVal });
-      }
-
-      const sortedKeys = Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
-      return sortedKeys.map((key) => ({
-        key,
-        points: map.get(key)!,
-      }));
-    })();
 
     const visualizationContext = [
       selectedDataset ? `${t("presentationView.contextDatasetLabel")} ${selectedDataset.name}, ${rows.length} ${t("transformTab.rowsUnit")}, ${cols.length} ${t("transformTab.columnsUnit")}.` : "",

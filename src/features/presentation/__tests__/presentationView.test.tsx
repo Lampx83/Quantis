@@ -1990,4 +1990,102 @@ describe("PresentationView Component — Aggregation Integration", () => {
       expect(htmlScatterVi).toContain("Bảng điều khiển");
     });
   });
+
+  describe("Task 5: Memoized Scatter, Box Plot, and Density Data", () => {
+    const multiGroupDataset: Dataset = {
+      id: "ds_memo_test",
+      name: "Memo Test Dataset",
+      rows: 6,
+      columns: 3,
+      columnNames: ["Group", "XVal", "YVal"],
+      preview: [
+        ["Group", "XVal", "YVal"],
+        ["Alpha", "10", "100"],
+        ["Alpha", "15", "120"],
+        ["Alpha", "20", "110"],
+        ["Beta", "25", "200"],
+        ["Beta", "30", "220"],
+        ["Beta", "35", "210"],
+      ],
+      data: [
+        ["Group", "XVal", "YVal"],
+        ["Alpha", "10", "100"],
+        ["Alpha", "15", "120"],
+        ["Alpha", "20", "110"],
+        ["Beta", "25", "200"],
+        ["Beta", "30", "220"],
+        ["Beta", "35", "210"],
+      ],
+      variables: {
+        Group: { name: "Group", label: "Group", type: "string", measure: "nominal", decimals: 0, align: "left" },
+        XVal: { name: "XVal", label: "X Value", type: "numeric", measure: "scale", decimals: 1, align: "right" },
+        YVal: { name: "YVal", label: "Y Value", type: "numeric", measure: "scale", decimals: 1, align: "right" },
+      },
+      sourceFormat: "csv",
+      createdAt: "2026-10-21T00:00:00Z",
+      updatedAt: "2026-10-21T00:00:00Z",
+    };
+
+    it("renders grouped scatter data when legendCol is configured", () => {
+      const html = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={multiGroupDataset}
+          chartType="scatter"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "XVal", yCol: "YVal", legendCol: "Group" }}
+        />
+      );
+      expect(html).toContain('data-testid="scatter-chart"');
+      expect(html).toContain('data-name="Alpha"');
+      expect(html).toContain('data-name="Beta"');
+    });
+
+    it("renders box plot statistics table and box chart data accurately", () => {
+      const html = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={multiGroupDataset}
+          chartType="box"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "Group", yCol: "YVal" }}
+        />
+      );
+      expect(html).toContain('data-testid="composed-chart"');
+      expect(html).toContain("Alpha");
+      expect(html).toContain("Beta");
+      // Check summary table values
+      expect(html).toContain("100.00");
+      expect(html).toContain("220.00");
+    });
+
+    it("renders density estimation chart for groups", () => {
+      const html = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={multiGroupDataset}
+          chartType="density"
+          setChartType={() => {}}
+          initialControls={{ densityGroupCol: "Group", densityValueCol: "YVal" }}
+        />
+      );
+      expect(html).toContain('data-testid="line-chart"');
+      expect(html).toContain("Alpha");
+      expect(html).toContain("Beta");
+    });
+
+    it("renders histogram combo chart with KDE density curve when showHistogramDensity is true", () => {
+      const html = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={multiGroupDataset}
+          chartType="histogram"
+          setChartType={() => {}}
+          initialControls={{ histogramCol: "YVal", showHistogramDensity: true }}
+        />
+      );
+      expect(html).toContain('data-testid="composed-chart"');
+      expect(html).toContain('data-testid="line-series"');
+    });
+  });
 });
