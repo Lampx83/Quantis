@@ -1766,6 +1766,71 @@ describe("PresentationView Component — Aggregation Integration", () => {
         const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
         expect(data).toHaveLength(35);
       });
+
+      it("preserves source order and does not cap at 30 for unaggregated multi-series line charts", () => {
+        const quarters = [
+          "2024-Q3",
+          "2024-Q1",
+          "2024-Q4",
+          ...Array.from({ length: 32 }, (_, i) => `Cat-${String(35 - i).padStart(2, "0")}`),
+        ];
+        const unaggRows: string[][] = [
+          ["Quarter", "Series"],
+          ...quarters.flatMap((q) => [
+            [q, "SeriesA"],
+            [q, "SeriesB"],
+          ]),
+        ];
+        const unaggMultiSeriesDataset: Dataset = {
+          id: "ds-unagg-multi-series",
+          name: "Unaggregated Multi-Series Dataset",
+          rows: unaggRows.length - 1,
+          columns: 2,
+          columnNames: ["Quarter", "Series"],
+          data: unaggRows,
+          preview: unaggRows,
+          variables: {
+            Quarter: {
+              name: "Quarter",
+              label: "Quarter",
+              type: "string",
+              measure: "nominal",
+              decimals: 0,
+              align: "left",
+            },
+            Series: {
+              name: "Series",
+              label: "Series",
+              type: "string",
+              measure: "nominal",
+              decimals: 0,
+              align: "left",
+            },
+          },
+          sourceFormat: "csv",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+        };
+
+        const html = renderToStaticMarkup(
+          <PresentationView
+            tab="visualization"
+            selectedDataset={unaggMultiSeriesDataset}
+            chartType="line"
+            setChartType={() => {}}
+            initialConfig={{ xCol: "Quarter", legendCol: "Series", yCol: "" }}
+          />
+        );
+
+        const match = html.match(/data-testid="line-chart"[^>]*data-chart-data="([^"]+)"/);
+        expect(match).not.toBeNull();
+        const data = JSON.parse(match![1].replace(/&quot;/g, '"'));
+        expect(data).toHaveLength(35);
+        expect(data.map((d: any) => d.name)).toEqual(quarters);
+        expect(data.map((d: any) => d.x)).toEqual(quarters);
+        expect(data[0].SeriesA).toBe(1);
+        expect(data[0].SeriesB).toBe(1);
+      });
     });
   });
 

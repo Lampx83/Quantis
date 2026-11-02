@@ -337,9 +337,19 @@ export function PresentationView({
           return item;
         });
 
+        // Line charts follow source row order from unsorted xOrder; keep up to 1000 points because a time series must not be truncated
+        const lineDataList = xOrder.slice(0, 1000).map((name) => {
+          const m = countsMap.get(name)!;
+          const item: Record<string, any> = { name, x: name, _errors: {} };
+          for (const k of keys) {
+            item[k] = m.get(k) || 0;
+          }
+          return item;
+        });
+
         return {
           pivotedBarData: barDataList,
-          pivotedLineData: barDataList.map((d) => ({ ...d, x: d.name })),
+          pivotedLineData: lineDataList,
           legendSeriesKeys: keys,
         };
       }
