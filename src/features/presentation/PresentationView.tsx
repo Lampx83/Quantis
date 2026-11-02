@@ -906,8 +906,6 @@ export function PresentationView({
       { label: t("presentationView.quickPromptHowToReadLabel"), systemHint: `${t("presentationView.quickPromptHowToReadHint")} ${aiAnswerLangHint()}`, userMessage: t("presentationView.quickPromptHowToReadUserMessage") },
     ];
 
-    const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && barChartData.length > 0) || (chartType === "barH" && barChartData.length > 0) || (chartType === "line" && lineChartData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
-
     const isChartRendered =
       (chartType === "scatter" && isScatter && (hasLegend ? groupedScatterData.length > 0 : chartData.length > 0)) ||
       (chartType === "bar" && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0)) ||
@@ -1040,12 +1038,12 @@ export function PresentationView({
       if (patch.pieNumericCol !== undefined) setPieNumericCol(patch.pieNumericCol);
     };
 
-    const chartExportIcons = hasExportableChart ? (
+    const chartExportIcons = (
       <div className="absolute top-2 right-2 z-10 flex gap-1 rounded-lg bg-white/95 dark:bg-neutral-800/95 border border-neutral-200 dark:border-neutral-600 p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
         <button type="button" onClick={handleExportPng} title={t("presentationView.savePngTitle")} className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Download className="w-4 h-4" /></button>
         <button type="button" onClick={handleCopyToClipboard} title={t("presentationView.copyToClipboardTitle")} className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /></button>
       </div>
-    ) : null;
+    );
 
     return (
       <div ref={chartContainerRef} className="w-full max-w-full">
