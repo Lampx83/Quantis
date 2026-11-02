@@ -315,12 +315,14 @@ export function PresentationView({
       ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
     const areaData = lineData;
+    // Line chart keeps source row order (sortOrder: "none") to preserve time/sequence trends; keeps up to 1000 points because a time series must not be truncated
     const lineChartData = (chartType === "line" && xCol && yCol && xIdx >= 0 && yIdx >= 0 && numericCols.includes(yCol))
       ? aggregateData(rows, {
           groupByCols: [xCol],
           measureCol: yCol,
           func: activeYAggregation,
-          limit: 30,
+          sortOrder: "none",
+          limit: 1000,
         }).map((g) => ({
           x: g.name,
           y: g.value,
@@ -480,10 +482,12 @@ export function PresentationView({
         };
       }
 
+      // Line charts keep source row order via sortOrder: "none"; bar charts sort via sortedPivoted below
       const multiAgg = aggregateData(rows, {
         groupByCols: [xCol, chartConfig.legendCol],
         measureCol: yCol,
         func: activeYAggregation,
+        sortOrder: "none",
         limit: 1000,
       });
       const pivoted = pivotByLegend(multiAgg, chartConfig.legendCol, chartConfig.errorBar);
@@ -512,7 +516,8 @@ export function PresentationView({
         }
         return item;
       });
-      const lineDataList = sortedPivoted.slice(0, 30).map((p) => {
+      // Line charts follow source row order from unsorted pivoted; keep up to 1000 points because a time series must not be truncated
+      const lineDataList = pivoted.slice(0, 1000).map((p) => {
         const item: Record<string, any> = {
           name: p.name,
           x: p.name,
