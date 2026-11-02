@@ -596,6 +596,62 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(newDs.variables!["INCOME_TIER"].align).toBe("right");
   });
 
+  it("Recode into Same Variable re-infers string variable metadata when numeric column is recoded to strings", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function RecodeSameStringHarness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "recode",
+        initialShowChoiceModal: true,
+        initialRecodeCol: "INCOME",
+        initialRecodeTargetMode: "same",
+        initialRecodeRules: [
+          { type: "value", from: "1000", to: "Low" },
+          { type: "value", from: "1500", to: "High" },
+        ],
+        initialRecodeElseEnabled: true,
+        initialRecodeElseAction: "custom",
+        initialRecodeElseValue: "Medium",
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<RecodeSameStringHarness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    await createNewBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets.length).toBe(2);
+    const newDs = datasets[1];
+    expect(newDs.variables!["INCOME"]).toBeDefined();
+    expect(newDs.variables!["INCOME"].type).toBe("string");
+    expect(newDs.variables!["INCOME"].measure).toBe("nominal");
+  });
+
   it("Task 6: renders all new Recode UI controls (Same/Diff, Range, ELSE) in static markup", () => {
     setLocale("en");
     const html = renderToStaticMarkup(

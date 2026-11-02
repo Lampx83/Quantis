@@ -491,6 +491,13 @@ export function TransformTab({
           ...inferVariableMetadata(targetName, colValues),
           name: targetName,
         };
+      } else if (transformAction === "recode" && recodeTargetMode === "same" && recodeCol) {
+        const recodeColIdx = newHeader.indexOf(recodeCol);
+        const colValues = newRows.slice(1).map((row) => row[recodeColIdx] ?? "");
+        baseVariables[recodeCol] = {
+          ...baseVariables[recodeCol],
+          ...inferVariableMetadata(recodeCol, colValues),
+        };
       }
     }
 
