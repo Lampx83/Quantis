@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Download, Copy, SlidersHorizontal, PanelRightOpen } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -168,23 +168,34 @@ export function PresentationView({
     quantisApi.analyzeHistogramBins(histValues).then(setHistBinsBackendResult);
   }, [tab, selectedDataset?.id, chartType, histogramCol, analysisBackendAvailable]);
 
-  if (tab === "visualization" && selectedDataset) {
+  const activeYAggregation = usesConfigAxes(chartType) ? chartConfig.aggregation : yAggregation;
+
+  // Chart data is expensive on large tables: each aggregateData pass scans every row
+  // (≈45 ms at the documented 50k cap) and the arrays below are built per row. The Chart
+  // Inspector calls setChartConfig on every keystroke, so without memoization typing a
+  // subtitle re-scans the whole table. Depend only on the fields that change the data —
+  // never the whole chartConfig object, or the memo would re-run on a title edit.
+  const vizData = useMemo(() => {
+    if (tab !== "visualization" || !selectedDataset) return null;
     const rows = getAnalysisRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
     const xCol = chartConfig.xCol;
-    const setXCol = (val: string) => setChartConfig((c) => ({ ...c, xCol: val }));
     const yCol = chartConfig.yCol;
-    const setYCol = (val: string) => setChartConfig((c) => ({ ...c, yCol: val }));
-    const activeYAggregation = usesConfigAxes(chartType) ? chartConfig.aggregation : yAggregation;
-    const numericCols = rows.length >= 2 ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
+    const numericCols = rows.length >= 2
+      ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); })
+      : [];
     const xIdx = cols.indexOf(xCol);
     const yIdx = cols.indexOf(yCol);
     const isScatter = xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol);
-    const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
-      : [];
-    const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
-    /** Biểu đồ cột: dùng X làm danh mục; nếu có Y (số) thì tính theo hàm gộp đã chọn, không thì = tần số */
+    const isAggregated = Boolean(yCol && yIdx >= 0 && numericCols.includes(yCol));
+    const hasLegend = Boolean(
+      supportsLegend(chartType) &&
+      chartConfig.legendCol &&
+      chartConfig.legendCol.trim() !== "" &&
+      cols.includes(chartConfig.legendCol) &&
+      chartConfig.legendCol !== xCol
+    );
+    const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ?? ""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
     const barChartData = (chartType === "bar" || chartType === "barH") && xCol && xIdx >= 0
       ? (yCol && yIdx >= 0 && numericCols.includes(yCol)
           ? aggregateData(rows, {
@@ -223,63 +234,24 @@ export function PresentationView({
               return entries.slice(0, 30);
             })())
       : barData;
-    const barDataSorted = barChartData;
-    const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
-      ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
+    const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
+      ? rows.slice(1).map((r) => ({ x: r[xIdx] ?? "", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
-    // Hộp xếp chồng: phần đệm trong suốt (0→Q1) + hộp Q1→Median + hộp Median→Q3; râu = ErrorBar (Q1→Min, Q3→Max).
-    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
-    const boxYDomain: [number, number] = (() => {
-      if (boxStats.length === 0) return [0, 1];
-      const lo = safeMin(boxStats.map((b) => b.min));
-      const hi = safeMax(boxStats.map((b) => b.max));
-      const pad = (hi - lo) * 0.05 || 1;
-      return [Math.floor(lo - pad), Math.ceil(hi + pad)];
-    })();
-    const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
-    const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
-    const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
-      const groups: Record<string, number[]> = {};
-      rows.slice(1).forEach((r) => {
-        const g = String(r[densityGroupIdx] ?? "").trim();
-        const v = numCell(r[densityValueIdx]);
-        if (g === "" || Number.isNaN(v)) return;
-        if (!groups[g]) groups[g] = [];
-        groups[g].push(v);
-      });
-      const allVals = Object.values(groups).flat();
-      if (allVals.length < 2) return [];
-      const [lo, hi] = safeMinMax(allVals);
-      const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
-      const series: { group: string; points: { x: number; density: number }[] }[] = [];
-      Object.entries(groups).forEach(([group, vals]) => {
-        if (vals.length < 2) return;
-        const pts = kernelDensityEstimate(vals, grid);
-        series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
-      });
-      return series;
-    })() : [];
-    const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
-    const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
-    const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
-    const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
-      const [lo, hi] = safeMinMax(histValues);
-      const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
-      return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
-    })() : [];
-    const histComboData = (chartType === "histogram" && showHistogramDensity && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
-      const maxCount = safeMax(histChartData.map((d) => d.count));
-      const maxDens = safeMax(histDensityCurve.map((d) => d.density));
-      const scale = maxDens > 0 ? maxCount / maxDens : 1;
-      return histChartData.map((d, i) => {
-        const binStart = histBins[i].binStart;
-        const binEnd = histBins[i].binEnd;
-        const center = (binStart + binEnd) / 2;
-        const nearest = histDensityCurve.reduce((a, p) => (Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a));
-        return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
-      });
-    })() : [];
+    // Line chart keeps source row order (sortOrder: "none") to preserve time/sequence trends; keeps up to 1000 points because a time series must not be truncated
+    const lineChartData = (chartType === "line" && xCol && yCol && xIdx >= 0 && yIdx >= 0 && numericCols.includes(yCol))
+      ? aggregateData(rows, {
+          groupByCols: [xCol],
+          measureCol: yCol,
+          func: activeYAggregation,
+          sortOrder: "none",
+          limit: 1000,
+        }).map((g) => ({
+          x: g.name,
+          y: g.value,
+          metrics: g.metrics,
+          error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
+        }))
+      : lineData;
     const pieData = (chartType === "pie" || chartType === "donut")
       ? (pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol)
           ? (() => {
@@ -311,118 +283,6 @@ export function PresentationView({
                     })())
               : []))
       : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
-    const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
-      : [];
-    const areaData = lineData;
-    // Line chart keeps source row order (sortOrder: "none") to preserve time/sequence trends; keeps up to 1000 points because a time series must not be truncated
-    const lineChartData = (chartType === "line" && xCol && yCol && xIdx >= 0 && yIdx >= 0 && numericCols.includes(yCol))
-      ? aggregateData(rows, {
-          groupByCols: [xCol],
-          measureCol: yCol,
-          func: activeYAggregation,
-          sortOrder: "none",
-          limit: 1000,
-        }).map((g) => ({
-          x: g.name,
-          y: g.value,
-          metrics: g.metrics,
-          error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
-        }))
-      : lineData;
-    const variables = selectedDataset?.variables ?? {};
-    const xLabel = xCol ? (variables[xCol]?.label?.trim() || xCol) : "";
-    const yLabel = yCol ? (variables[yCol]?.label?.trim() || yCol) : "";
-    const legendLabel = chartConfig.legendCol ? (variables[chartConfig.legendCol]?.label?.trim() || chartConfig.legendCol) : "";
-
-    const isAggregated = Boolean(yCol && yIdx >= 0 && numericCols.includes(yCol));
-    const activeAggLegendName = isAggregated
-      ? `${t("presentationView.aggLabel." + activeYAggregation)} ${t("presentationView.ofPreposition")} ${yLabel}`
-      : "";
-
-    const renderAggTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
-      if (!active || !payload?.length || !payload[0]?.payload) return null;
-      const p = payload[0].payload as { name?: string; x?: string; count?: number; y?: number; metrics?: AggregateMetrics };
-      const label = p.name ?? p.x ?? "";
-      const val = p.count ?? p.y;
-      if (!p.metrics) {
-        return (
-          <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
-            <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
-            <p className="text-neutral-600 dark:text-neutral-300">{val !== undefined ? val : ""}</p>
-          </div>
-        );
-      }
-      const formattedVal = val !== undefined ? Number(val).toFixed(2) : "";
-      const stdVal = Number(p.metrics.std).toFixed(2);
-      const funcLabel = t(`presentationView.aggLabel.${activeYAggregation}`);
-      return (
-        <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
-          <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
-          <p className="text-neutral-700 dark:text-neutral-200">
-            <span className="font-medium">{funcLabel}:</span> {formattedVal}
-          </p>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-            {t("presentationView.aggTooltipSampleSize")} = {p.metrics.count} | {t("presentationView.aggTooltipStd")} = {stdVal}
-          </p>
-        </div>
-      );
-    };
-    const stackByIdx = stackByCol ? cols.indexOf(stackByCol) : -1;
-    const stackedBarData = (chartType === "stackedBar" && xCol && stackByCol && yCol && xIdx >= 0 && yIdx >= 0 && stackByIdx >= 0 && rows.length >= 2) ? (() => {
-      const xVals = Array.from(new Set(rows.slice(1).map((r) => r[xIdx] ??"")));
-      const stackVals = Array.from(new Set(rows.slice(1).map((r) => r[stackByIdx] ??"")));
-      const map: Record<string, Record<string, number>> = {};
-      xVals.forEach((x) => { map[x] = {}; stackVals.forEach((s) => { map[x][s] = 0; }); });
-      rows.slice(1).forEach((r) => {
-        const x = r[xIdx] ??"";
-        const s = r[stackByIdx] ??"";
-        const y = numCell(r[yIdx]);
-        if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
-      });
-      return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
-    })() : [];
-    const radarGroups = (radarGroupCol && rows.length >= 2) ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? ""))) : [t("presentationView.radarAllLabel")];
-    const radarData = (chartType === "radar" && radarNumericCols.length >= 2) ? (() => {
-      const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
-      const fullMark = 100;
-      return radarNumericCols.map((col) => {
-        const colIdx = cols.indexOf(col);
-        const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
-        radarGroups.forEach((g) => {
-          const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
-          const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
-          entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-        });
-        return entry;
-      });
-    })() : [];
-    const corrResult = (chartType === "heatmap" && rows.length >= 2) ? computeCorrelationMatrix(rows, heatmapCorrMethod) : null;
-    const summaryStats = (chartType === "summary" && rows.length >= 2) ? computeDescriptive(rows) : [];
-    const dashboardCorrResult = (chartType === "dashboard" && rows.length >= 2) ? computeCorrelationMatrix(rows, "pearson") : null;
-    const dashboardStats = (chartType === "dashboard" && rows.length >= 2) ? computeDescriptive(rows) : [];
-    const multiLineXIdx = chartType === "multiLine" && xCol ? cols.indexOf(xCol) : -1;
-    const multiLineData = (chartType === "multiLine" && multiLineXIdx >= 0 && multiLineYCols.length > 0 && rows.length >= 2) ? (() => {
-      const yIndices = multiLineYCols.map((c) => cols.indexOf(c)).filter((i) => i >= 0);
-      if (yIndices.length === 0) return [];
-      return rows.slice(1).map((r) => {
-        const point: Record<string, string | number> = { x: r[multiLineXIdx] ??"" };
-        multiLineYCols.forEach((col) => {
-          const idx = cols.indexOf(col);
-          if (idx >= 0) { const v = numCell(r[idx]); point[col] = Number.isNaN(v) ? "" : v; }
-        });
-        return point;
-      }).filter((d) => multiLineYCols.some((c) => d[c] !== "" && d[c] !== undefined));
-    })() : [];
-    const crosstabResult: { rowLabels: string[]; colLabels: string[]; counts: number[][] } | null = (chartType === "crosstab" && crosstabCol1 && crosstabCol2 && rows.length >= 2) ? getCrosstab(rows, crosstabCol1, crosstabCol2) : null;
-
-        const hasLegend = Boolean(
-      supportsLegend(chartType) &&
-      chartConfig.legendCol &&
-      chartConfig.legendCol.trim() !== "" &&
-      cols.includes(chartConfig.legendCol) &&
-      chartConfig.legendCol !== xCol
-    );
 
     const { pivotedBarData, pivotedLineData, legendSeriesKeys } = (() => {
       if (!hasLegend || !xCol || xIdx < 0) {
@@ -535,6 +395,209 @@ export function PresentationView({
         legendSeriesKeys: keys,
       };
     })();
+
+    return {
+      rows,
+      cols,
+      numericCols,
+      xIdx,
+      yIdx,
+      isScatter,
+      isAggregated,
+      hasLegend,
+      barData,
+      barChartData,
+      lineData,
+      lineChartData,
+      pieData,
+      pivotedBarData,
+      pivotedLineData,
+      legendSeriesKeys,
+    };
+  }, [
+    tab,
+    selectedDataset,
+    chartType,
+    chartConfig.xCol,
+    chartConfig.yCol,
+    chartConfig.legendCol,
+    chartConfig.aggregation,
+    chartConfig.errorBar,
+    chartConfig.sortOrder,
+    pieBinNumeric,
+    pieBinCount,
+    pieNumericCol,
+    activeYAggregation,
+  ]);
+
+  if (tab === "visualization" && selectedDataset) {
+    const {
+      rows,
+      cols,
+      numericCols,
+      xIdx,
+      yIdx,
+      isScatter,
+      isAggregated,
+      hasLegend,
+      barData,
+      barChartData,
+      lineData,
+      lineChartData,
+      pieData,
+      pivotedBarData,
+      pivotedLineData,
+      legendSeriesKeys,
+    } = vizData!;
+    const xCol = chartConfig.xCol;
+    const setXCol = (val: string) => setChartConfig((c) => ({ ...c, xCol: val }));
+    const yCol = chartConfig.yCol;
+    const setYCol = (val: string) => setChartConfig((c) => ({ ...c, yCol: val }));
+    const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
+      ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
+      : [];
+    const barDataSorted = barChartData;
+    const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
+      ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
+      : [];
+    // Hộp xếp chồng: phần đệm trong suốt (0→Q1) + hộp Q1→Median + hộp Median→Q3; râu = ErrorBar (Q1→Min, Q3→Max).
+    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
+    const boxYDomain: [number, number] = (() => {
+      if (boxStats.length === 0) return [0, 1];
+      const lo = safeMin(boxStats.map((b) => b.min));
+      const hi = safeMax(boxStats.map((b) => b.max));
+      const pad = (hi - lo) * 0.05 || 1;
+      return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+    })();
+    const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
+    const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
+    const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
+      const groups: Record<string, number[]> = {};
+      rows.slice(1).forEach((r) => {
+        const g = String(r[densityGroupIdx] ?? "").trim();
+        const v = numCell(r[densityValueIdx]);
+        if (g === "" || Number.isNaN(v)) return;
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(v);
+      });
+      const allVals = Object.values(groups).flat();
+      if (allVals.length < 2) return [];
+      const [lo, hi] = safeMinMax(allVals);
+      const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
+      const series: { group: string; points: { x: number; density: number }[] }[] = [];
+      Object.entries(groups).forEach(([group, vals]) => {
+        if (vals.length < 2) return;
+        const pts = kernelDensityEstimate(vals, grid);
+        series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
+      });
+      return series;
+    })() : [];
+    const histColIdx = cols.indexOf(histogramCol);
+    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
+    const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
+    const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
+    const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
+      const [lo, hi] = safeMinMax(histValues);
+      const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
+      return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
+    })() : [];
+    const histComboData = (chartType === "histogram" && showHistogramDensity && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
+      const maxCount = safeMax(histChartData.map((d) => d.count));
+      const maxDens = safeMax(histDensityCurve.map((d) => d.density));
+      const scale = maxDens > 0 ? maxCount / maxDens : 1;
+      return histChartData.map((d, i) => {
+        const binStart = histBins[i].binStart;
+        const binEnd = histBins[i].binEnd;
+        const center = (binStart + binEnd) / 2;
+        const nearest = histDensityCurve.reduce((a, p) => (Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a));
+        return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
+      });
+    })() : [];
+    const areaData = lineData;
+    const variables = selectedDataset?.variables ?? {};
+    const xLabel = xCol ? (variables[xCol]?.label?.trim() || xCol) : "";
+    const yLabel = yCol ? (variables[yCol]?.label?.trim() || yCol) : "";
+    const legendLabel = chartConfig.legendCol ? (variables[chartConfig.legendCol]?.label?.trim() || chartConfig.legendCol) : "";
+
+    const activeAggLegendName = isAggregated
+      ? `${t("presentationView.aggLabel." + activeYAggregation)} ${t("presentationView.ofPreposition")} ${yLabel}`
+      : "";
+
+    const renderAggTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+      if (!active || !payload?.length || !payload[0]?.payload) return null;
+      const p = payload[0].payload as { name?: string; x?: string; count?: number; y?: number; metrics?: AggregateMetrics };
+      const label = p.name ?? p.x ?? "";
+      const val = p.count ?? p.y;
+      if (!p.metrics) {
+        return (
+          <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
+            <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
+            <p className="text-neutral-600 dark:text-neutral-300">{val !== undefined ? val : ""}</p>
+          </div>
+        );
+      }
+      const formattedVal = val !== undefined ? Number(val).toFixed(2) : "";
+      const stdVal = Number(p.metrics.std).toFixed(2);
+      const funcLabel = t(`presentationView.aggLabel.${activeYAggregation}`);
+      return (
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
+          <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
+          <p className="text-neutral-700 dark:text-neutral-200">
+            <span className="font-medium">{funcLabel}:</span> {formattedVal}
+          </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+            {t("presentationView.aggTooltipSampleSize")} = {p.metrics.count} | {t("presentationView.aggTooltipStd")} = {stdVal}
+          </p>
+        </div>
+      );
+    };
+    const stackByIdx = stackByCol ? cols.indexOf(stackByCol) : -1;
+    const stackedBarData = (chartType === "stackedBar" && xCol && stackByCol && yCol && xIdx >= 0 && yIdx >= 0 && stackByIdx >= 0 && rows.length >= 2) ? (() => {
+      const xVals = Array.from(new Set(rows.slice(1).map((r) => r[xIdx] ??"")));
+      const stackVals = Array.from(new Set(rows.slice(1).map((r) => r[stackByIdx] ??"")));
+      const map: Record<string, Record<string, number>> = {};
+      xVals.forEach((x) => { map[x] = {}; stackVals.forEach((s) => { map[x][s] = 0; }); });
+      rows.slice(1).forEach((r) => {
+        const x = r[xIdx] ??"";
+        const s = r[stackByIdx] ??"";
+        const y = numCell(r[yIdx]);
+        if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
+      });
+      return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
+    })() : [];
+    const radarGroups = (radarGroupCol && rows.length >= 2) ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? ""))) : [t("presentationView.radarAllLabel")];
+    const radarData = (chartType === "radar" && radarNumericCols.length >= 2) ? (() => {
+      const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
+      const fullMark = 100;
+      return radarNumericCols.map((col) => {
+        const colIdx = cols.indexOf(col);
+        const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
+        radarGroups.forEach((g) => {
+          const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
+          const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
+          entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        });
+        return entry;
+      });
+    })() : [];
+    const corrResult = (chartType === "heatmap" && rows.length >= 2) ? computeCorrelationMatrix(rows, heatmapCorrMethod) : null;
+    const summaryStats = (chartType === "summary" && rows.length >= 2) ? computeDescriptive(rows) : [];
+    const dashboardCorrResult = (chartType === "dashboard" && rows.length >= 2) ? computeCorrelationMatrix(rows, "pearson") : null;
+    const dashboardStats = (chartType === "dashboard" && rows.length >= 2) ? computeDescriptive(rows) : [];
+    const multiLineXIdx = chartType === "multiLine" && xCol ? cols.indexOf(xCol) : -1;
+    const multiLineData = (chartType === "multiLine" && multiLineXIdx >= 0 && multiLineYCols.length > 0 && rows.length >= 2) ? (() => {
+      const yIndices = multiLineYCols.map((c) => cols.indexOf(c)).filter((i) => i >= 0);
+      if (yIndices.length === 0) return [];
+      return rows.slice(1).map((r) => {
+        const point: Record<string, string | number> = { x: r[multiLineXIdx] ??"" };
+        multiLineYCols.forEach((col) => {
+          const idx = cols.indexOf(col);
+          if (idx >= 0) { const v = numCell(r[idx]); point[col] = Number.isNaN(v) ? "" : v; }
+        });
+        return point;
+      }).filter((d) => multiLineYCols.some((c) => d[c] !== "" && d[c] !== undefined));
+    })() : [];
+    const crosstabResult: { rowLabels: string[]; colLabels: string[]; counts: number[][] } | null = (chartType === "crosstab" && crosstabCol1 && crosstabCol2 && rows.length >= 2) ? getCrosstab(rows, crosstabCol1, crosstabCol2) : null;
 
     const showErrorBars = Boolean(
       isAggregated &&
