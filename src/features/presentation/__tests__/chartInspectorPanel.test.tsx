@@ -119,6 +119,7 @@ describe("ChartInspectorPanel Component", () => {
       />
     );
     expect(htmlPie).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Axes/);
+    expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Style &amp; Palette/);
     expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Options/);
     expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Labels &amp; Typography/);
   });
@@ -248,7 +249,7 @@ describe("ChartInspectorPanel Component", () => {
     expect(html).toContain("Phòng ban (Department)");
   });
 
-  it("renders Data & Axes and Options accordions for non-academic charts, excluding academic accordions", () => {
+  it("renders Data & Axes, Style & Palette, and Options accordions for non-academic charts, excluding error bars", () => {
     const nonAcademicCharts = ["pie", "donut", "histogram", "box", "heatmap", "area", "density", "radar"];
 
     for (const chartType of nonAcademicCharts) {
@@ -273,9 +274,21 @@ describe("ChartInspectorPanel Component", () => {
           toHtmlEntities(t("presentationView.accordionOptions"))
         );
       }
-      expect(html, `chartType ${chartType} should not have accordionStyle`).not.toContain(
-        toHtmlEntities(t("presentationView.accordionStyle"))
-      );
+      if (chartType === "heatmap") {
+        expect(html, `chartType ${chartType} should not have accordionStyle`).not.toContain(
+          toHtmlEntities(t("presentationView.accordionStyle"))
+        );
+        expect(html, `chartType ${chartType} should not have palette-select`).not.toContain(
+          'data-testid="palette-select"'
+        );
+      } else {
+        expect(html, `chartType ${chartType} should have accordionStyle`).toContain(
+          toHtmlEntities(t("presentationView.accordionStyle"))
+        );
+        expect(html, `chartType ${chartType} should have palette-select`).toContain(
+          'data-testid="palette-select"'
+        );
+      }
       expect(html, `chartType ${chartType} should not have accordionErrorBars`).not.toContain(
         toHtmlEntities(t("presentationView.accordionErrorBars"))
       );
@@ -283,6 +296,40 @@ describe("ChartInspectorPanel Component", () => {
         toHtmlEntities(t("presentationView.accordionLabels"))
       );
     }
+  });
+
+
+  it("renders Style & Palette accordion with palette selector for all charts except heatmap", () => {
+    const paletteCharts = [
+      "bar", "barH", "line", "scatter",
+      "pie", "donut", "histogram", "box",
+      "area", "density", "radar", "stackedBar"
+    ];
+    for (const ct of paletteCharts) {
+      const html = renderToStaticMarkup(
+        <ChartInspectorPanel
+          chartType={ct}
+          dataset={mockDataset}
+          config={DEFAULT_CHART_CONFIG}
+          onChange={() => {}}
+        />
+      );
+      expect(html, `${ct} must have Style & Palette accordion`).toContain(
+        toHtmlEntities(t("presentationView.accordionStyle"))
+      );
+      expect(html, `${ct} must have palette-select`).toContain('data-testid="palette-select"');
+    }
+
+    const htmlHeatmap = renderToStaticMarkup(
+      <ChartInspectorPanel
+        chartType="heatmap"
+        dataset={mockDataset}
+        config={DEFAULT_CHART_CONFIG}
+        onChange={() => {}}
+      />
+    );
+    expect(htmlHeatmap).not.toContain(toHtmlEntities(t("presentationView.accordionStyle")));
+    expect(htmlHeatmap).not.toContain('data-testid="palette-select"');
   });
 
   it("verifies supportsOptions predicate correctly identifies charts with options", () => {
