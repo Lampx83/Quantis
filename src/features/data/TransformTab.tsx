@@ -24,6 +24,7 @@ import {
   applyRecode,
   type LogKind,
   type PrepResult,
+  type RecodeConfig,
   type RecodeRule,
   type RecodeElseAction,
 } from "@/utils/dataPrep";
@@ -151,6 +152,18 @@ export function TransformTab({
   const removeRecodeRule = (i: number) => setRecodeRules((prev) => prev.filter((_, j) => j !== i));
   const updateRecodeRule = (i: number, patch: Partial<RecodeRule>) =>
     setRecodeRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  /** Cấu hình recode từ form — dùng chung cho bước kiểm tra trước và bước áp dụng. */
+  const recodeConfig = (): RecodeConfig => ({
+    sourceCol: recodeCol,
+    targetMode: recodeTargetMode,
+    targetCol: recodeNewColName,
+    rules: recodeRules,
+    elseRule: {
+      enabled: recodeElseEnabled,
+      action: recodeElseAction,
+      customValue: recodeElseValue,
+    },
+  });
 
   if (!selectedDs) {
     return (
@@ -206,17 +219,7 @@ export function TransformTab({
         return;
       }
     } else if (transformAction === "recode") {
-      const r = applyRecode(dataRows, {
-        sourceCol: recodeCol,
-        targetMode: recodeTargetMode,
-        targetCol: recodeNewColName,
-        rules: recodeRules,
-        elseRule: {
-          enabled: recodeElseEnabled,
-          action: recodeElseAction,
-          customValue: recodeElseValue,
-        },
-      });
+      const r = applyRecode(dataRows, recodeConfig());
       if (r.error) {
         setPrepNote({ ok: false, text: r.error });
         return;
@@ -282,24 +285,14 @@ export function TransformTab({
       newRows = [header, ...sorted];
     } else if (transformAction === "recode") {
       if (!recodeCol || header.indexOf(recodeCol) === -1) return;
-      const r = applyRecode(dataRows, {
-        sourceCol: recodeCol,
-        targetMode: recodeTargetMode,
-        targetCol: recodeNewColName,
-        rules: recodeRules,
-        elseRule: {
-          enabled: recodeElseEnabled,
-          action: recodeElseAction,
-          customValue: recodeElseValue,
-        },
-      });
+      const r = applyRecode(dataRows, recodeConfig());
       if (r.error) {
         setPrepNote({ ok: false, text: r.error });
         return;
       }
       newRows = r.rows;
-      const recodedCount = r.stats?.recodedRows ?? r.stats?.recoded ?? 0;
-      const totalCount = r.stats?.totalRows ?? r.stats?.total ?? (dataRows.length - 1);
+      const recodedCount = r.stats?.recoded ?? 0;
+      const totalCount = r.stats?.total ?? dataRows.length - 1;
       setPrepNote({
         ok: true,
         text: t("transformTab.resultRecode", { recoded: recodedCount, total: totalCount }),

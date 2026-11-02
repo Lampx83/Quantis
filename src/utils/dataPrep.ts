@@ -570,9 +570,6 @@ export function applyRecode(rows: Rows, config: RecodeConfig): PrepResult {
   return {
     rows: outRows,
     stats: {
-      totalRows: total,
-      recodedRows: recoded,
-      unchangedRows: total - recoded,
       total,
       recoded,
     },
