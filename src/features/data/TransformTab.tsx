@@ -12,7 +12,7 @@ import {
   getModeFallbackColumns,
 } from "@/utils/missing-imputation";
 import { analyzeMiceImputation, clampMiceIterations, MICE_MIN_ITER, MICE_MAX_ITER, type MiceImputationResponse } from "@/api";
-import { ensureDatasetMetadata } from "@/utils/metadata";
+import { ensureDatasetMetadata, inferVariableMetadata } from "@/utils/metadata";
 import { runHotDeckImputation } from "@/utils/imputation-worker-client";
 import {
   renameColumn,
@@ -485,13 +485,11 @@ export function TransformTab({
         };
       } else if (transformAction === "recode" && recodeTargetMode === "different" && recodeNewColName.trim()) {
         const targetName = recodeNewColName.trim();
+        const targetColIdx = newHeader.indexOf(targetName);
+        const colValues = newRows.slice(1).map((row) => (targetColIdx >= 0 ? row[targetColIdx] : row[row.length - 1]) ?? "");
         baseVariables[targetName] = {
+          ...inferVariableMetadata(targetName, colValues),
           name: targetName,
-          type: "string",
-          measure: "nominal",
-          label: "",
-          decimals: 0,
-          align: "left",
         };
       }
     }
