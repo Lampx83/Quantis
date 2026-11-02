@@ -927,47 +927,6 @@ export function PresentationView({
       (chartType === "summary" && summaryStats.length > 0) ||
       (chartType === "dashboard" && (dashboardStats.length > 0 || (dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2)));
 
-    const chartWarningMessage = (() => {
-      if (chartType === "scatter") {
-        if (xCol && !numericCols.includes(xCol)) {
-          return `${t("presentationView.scatterXNotNumericPart1")} "${xCol}" ${t("presentationView.scatterXNotNumericPart2")}`;
-        }
-        if (yCol && !numericCols.includes(yCol)) {
-          return `${t("presentationView.scatterYNotNumericPart1")} "${yCol}" ${t("presentationView.scatterYNotNumericPart2")}`;
-        }
-        if (xCol && yCol && chartData.length === 0) {
-          return `${t("presentationView.scatterNoDataPart1")} "${xCol}" ${t("presentationView.scatterNoDataPart2")} "${yCol}" ${t("presentationView.scatterNoDataPart3")}`;
-        }
-      }
-      if (chartType === "bar" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) {
-        return `${t("presentationView.barNoDataPart1")} "${xCol}"${yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. ${t("presentationView.barNoDataPart2")}`;
-      }
-      if (chartType === "barH" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) {
-        return `${t("presentationView.barNoDataPart1")} "${xCol}"${yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. ${t("presentationView.barNoDataPart2")}`;
-      }
-      if (chartType === "line" && xCol && yCol && lineChartData.length === 0) {
-        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
-      }
-      if (chartType === "area" && xCol && yCol && areaData.length === 0) {
-        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
-      }
-      if (chartType === "stackedBar" && xCol && stackByCol && yCol && stackedBarData.length === 0) {
-        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
-      }
-      if (chartType === "pie" && xCol && pieData.length === 0) {
-        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
-      }
-      if (chartType === "donut" && xCol && pieData.length === 0) {
-        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
-      }
-      if (chartType === "box" && xCol && yCol && boxChartData.length === 0) {
-        return `${t("presentationView.placeholderNoDataFound")} ${t("presentationView.placeholderCheckVariables")}`;
-      }
-      if (chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2)) {
-        return t("presentationView.placeholderNeedNumericCols");
-      }
-      return undefined;
-    })();
     const getChartSvgFromButton = (btn: HTMLElement): SVGElement | null => {
       const wrapper = btn.closest("[data-chart-export-wrapper]");
       if (!wrapper) return null;
@@ -1782,21 +1741,7 @@ export function PresentationView({
           </div>
         )}
         {!isChartRendered && (
-          <ChartPlaceholderFrame
-            chartType={chartType}
-            datasetName={selectedDataset?.name}
-            xCol={xCol}
-            yCol={yCol}
-            histogramCol={histogramCol}
-            densityGroupCol={densityGroupCol}
-            densityValueCol={densityValueCol}
-            radarNumericCols={radarNumericCols}
-            stackByCol={stackByCol}
-            activeAggregation={activeYAggregation}
-            isInspectorOpen={isInspectorOpen}
-            onOpenInspector={() => setIsInspectorOpen(true)}
-            warningMessage={chartWarningMessage}
-          />
+          <ChartPlaceholderFrame chartType={chartType} />
         )}
         {chartType === "scatter" && (!xCol || !yCol) && <p className="text-neutral-500 text-sm">{t("presentationView.scatterEmptyHint")}</p>}
         {chartType === "scatter" && xCol && !numericCols.includes(xCol) && (

@@ -3,18 +3,6 @@ import type { PresentationChartType } from "@/stores";
 
 export interface ChartPlaceholderFrameProps {
   chartType: PresentationChartType;
-  datasetName?: string;
-  xCol?: string;
-  yCol?: string;
-  histogramCol?: string;
-  densityGroupCol?: string;
-  densityValueCol?: string;
-  radarNumericCols?: string[];
-  stackByCol?: string;
-  activeAggregation?: string;
-  isInspectorOpen?: boolean;
-  onOpenInspector?: () => void;
-  warningMessage?: string;
   className?: string;
 }
 
