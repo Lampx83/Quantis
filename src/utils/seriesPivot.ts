@@ -62,12 +62,6 @@ export function pivotByLegend(
     return [];
   }
 
-  // Check if at least one group contains the multi-column separator " | "
-  const hasDelimiter = groups.some((g) => g && typeof g.name === "string" && g.name.includes(" | "));
-  if (!hasDelimiter) {
-    return [];
-  }
-
   // Preserve row ordering while grouping entries by X value
   const rowOrder: string[] = [];
   const rowMap = new Map<
@@ -79,17 +73,13 @@ export function pivotByLegend(
   >();
 
   for (const group of groups) {
-    if (!group || typeof group.name !== "string") {
+    // Cần ít nhất 2 phần: các phần đầu là X, phần cuối là Legend.
+    if (!group || !group.parts || group.parts.length < 2) {
       continue;
     }
 
-    const lastSepIndex = group.name.lastIndexOf(" | ");
-    if (lastSepIndex === -1) {
-      continue;
-    }
-
-    const xVal = group.name.slice(0, lastSepIndex).trim();
-    const legendVal = group.name.slice(lastSepIndex + 3).trim();
+    const legendVal = group.parts[group.parts.length - 1];
+    const xVal = group.parts.slice(0, -1).join(" | ").trim();
 
     if (!rowMap.has(xVal)) {
       rowOrder.push(xVal);

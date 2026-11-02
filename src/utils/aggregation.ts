@@ -25,6 +25,11 @@ export interface AggregateMetrics {
 export interface AggregatedGroup {
   /** Tên định danh nhóm (dùng làm trục X / Recharts `name`) */
   name: string;
+  /**
+   * Nhãn nhóm đã tách rời, đúng thứ tự `groupByCols`. `seriesPivot` đọc trường này
+   * thay vì tách `name` theo dấu phân cách: giá trị dữ liệu có chứa " | " vẫn pivot đúng.
+   */
+  parts: string[];
   /** Giá trị của hàm tổng hợp đã chọn */
   value: number;
   /** Trọn bộ các chỉ số thống kê của nhóm */
@@ -79,7 +84,7 @@ export function aggregateData(
   }
 
   const skipEmpty = options.skipEmpty !== false;
-  const groupMap = new Map<string, number[]>();
+  const groupMap = new Map<string, { parts: string[]; values: number[] }>();
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -95,22 +100,22 @@ export function aggregateData(
 
     if (Number.isNaN(val)) {
       if (!skipEmpty && !groupMap.has(groupKey)) {
-        groupMap.set(groupKey, []);
+        groupMap.set(groupKey, { parts: groupParts, values: [] });
       }
       continue;
     }
 
-    let list = groupMap.get(groupKey);
-    if (!list) {
-      list = [];
-      groupMap.set(groupKey, list);
+    let entry = groupMap.get(groupKey);
+    if (!entry) {
+      entry = { parts: groupParts, values: [] };
+      groupMap.set(groupKey, entry);
     }
-    list.push(val);
+    entry.values.push(val);
   }
 
   const results: AggregatedGroup[] = [];
 
-  for (const [groupKey, values] of groupMap.entries()) {
+  for (const [groupKey, { parts, values }] of groupMap.entries()) {
     const n = values.length;
     // Nhóm không có quan sát hợp lệ (n = 0) bị loại khỏi kết quả
     if (n === 0) {
@@ -162,6 +167,7 @@ export function aggregateData(
 
     results.push({
       name: groupKey,
+      parts,
       value,
       metrics,
     });

@@ -197,6 +197,8 @@ describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
 
     const itNorth = result.find((g) => g.name === "IT | North");
     expect(itNorth?.value).toBe(250);
+    // `parts` keeps the labels separate so a value containing " | " cannot corrupt the pivot
+    expect(itNorth?.parts).toEqual(["IT", "North"]);
   });
 
   it("truncates output according to limit option (default 30)", () => {

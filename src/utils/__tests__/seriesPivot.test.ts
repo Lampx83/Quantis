@@ -18,6 +18,11 @@ function createMockMetrics(overrides: Partial<AggregateMetrics> = {}): Aggregate
   };
 }
 
+/** Nhóm như `aggregateData` trả về: `name` để hiển thị, `parts` để pivot. */
+function createGroup(parts: string[], value: number, metrics: AggregateMetrics = createMockMetrics()): AggregatedGroup {
+  return { name: parts.join(" | "), parts, value, metrics };
+}
+
 describe("seriesPivot", () => {
   describe("empty and edge case inputs", () => {
     it("returns empty array when input groups is empty or undefined", () => {
@@ -29,18 +34,13 @@ describe("seriesPivot", () => {
     });
 
     it("returns empty array when legendCol is empty or whitespace", () => {
-      const groups: AggregatedGroup[] = [
-        { name: "Dept A | M", value: 10, metrics: createMockMetrics() },
-      ];
+      const groups: AggregatedGroup[] = [createGroup(["Dept A", "M"], 10)];
       expect(pivotByLegend(groups, "", "ci95")).toEqual([]);
       expect(pivotByLegend(groups, "   ", "ci95")).toEqual([]);
     });
 
-    it("returns empty array when groups lack the delimiter separator", () => {
-      const groups: AggregatedGroup[] = [
-        { name: "Dept A", value: 10, metrics: createMockMetrics() },
-        { name: "Dept B", value: 20, metrics: createMockMetrics() },
-      ];
+    it("returns empty array when groups have fewer than two parts (no X + Legend split)", () => {
+      const groups: AggregatedGroup[] = [createGroup(["Dept A"], 10), createGroup(["Dept B"], 20)];
       expect(pivotByLegend(groups, "Gender", "ci95")).toEqual([]);
     });
   });
@@ -48,10 +48,10 @@ describe("seriesPivot", () => {
   describe("long to wide pivot", () => {
     it("pivots single legend column into wide format preserving values and emitting one row per X", () => {
       const groups: AggregatedGroup[] = [
-        { name: "Dept A | Female", value: 12, metrics: createMockMetrics({ mean: 12 }) },
-        { name: "Dept A | Male", value: 18, metrics: createMockMetrics({ mean: 18 }) },
-        { name: "Dept B | Female", value: 15, metrics: createMockMetrics({ mean: 15 }) },
-        { name: "Dept B | Male", value: 20, metrics: createMockMetrics({ mean: 20 }) },
+        createGroup(["Dept A", "Female"], 12, createMockMetrics({ mean: 12 })),
+        createGroup(["Dept A", "Male"], 18, createMockMetrics({ mean: 18 })),
+        createGroup(["Dept B", "Female"], 15, createMockMetrics({ mean: 15 })),
+        createGroup(["Dept B", "Male"], 20, createMockMetrics({ mean: 20 })),
       ];
 
       const pivoted = pivotByLegend(groups, "Gender", "ci95");
@@ -63,11 +63,24 @@ describe("seriesPivot", () => {
       expect(pivoted[1].series).toEqual({ Female: 15, Male: 20 });
     });
 
+    it("keeps X and legend values intact when a value itself contains the ' | ' separator", () => {
+      const groups: AggregatedGroup[] = [
+        createGroup(["Dept A", "High | Low"], 7),
+        createGroup(["Dept A", "Low"], 3),
+      ];
+
+      const pivoted = pivotByLegend(groups, "Rating", "ci95");
+
+      expect(pivoted).toHaveLength(1);
+      expect(pivoted[0].name).toBe("Dept A");
+      expect(pivoted[0].series).toEqual({ "High | Low": 7, Low: 3 });
+    });
+
     it("handles uneven series across different X categories", () => {
       const groups: AggregatedGroup[] = [
-        { name: "Dept A | Full-time", value: 40, metrics: createMockMetrics() },
-        { name: "Dept A | Part-time", value: 20, metrics: createMockMetrics() },
-        { name: "Dept B | Full-time", value: 35, metrics: createMockMetrics() },
+        createGroup(["Dept A", "Full-time"], 40),
+        createGroup(["Dept A", "Part-time"], 20),
+        createGroup(["Dept B", "Full-time"], 35),
       ];
 
       const pivoted = pivotByLegend(groups, "Employment", "ci95");
@@ -83,11 +96,7 @@ describe("seriesPivot", () => {
   describe("error offset calculations", () => {
     it("calculates ci95 offsets as [mean - ci95Lower, ci95Upper - mean]", () => {
       const groups: AggregatedGroup[] = [
-        {
-          name: "Group 1 | Alpha",
-          value: 15,
-          metrics: createMockMetrics({ mean: 15, ci95Lower: 10, ci95Upper: 20 }),
-        },
+        createGroup(["Group 1", "Alpha"], 15, createMockMetrics({ mean: 15, ci95Lower: 10, ci95Upper: 20 })),
       ];
 
       const pivoted = pivotByLegend(groups, "Type", "ci95");
@@ -96,11 +105,7 @@ describe("seriesPivot", () => {
 
     it("calculates se offsets as [se, se]", () => {
       const groups: AggregatedGroup[] = [
-        {
-          name: "Group 1 | Alpha",
-          value: 15,
-          metrics: createMockMetrics({ se: 2.5 }),
-        },
+        createGroup(["Group 1", "Alpha"], 15, createMockMetrics({ se: 2.5 })),
       ];
 
       const pivoted = pivotByLegend(groups, "Type", "se");
@@ -109,11 +114,7 @@ describe("seriesPivot", () => {
 
     it("calculates sd offsets as [std, std]", () => {
       const groups: AggregatedGroup[] = [
-        {
-          name: "Group 1 | Alpha",
-          value: 15,
-          metrics: createMockMetrics({ std: 5.2 }),
-        },
+        createGroup(["Group 1", "Alpha"], 15, createMockMetrics({ std: 5.2 })),
       ];
 
       const pivoted = pivotByLegend(groups, "Type", "sd");
@@ -134,9 +135,7 @@ describe("seriesPivot", () => {
         ci95Upper: 10,
       };
 
-      const groups: AggregatedGroup[] = [
-        { name: "Group 1 | Alpha", value: 10, metrics: n1Metrics },
-      ];
+      const groups: AggregatedGroup[] = [createGroup(["Group 1", "Alpha"], 10, n1Metrics)];
 
       expect(pivotByLegend(groups, "Type", "ci95")[0].errors.Alpha).toEqual([0, 0]);
       expect(pivotByLegend(groups, "Type", "se")[0].errors.Alpha).toEqual([0, 0]);
@@ -147,9 +146,9 @@ describe("seriesPivot", () => {
   describe("series ordering and immutability", () => {
     it("sorts series keys in natural, deterministic order", () => {
       const groups: AggregatedGroup[] = [
-        { name: "Row | Charlie", value: 3, metrics: createMockMetrics() },
-        { name: "Row | Alpha", value: 1, metrics: createMockMetrics() },
-        { name: "Row | Bravo", value: 2, metrics: createMockMetrics() },
+        createGroup(["Row", "Charlie"], 3),
+        createGroup(["Row", "Alpha"], 1),
+        createGroup(["Row", "Bravo"], 2),
       ];
 
       const pivoted = pivotByLegend(groups, "Col", "ci95");
@@ -159,10 +158,7 @@ describe("seriesPivot", () => {
     });
 
     it("never mutates input groups or metrics", () => {
-      const groups: AggregatedGroup[] = [
-        { name: "A | 1", value: 10, metrics: createMockMetrics() },
-        { name: "B | 2", value: 20, metrics: createMockMetrics() },
-      ];
+      const groups: AggregatedGroup[] = [createGroup(["A", "1"], 10), createGroup(["B", "2"], 20)];
       const snapshot = JSON.stringify(groups);
 
       pivotByLegend(groups, "Num", "ci95");
