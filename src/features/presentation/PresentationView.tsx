@@ -1607,6 +1607,22 @@ export function PresentationView({
             warningMessage={chartWarningMessage}
           />
         )}
+        {chartType === "scatter" && (!xCol || !yCol) && <p className="text-neutral-500 text-sm">{t("presentationView.scatterEmptyHint")}</p>}
+        {chartType === "scatter" && xCol && !numericCols.includes(xCol) && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {t("presentationView.scatterXNotNumericPart1")} <strong>&quot;{xCol}&quot;</strong> {t("presentationView.scatterXNotNumericPart2")}
+          </p>
+        )}
+        {chartType === "scatter" && yCol && !numericCols.includes(yCol) && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {t("presentationView.scatterYNotNumericPart1")} <strong>&quot;{yCol}&quot;</strong> {t("presentationView.scatterYNotNumericPart2")}
+          </p>
+        )}
+        {chartType === "scatter" && xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol) && (hasLegend ? groupedScatterData.length === 0 : chartData.length === 0) && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {t("presentationView.scatterNoDataPart1")} <strong>&quot;{xCol}&quot;</strong> {t("presentationView.scatterNoDataPart2")} <strong>&quot;{yCol}&quot;</strong> {t("presentationView.scatterNoDataPart3")}
+          </p>
+        )}
         {chartType === "bar" && !xCol && <p className="text-neutral-500 text-sm">{t("presentationView.barEmptyHint")}</p>}
         {chartType === "bar" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0) && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.barNoDataPart1")} &quot;{xCol}&quot;{yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. {t("presentationView.barNoDataPart2")}</p>}
         {chartType === "line" && (!xCol || !yCol || (hasLegend ? pivotedLineData.length === 0 : lineChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}

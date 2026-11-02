@@ -1717,5 +1717,34 @@ describe("PresentationView Component — Aggregation Integration", () => {
       expect(htmlHist).toContain(t("presentationView.histogramEmptyHint"));
       expect(htmlHist).toContain("Chart Inspector");
     });
+
+    it("renders synchronized empty instructions for scatter plot", () => {
+      setLocale("en");
+      const htmlScatter = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="scatter"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "", yCol: "" }}
+        />
+      );
+      expect(htmlScatter).toContain(t("presentationView.scatterEmptyHint"));
+      expect(htmlScatter).toContain("Chart Inspector");
+
+      // Vietnamese
+      setLocale("vi");
+      const htmlScatterVi = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="scatter"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "", yCol: "" }}
+        />
+      );
+      expect(htmlScatterVi).toContain(t("presentationView.scatterEmptyHint"));
+      expect(htmlScatterVi).toContain("Bảng điều khiển");
+    });
   });
 });

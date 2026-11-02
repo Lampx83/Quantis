@@ -1,4 +1,4 @@
-import React from "react";
+
 import type { PresentationChartType } from "@/stores";
 
 export interface ChartPlaceholderFrameProps {

@@ -42,6 +42,18 @@ vi.mock("recharts", async (importOriginal) => {
 const sampleDataset: Dataset = {
   id: "ds1",
   name: "Sales Q3",
+  rows: 4,
+  columns: 3,
+  preview: [
+    ["Department", "Score", "Rating"],
+    ["Marketing", "85", "4"],
+    ["Marketing", "90", "5"],
+    ["Sales", "70", "3"],
+    ["Sales", "95", "5"],
+  ],
+  sourceFormat: "csv",
+  createdAt: "2026-11-02T00:00:00.000Z",
+  updatedAt: "2026-11-02T00:00:00.000Z",
   columnNames: ["Department", "Score", "Rating"],
   data: [
     ["Department", "Score", "Rating"],
@@ -51,9 +63,9 @@ const sampleDataset: Dataset = {
     ["Sales", "95", "5"],
   ],
   variables: {
-    Department: { name: "Department", type: "string", measure: "nominal" },
-    Score: { name: "Score", type: "numeric", measure: "scale" },
-    Rating: { name: "Rating", type: "numeric", measure: "scale" },
+    Department: { name: "Department", label: "Department", type: "string", measure: "nominal", decimals: 0, align: "left" },
+    Score: { name: "Score", label: "Score", type: "numeric", measure: "scale", decimals: 2, align: "right" },
+    Rating: { name: "Rating", label: "Rating", type: "numeric", measure: "scale", decimals: 1, align: "right" },
   },
 };
 
