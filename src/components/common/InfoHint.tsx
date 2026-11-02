@@ -28,15 +28,29 @@ export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {
   );
 }
 
-export function InfoHint({ term, className = "" }: { term: GlossaryTerm; className?: string }) {
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+export function InfoHint({
+  term,
+  title: customTitle,
+  text: customText,
+  icon,
+  className = "",
+}: {
+  term?: GlossaryTerm;
+  title?: string;
+  text?: string;
+  icon?: React.ReactNode;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const title = t(`glossary.${term}.title`);
-  const text = t(`glossary.${term}.text`);
+  const title = customTitle ?? (term ? t(`glossary.${term}.title`) : "");
+  const text = customText ?? (term ? t(`glossary.${term}.text`) : "");
 
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!open || !btnRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
     const width = Math.min(320, window.innerWidth - 16);
@@ -71,8 +85,8 @@ export function InfoHint({ term, className = "" }: { term: GlossaryTerm; classNa
       <button
         ref={btnRef}
         type="button"
-        data-testid={`info-hint-${term}`}
-        aria-label={`${t("glossary.ariaPrefix")}: ${title}`}
+        data-testid={term ? `info-hint-${term}` : "info-hint"}
+        aria-label={customTitle ? title : `${t("glossary.ariaPrefix")}: ${title}`}
         aria-expanded={open}
         title={title}
         onClick={(e) => {
@@ -81,7 +95,8 @@ export function InfoHint({ term, className = "" }: { term: GlossaryTerm; classNa
         }}
         className={`inline-flex items-center justify-center align-middle ml-1 rounded-full text-neutral-400 hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${className}`}
       >
-        <Info className="w-3.5 h-3.5" aria-hidden="true" />
+        {icon ?? <Info className="w-3.5 h-3.5" aria-hidden="true" />}
+        <span className="sr-only">{text || title}</span>
       </button>
       {open && pos &&
         createPortal(

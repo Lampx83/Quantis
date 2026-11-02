@@ -58,7 +58,7 @@ describe("ChartInspectorPanel Component", () => {
 
   const toHtmlEntities = (str: string) => str.replace(/&/g, "&amp;");
 
-  it("renders all 4 accordion headers with i18n labels in English and Vietnamese", () => {
+  it("renders all 3 accordion headers with i18n labels in English and Vietnamese", () => {
     setLocale("en");
     const htmlEn = renderToStaticMarkup(
       <ChartInspectorPanel
@@ -72,7 +72,6 @@ describe("ChartInspectorPanel Component", () => {
     expect(htmlEn).toContain(toHtmlEntities(t("presentationView.inspectorTitle")));
     expect(htmlEn).toContain(toHtmlEntities(t("presentationView.accordionData")));
     expect(htmlEn).toContain(toHtmlEntities(t("presentationView.accordionStyle")));
-    expect(htmlEn).toContain(toHtmlEntities(t("presentationView.accordionErrorBars")));
     expect(htmlEn).toContain(toHtmlEntities(t("presentationView.accordionLabels")));
 
     setLocale("vi");
@@ -88,11 +87,10 @@ describe("ChartInspectorPanel Component", () => {
     expect(htmlVi).toContain(toHtmlEntities(t("presentationView.inspectorTitle")));
     expect(htmlVi).toContain(toHtmlEntities(t("presentationView.accordionData")));
     expect(htmlVi).toContain(toHtmlEntities(t("presentationView.accordionStyle")));
-    expect(htmlVi).toContain(toHtmlEntities(t("presentationView.accordionErrorBars")));
     expect(htmlVi).toContain(toHtmlEntities(t("presentationView.accordionLabels")));
   });
 
-  it("defaults to only opening Data & Axes accordion and closing the rest", () => {
+  it("defaults to only opening Data & Variables accordion and closing the rest", () => {
     // Academic chart (e.g., bar)
     const htmlBar = renderToStaticMarkup(
       <ChartInspectorPanel
@@ -102,14 +100,13 @@ describe("ChartInspectorPanel Component", () => {
         onChange={() => {}}
       />
     );
-    // Data & Axes is open
-    expect(htmlBar).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Axes/);
-    // Style & Palette, Error Bars, Labels & Typography are closed (no open attribute)
+    // Data & Variables is open
+    expect(htmlBar).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Variables/);
+    // Style & Palette, Labels & Typography are closed (no open attribute)
     expect(htmlBar).toMatch(/<details\s+class="group">[\s\S]*?Style &amp; Palette/);
-    expect(htmlBar).toMatch(/<details\s+class="group">[\s\S]*?Error Bars/);
     expect(htmlBar).toMatch(/<details\s+class="group">[\s\S]*?Labels &amp; Typography/);
 
-    // Non-academic chart with options (e.g., pie)
+    // Non-academic chart (e.g., pie)
     const htmlPie = renderToStaticMarkup(
       <ChartInspectorPanel
         chartType="pie"
@@ -118,9 +115,8 @@ describe("ChartInspectorPanel Component", () => {
         onChange={() => {}}
       />
     );
-    expect(htmlPie).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Axes/);
+    expect(htmlPie).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Variables/);
     expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Style &amp; Palette/);
-    expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Options/);
     expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Labels &amp; Typography/);
   });
 
@@ -249,7 +245,7 @@ describe("ChartInspectorPanel Component", () => {
     expect(html).toContain("Phòng ban (Department)");
   });
 
-  it("renders Data & Axes, Style & Palette, and Options accordions for non-academic charts, excluding error bars", () => {
+  it("renders Data & Variables and Labels & Typography accordions for non-academic charts, excluding standalone error bars/options accordions", () => {
     const nonAcademicCharts = ["pie", "donut", "histogram", "box", "heatmap", "area", "density", "radar"];
 
     for (const chartType of nonAcademicCharts) {
@@ -265,15 +261,9 @@ describe("ChartInspectorPanel Component", () => {
       expect(html, `chartType ${chartType} should have accordionData`).toContain(
         toHtmlEntities(t("presentationView.accordionData"))
       );
-      if (["box", "area", "density"].includes(chartType)) {
-        expect(html, `chartType ${chartType} without options should not have accordionOptions`).not.toContain(
-          toHtmlEntities(t("presentationView.accordionOptions"))
-        );
-      } else {
-        expect(html, `chartType ${chartType} with options should have accordionOptions`).toContain(
-          toHtmlEntities(t("presentationView.accordionOptions"))
-        );
-      }
+      expect(html, `chartType ${chartType} should not have standalone accordionOptions`).not.toContain(
+        toHtmlEntities(t("presentationView.accordionOptions"))
+      );
       if (chartType === "heatmap") {
         expect(html, `chartType ${chartType} should not have accordionStyle`).not.toContain(
           toHtmlEntities(t("presentationView.accordionStyle"))
@@ -289,7 +279,7 @@ describe("ChartInspectorPanel Component", () => {
           'data-testid="palette-select"'
         );
       }
-      expect(html, `chartType ${chartType} should not have accordionErrorBars`).not.toContain(
+      expect(html, `chartType ${chartType} should not have standalone accordionErrorBars`).not.toContain(
         toHtmlEntities(t("presentationView.accordionErrorBars"))
       );
       expect(html, `chartType ${chartType} should have accordionLabels`).toContain(
