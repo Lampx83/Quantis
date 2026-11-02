@@ -1534,18 +1534,19 @@ export function PresentationView({
             )}
           </div>
         )}
+        {chartType === "bar" && !xCol && <p className="text-neutral-500 text-sm">{t("presentationView.barEmptyHint")}</p>}
         {chartType === "bar" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0) && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.barNoDataPart1")} &quot;{xCol}&quot;{yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. {t("presentationView.barNoDataPart2")}</p>}
-        {chartType === "line" && (!xCol || !yCol || lineChartData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}
+        {chartType === "line" && (!xCol || !yCol || (hasLegend ? pivotedLineData.length === 0 : lineChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}
         {chartType === "area" && (!xCol || !yCol || areaData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.areaEmptyHint")}</p>}
         {chartType === "stackedBar" && (!xCol || !stackByCol || !yCol || stackedBarData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.stackedBarEmptyHint")}</p>}
-        {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.pieEmptyHint")}</p>}
+        {chartType === "pie" && pieData.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.pieEmptyHint")}</p>}
         {chartType === "box" && (!xCol || !yCol || boxChartData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.boxEmptyHint")}</p>}
         {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">{t("presentationView.histogramEmptyHint")}</p>}
         {chartType === "density" && (!densityGroupCol || !densityValueCol) && <p className="text-neutral-500 text-sm">{t("presentationView.densityEmptyHint")}</p>}
         {chartType === "radar" && radarNumericCols.length < 2 && <p className="text-neutral-500 text-sm">{t("presentationView.radarEmptyHint")}</p>}
         {chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2) && <p className="text-neutral-500 text-sm">{t("presentationView.heatmapEmptyHint")}</p>}
         {chartType === "summary" && summaryStats.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.summaryEmptyHint")}</p>}
-        {chartType === "donut" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.donutEmptyHint")}</p>}
+        {chartType === "donut" && pieData.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.donutEmptyHint")}</p>}
         {chartType === "barH" && (!xCol || (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.barHEmptyHint")}</p>}
         {chartType === "dashboard" && dashboardStats.length === 0 && !(dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2) && <p className="text-neutral-500 text-sm">{t("presentationView.dashboardEmptyHint")}</p>}
           </div>

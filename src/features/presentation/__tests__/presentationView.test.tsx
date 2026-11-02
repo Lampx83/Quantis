@@ -1590,4 +1590,132 @@ describe("PresentationView Component — Aggregation Integration", () => {
       });
     });
   });
+
+  describe("Synchronized Chart Instructions with Inspector UI", () => {
+    it("renders synchronized instruction for pie chart without legacy 'X axis above' phrasing", () => {
+      setLocale("en");
+      const htmlPie = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="pie"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "" }}
+        />
+      );
+      expect(htmlPie).toContain(t("presentationView.pieEmptyHint"));
+      expect(htmlPie).toContain("Select a Legend (category column) in the Chart Inspector");
+      expect(htmlPie).not.toContain("Pick the X axis");
+      expect(htmlPie).not.toContain("above to draw the pie chart");
+
+      // Vietnamese
+      setLocale("vi");
+      const htmlPieVi = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="pie"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "" }}
+        />
+      );
+      expect(htmlPieVi).toContain(t("presentationView.pieEmptyHint"));
+      expect(htmlPieVi).toContain("Chọn Phân nhóm (Legend - cột phân loại) trong Bảng điều khiển");
+      expect(htmlPieVi).not.toContain("ở trên");
+    });
+
+    it("renders synchronized instruction for donut chart", () => {
+      setLocale("en");
+      const htmlDonut = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="donut"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "" }}
+        />
+      );
+      expect(htmlDonut).toContain(t("presentationView.donutEmptyHint"));
+      expect(htmlDonut).toContain("Select a Legend (category column) in the Chart Inspector");
+      expect(htmlDonut).not.toContain("field above");
+    });
+
+    it("renders synchronized empty instructions for column (bar) and horizontal bar (barH)", () => {
+      setLocale("en");
+      const htmlBar = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="bar"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "" }}
+        />
+      );
+      expect(htmlBar).toContain(t("presentationView.barEmptyHint"));
+      expect(htmlBar).toContain("Select an X axis (category) in the Chart Inspector");
+
+      const htmlBarH = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="barH"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "" }}
+        />
+      );
+      expect(htmlBarH).toContain(t("presentationView.barHEmptyHint"));
+      expect(htmlBarH).toContain("Select an X axis (category) in the Chart Inspector");
+    });
+
+    it("renders synchronized instructions for line, area, box, and histogram", () => {
+      setLocale("en");
+      const htmlLine = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="line"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "", yCol: "" }}
+        />
+      );
+      expect(htmlLine).toContain(t("presentationView.lineEmptyHint"));
+      expect(htmlLine).toContain("Chart Inspector");
+
+      const htmlArea = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="area"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "", yCol: "" }}
+        />
+      );
+      expect(htmlArea).toContain(t("presentationView.areaEmptyHint"));
+      expect(htmlArea).toContain("Chart Inspector");
+
+      const htmlBox = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="box"
+          setChartType={() => {}}
+          initialConfig={{ xCol: "", yCol: "" }}
+        />
+      );
+      expect(htmlBox).toContain(t("presentationView.boxEmptyHint"));
+      expect(htmlBox).toContain("Chart Inspector");
+
+      const htmlHist = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={sampleDataset}
+          chartType="histogram"
+          setChartType={() => {}}
+          initialControls={{ histogramCol: "" }}
+        />
+      );
+      expect(htmlHist).toContain(t("presentationView.histogramEmptyHint"));
+      expect(htmlHist).toContain("Chart Inspector");
+    });
+  });
 });
