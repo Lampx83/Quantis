@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pivotByLegend, getSeriesKeys, type PivotedSeries } from "../seriesPivot";
+import { pivotByLegend, getSeriesKeys } from "../seriesPivot";
 import type { AggregatedGroup, AggregateMetrics } from "../aggregation";
 
 function createMockMetrics(overrides: Partial<AggregateMetrics> = {}): AggregateMetrics {

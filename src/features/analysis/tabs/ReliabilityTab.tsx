@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { Dataset } from "@/types";
 import { computeCronbachAlpha, computeCronbachDetail } from "@/utils/stats";
 import * as quantisApi from "@/api";

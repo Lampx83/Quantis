@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TransformTab, HotDeckLoadingBanner } from "../TransformTab";
 import { useDataStore } from "@/stores/useDataStore";
@@ -410,7 +409,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(datasets[0].id).toBe("ds_transform_test");
   });
 
-it("Task 4: Compute Variable initializes metadata with empty label instead of formula", async () => {
+  it("Task 4: Compute Variable initializes metadata with empty label instead of formula", async () => {
     setLocale("en");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],

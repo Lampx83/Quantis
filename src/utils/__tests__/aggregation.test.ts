@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  aggregateData,
-  type AggregateOptions,
-  type AggregatedGroup,
-} from "../aggregation";
+import { aggregateData } from "../aggregation";
 
 describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
   const sampleRows: string[][] = [

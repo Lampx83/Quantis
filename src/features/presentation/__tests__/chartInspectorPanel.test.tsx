@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChartInspectorPanel, usesConfigAxes, supportsAutoTitle, supportsDataLabels, supportsOptions } from "../ChartInspectorPanel";
 import { setLocale, t } from "@/i18n";

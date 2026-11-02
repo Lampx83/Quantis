@@ -1,11 +1,9 @@
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { setLocale } from "../../../../i18n";
 import {
   ValueLabelsModal,
   QUICK_VALUE_LABEL_TEMPLATES,
-  getQuickValueLabelTemplates,
   upsertValueLabel,
   removeValueLabel,
   formatValueLabelsSummary,

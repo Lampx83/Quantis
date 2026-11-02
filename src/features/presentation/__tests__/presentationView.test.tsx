@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PresentationView } from "../PresentationView";
 import { setLocale, t } from "@/i18n";
 import type { Dataset } from "@/types";
+import type { PresentationChartType } from "@/stores";
 
 // Mock recharts components for renderToStaticMarkup SSR testing
 vi.mock("recharts", async (importOriginal) => {
@@ -888,7 +888,7 @@ describe("PresentationView Component — Aggregation Integration", () => {
 
   describe("Chart Inspector Panel Mounting", () => {
     it("renders the inspector toggle button and panel for non-academic chart types", () => {
-      const nonAcademicCharts = ["pie", "donut", "histogram", "box", "heatmap", "area", "density", "radar"];
+      const nonAcademicCharts: PresentationChartType[] = ["pie", "donut", "histogram", "box", "heatmap", "area", "density", "radar"];
 
       for (const chartType of nonAcademicCharts) {
         const html = renderToStaticMarkup(
@@ -906,7 +906,7 @@ describe("PresentationView Component — Aggregation Integration", () => {
     });
 
     it("does not render inline toolbar blocks for pie and donut", () => {
-      for (const chartType of ["pie", "donut"]) {
+      for (const chartType of ["pie", "donut"] as PresentationChartType[]) {
         const html = renderToStaticMarkup(
           <PresentationView
             tab="visualization"
@@ -1466,7 +1466,6 @@ describe("PresentationView Component — Aggregation Integration", () => {
         rows: 5,
         columns: 2,
         columnNames: ["id", "val"],
-        columnTypes: { id: "nominal", val: "continuous" },
         data: [
           ["id", "val"],
           ["1", "10"],
@@ -1483,8 +1482,9 @@ describe("PresentationView Component — Aggregation Integration", () => {
           ["20", "20"],
           ["3", "40"],
         ],
-        type: "survey",
+        sourceFormat: "csv",
         createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
       };
 
       it("naturally sorts categories ascending (1, 2, 3, 10, 20) by default", () => {

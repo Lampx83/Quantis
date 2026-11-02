@@ -1,10 +1,9 @@
-import React from "react";
 import { t } from "@/i18n";
 import type { Dataset, ChartConfig, ChartControls, BarMode, ErrorBarType, ColorPaletteName, ChartSortOrder } from "@/types";
 import { DEFAULT_CHART_CONTROLS } from "@/types";
 import type { AggregateFunction } from "@/utils/aggregation";
 import { PALETTES } from "./colorPalettes";
-import { ChevronDown, SlidersHorizontal, BarChart3, ShieldAlert, Type, Download, Palette, X, PanelRightClose } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, BarChart3, ShieldAlert, Type, Download, Palette, PanelRightClose } from "lucide-react";
 
 /** Charts whose X/Y/aggregation live in `chartConfig` (vs legacy hooks). */
 export const usesConfigAxes = (chartType: string): boolean =>

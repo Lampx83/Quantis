@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Download, Copy, SlidersHorizontal, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Download, Copy, SlidersHorizontal, PanelRightOpen } from "lucide-react";
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -110,16 +110,16 @@ export function PresentationView({
     showDataLabels: initialConfig?.showDataLabels ?? (chartType === "pie" || chartType === "donut"),
   }));
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
-  const [yAggregation, setYAggregation] = useState<AggregateFunction>(initialYAggregation);
+  const [yAggregation] = useState<AggregateFunction>(initialYAggregation);
   const [histogramCol, setHistogramCol] = useState(initialControls?.histogramCol ?? "");
   const [showHistogramDensity, setShowHistogramDensity] = useState(initialControls?.showHistogramDensity ?? false);
   const [stackByCol, setStackByCol] = useState("");
   const [heatmapCorrMethod, setHeatmapCorrMethod] = useState<"pearson" | "spearman" | "kendall">(initialControls?.heatmapCorrMethod ?? "pearson");
   const [radarGroupCol, setRadarGroupCol] = useState(initialControls?.radarGroupCol ?? "");
   const [radarNumericCols, setRadarNumericCols] = useState<string[]>(initialControls?.radarNumericCols ?? []);
-  const [multiLineYCols, setMultiLineYCols] = useState<string[]>([]);
-  const [crosstabCol1, setCrosstabCol1] = useState("");
-  const [crosstabCol2, setCrosstabCol2] = useState("");
+  const [multiLineYCols] = useState<string[]>([]);
+  const [crosstabCol1] = useState("");
+  const [crosstabCol2] = useState("");
   const [densityGroupCol, setDensityGroupCol] = useState(initialControls?.densityGroupCol ?? "");
   const [densityValueCol, setDensityValueCol] = useState(initialControls?.densityValueCol ?? "");
   const [pieBinNumeric, setPieBinNumeric] = useState(initialControls?.pieBinNumeric ?? false);
