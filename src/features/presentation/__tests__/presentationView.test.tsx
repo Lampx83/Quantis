@@ -486,6 +486,68 @@ describe("PresentationView Component — Aggregation Integration", () => {
       expect(html).toContain('data-key="M"');
       expect(html).toContain('data-testid="bar-chart"');
     });
+
+    it("renders multi-series count Line chart when legendCol is configured without yCol and suppresses lineEmptyHint", () => {
+      const ratingDataset: Dataset = {
+        id: "ds_pres_rating",
+        name: "Department Ratings",
+        rows: 4,
+        columns: 2,
+        columnNames: ["Department", "Rating"],
+        preview: [
+          ["Department", "Rating"],
+          ["Sales", "Good"],
+          ["Sales", "Poor"],
+          ["Marketing", "Good"],
+          ["Marketing", "Excellent"],
+        ],
+        data: [
+          ["Department", "Rating"],
+          ["Sales", "Good"],
+          ["Sales", "Poor"],
+          ["Marketing", "Good"],
+          ["Marketing", "Excellent"],
+        ],
+        variables: {
+          Department: {
+            name: "Department",
+            label: "Department",
+            type: "string",
+            measure: "nominal",
+            decimals: 0,
+            align: "left",
+          },
+          Rating: {
+            name: "Rating",
+            label: "Rating",
+            type: "string",
+            measure: "nominal",
+            decimals: 0,
+            align: "left",
+          },
+        },
+        sourceFormat: "csv",
+        createdAt: "2026-10-21T00:00:00Z",
+        updatedAt: "2026-10-21T00:00:00Z",
+      };
+
+      const html = renderToStaticMarkup(
+        <PresentationView
+          tab="visualization"
+          selectedDataset={ratingDataset}
+          chartType="line"
+          setChartType={() => {}}
+          initialConfig={{
+            xCol: "Department",
+            legendCol: "Rating",
+            yCol: "",
+          }}
+        />
+      );
+
+      expect(html).toContain('data-testid="line-chart"');
+      expect(html).not.toContain(t("presentationView.lineEmptyHint"));
+    });
   });
 
   describe("Error Bars on Academic Charts", () => {

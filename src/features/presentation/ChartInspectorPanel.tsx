@@ -1,5 +1,5 @@
 import { t } from "@/i18n";
-import type { Dataset, ChartConfig, ChartControls, BarMode, ErrorBarType, ColorPaletteName, ChartSortOrder } from "@/types";
+import type { Dataset, ChartConfig, ChartControls, ErrorBarType, ColorPaletteName, ChartSortOrder } from "@/types";
 import { DEFAULT_CHART_CONTROLS } from "@/types";
 import type { AggregateFunction } from "@/utils/aggregation";
 import { PALETTES } from "./colorPalettes";
