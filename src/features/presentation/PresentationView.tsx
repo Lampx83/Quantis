@@ -144,7 +144,6 @@ export function PresentationView({
   }, [chartType]);
   const [boxStatsBackendResult, setBoxStatsBackendResult] = useState<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null>(null);
   const [histBinsBackendResult, setHistBinsBackendResult] = useState<Array<{ binStart: number; binEnd: number; count: number }> | null>(null);
-  const PIE_COLORS = ["#0061bb", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"];
 
   useEffect(() => {
     if (tab !== "visualization" || !selectedDataset || chartType !== "box" || !chartConfig.xCol || !chartConfig.yCol || !analysisBackendAvailable) {
@@ -1062,7 +1061,7 @@ export function PresentationView({
                       <Tooltip />
                       <Legend />
                       {keys.map((key, i) => (
-                        <Line key={key} type="monotone" dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={key} />
+                        <Line key={key} type="monotone" dataKey={key} stroke={getPaletteColor(chartConfig.palette, i)} strokeWidth={2} dot={false} name={key} />
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
@@ -1270,7 +1269,7 @@ export function PresentationView({
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={chartConfig.showDataLabels ? ({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(chartConfig.decimals ?? 0)}%` : false}>
                       {pieData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        <Cell key={i} fill={getPaletteColor(chartConfig.palette, i)} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -1297,7 +1296,7 @@ export function PresentationView({
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={60} label={chartConfig.showDataLabels ? ({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(chartConfig.decimals ?? 0)}%` : false}>
                       {pieData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        <Cell key={i} fill={getPaletteColor(chartConfig.palette, i)} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -1338,8 +1337,8 @@ export function PresentationView({
                     <Bar dataKey="q1" stackId="box" fill="transparent" stroke="none" isAnimationActive={false} legendType="none">
                       <ErrorBar dataKey="whiskerLow" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
                     </Bar>
-                    <Bar dataKey="boxLower" stackId="box" fill="#0061bb" fillOpacity={0.55} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none" />
-                    <Bar dataKey="boxUpper" stackId="box" fill="#0061bb" fillOpacity={0.85} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none">
+                    <Bar dataKey="boxLower" stackId="box" fill={getPaletteColor(chartConfig.palette, 0)} fillOpacity={0.55} stroke={getPaletteColor(chartConfig.palette, 0)} strokeWidth={1.5} isAnimationActive={false} legendType="none" />
+                    <Bar dataKey="boxUpper" stackId="box" fill={getPaletteColor(chartConfig.palette, 0)} fillOpacity={0.85} stroke={getPaletteColor(chartConfig.palette, 0)} strokeWidth={1.5} isAnimationActive={false} legendType="none">
                       <ErrorBar dataKey="whiskerHigh" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
                     </Bar>
                   </ComposedChart>
@@ -1373,7 +1372,7 @@ export function PresentationView({
                     <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
                     <YAxis label={{ value: t("presentationView.histogramFrequencyLabel"), angle: -90, position: "insideLeft" }} />
                     <Tooltip />
-                    <Bar dataKey="count" fill="#0061bb" name={t("presentationView.histogramFrequencyLabel")}>
+                    <Bar dataKey="count" fill={getPaletteColor(chartConfig.palette, 0)} name={t("presentationView.histogramFrequencyLabel")}>
                       {chartConfig.showDataLabels && (
                         <LabelList dataKey="count" position="top" formatter={formatDataLabel} />
                       )}
@@ -1396,12 +1395,12 @@ export function PresentationView({
                     <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
                     <YAxis label={{ value: t("presentationView.histogramFrequencyDensityLabel"), angle: -90, position: "insideLeft" }} />
                     <Tooltip />
-                    <Bar dataKey="count" fill="#0061bb" name={t("presentationView.histogramFrequencyLabel")}>
+                    <Bar dataKey="count" fill={getPaletteColor(chartConfig.palette, 0)} name={t("presentationView.histogramFrequencyLabel")}>
                       {chartConfig.showDataLabels && (
                         <LabelList dataKey="count" position="top" formatter={formatDataLabel} />
                       )}
                     </Bar>
-                    <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name={t("presentationView.kdeLineLabel")} />
+                    <Line type="monotone" dataKey="densityScaled" stroke={getPaletteColor(chartConfig.palette, 1)} strokeWidth={2} dot={false} name={t("presentationView.kdeLineLabel")} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -1420,7 +1419,7 @@ export function PresentationView({
                     <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
                     <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
                     <Tooltip />
-                    <Area type="monotone" dataKey="y" stroke="#0061bb" fill="#0061bb" fillOpacity={0.4} name={yCol || t("presentationView.lineDefaultValueName")}>
+                    <Area type="monotone" dataKey="y" stroke={getPaletteColor(chartConfig.palette, 0)} fill={getPaletteColor(chartConfig.palette, 0)} fillOpacity={0.4} name={yCol || t("presentationView.lineDefaultValueName")}>
                       {chartConfig.showDataLabels && (
                         <LabelList dataKey="y" position="top" formatter={formatDataLabel} />
                       )}
@@ -1445,7 +1444,7 @@ export function PresentationView({
                     <Tooltip />
                     <Legend />
                     {stackKeys.map((key, i) => (
-                      <Bar key={key} dataKey={key} stackId="stack" fill={PIE_COLORS[i % PIE_COLORS.length]} name={key.length > 16 ? key.slice(0, 14) + "…" : key} />
+                      <Bar key={key} dataKey={key} stackId="stack" fill={getPaletteColor(chartConfig.palette, i)} name={key.length > 16 ? key.slice(0, 14) + "…" : key} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -1467,7 +1466,7 @@ export function PresentationView({
                       <PolarAngleAxis dataKey="subject" />
                       <PolarRadiusAxis angle={90} domain={[0, "auto"]} />
                       {radarKeys.map((key, i) => (
-                        <Radar key={key} name={key} dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.3} strokeWidth={2}>
+                        <Radar key={key} name={key} dataKey={key} stroke={getPaletteColor(chartConfig.palette, i)} fill={getPaletteColor(chartConfig.palette, i)} fillOpacity={0.3} strokeWidth={2}>
                           {chartConfig.showDataLabels && (
                             <LabelList dataKey={key} position="top" formatter={formatDataLabel} />
                           )}
@@ -1493,7 +1492,7 @@ export function PresentationView({
                   <Tooltip />
                   <Legend />
                   {multiLineYCols.map((col, i) => (
-                    <Line key={col} type="monotone" dataKey={col} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={{ r: 3 }} name={col.length > 14 ? col.slice(0, 12) + "…" : col} />
+                    <Line key={col} type="monotone" dataKey={col} stroke={getPaletteColor(chartConfig.palette, i)} strokeWidth={2} dot={{ r: 3 }} name={col.length > 14 ? col.slice(0, 12) + "…" : col} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -1552,7 +1551,7 @@ export function PresentationView({
                   <Tooltip />
                   <Legend />
                   {crosstabResult.colLabels.slice(0, 8).map((col, i) => (
-                    <Bar key={col} dataKey={col} stackId="ct" fill={PIE_COLORS[i % PIE_COLORS.length]} name={col.length > 12 ? col.slice(0, 10) + "…" : col} />
+                    <Bar key={col} dataKey={col} stackId="ct" fill={getPaletteColor(chartConfig.palette, i)} name={col.length > 12 ? col.slice(0, 10) + "…" : col} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
