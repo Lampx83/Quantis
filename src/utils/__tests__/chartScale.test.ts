@@ -127,6 +127,21 @@ describe("extractChartExtent — Data Extent Extraction", () => {
     expect(extent.min).toBe(0);
     expect(extent.max).toBe(40);
   });
+
+  it("extracts cumulative negative extent for stacked bar chart with negative values", () => {
+    const data = [
+      { name: "Cat 1", Series1: -5, Series2: -2 },
+      { name: "Cat 2", Series1: -3, Series2: -1 },
+    ];
+    const extent = extractChartExtent(data, {
+      hasLegend: true,
+      legendKeys: ["Series1", "Series2"],
+      barMode: "stacked",
+      includeErrors: false,
+    });
+    expect(extent.min).toBe(-7);
+    expect(extent.max).toBe(0);
+  });
 });
 
 describe("computeAxisScale — Integration Helper", () => {

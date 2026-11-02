@@ -127,21 +127,33 @@ export function extractChartExtent(
       if (!row) continue;
 
       if (options.barMode === "stacked") {
+        // Stacked bar: sum positive and negative series separately
         let stackSum = 0;
+        let stackNeg = 0;
         let maxErr = 0;
+        let minErr = 0;
         for (const k of keys) {
           const val = Number(row[k]);
-          if (!Number.isNaN(val) && val > 0) {
-            stackSum += val;
+          if (!Number.isNaN(val)) {
+            if (val > 0) {
+              stackSum += val;
+            } else if (val < 0) {
+              stackNeg += val;
+            }
           }
           if (options.includeErrors) {
             const err = row[`_err_${k}`] ?? row._errors?.[k];
-            if (Array.isArray(err) && Number.isFinite(err[1])) {
-              maxErr = Math.max(maxErr, err[1]);
+            if (Array.isArray(err)) {
+              if (Number.isFinite(err[1])) {
+                maxErr = Math.max(maxErr, err[1]);
+              }
+              if (val < 0 && Number.isFinite(err[0])) {
+                minErr = Math.max(minErr, err[0]);
+              }
             }
           }
         }
-        min = Math.min(min, 0);
+        min = Math.min(min, stackNeg - minErr);
         max = Math.max(max, stackSum + maxErr);
       } else {
         // Clustered bar or multi-series line
