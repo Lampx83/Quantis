@@ -170,6 +170,16 @@ function tokenize(src: string): Tok[] {
 
 const finite = (xs: number[]) => xs.filter((x) => Number.isFinite(x));
 
+/** Độ lệch chuẩn mẫu (hiệu chỉnh Bessel, n - 1); ít hơn 2 giá trị -> thiếu. Dùng chung cho `sd` và `std`. */
+const sampleStdDev = (a: number[]): number => {
+  const vals = finite(a);
+  const n = vals.length;
+  if (n < 2) return NaN;
+  const mean = vals.reduce((s, x) => s + x, 0) / n;
+  const ss = vals.reduce((s, x) => s + (x - mean) ** 2, 0);
+  return Math.sqrt(ss / (n - 1));
+};
+
 const FUNCS: Record<string, { min: number; max: number; f: (a: number[]) => number }> = {
   ln: { min: 1, max: 1, f: (a) => (a[0] > 0 ? Math.log(a[0]) : NaN) },
   log: { min: 1, max: 1, f: (a) => (a[0] > 0 ? Math.log10(a[0]) : NaN) }, // như Excel: LOG = log10
@@ -206,26 +216,12 @@ const FUNCS: Record<string, { min: number; max: number; f: (a: number[]) => numb
   sd: {
     min: 1,
     max: 99,
-    f: (a) => {
-      const vals = finite(a);
-      const n = vals.length;
-      if (n < 2) return NaN;
-      const mean = vals.reduce((s, x) => s + x, 0) / n;
-      const ss = vals.reduce((s, x) => s + (x - mean) ** 2, 0);
-      return Math.sqrt(ss / (n - 1));
-    },
+    f: sampleStdDev,
   },
   std: {
     min: 1,
     max: 99,
-    f: (a) => {
-      const vals = finite(a);
-      const n = vals.length;
-      if (n < 2) return NaN;
-      const mean = vals.reduce((s, x) => s + x, 0) / n;
-      const ss = vals.reduce((s, x) => s + (x - mean) ** 2, 0);
-      return Math.sqrt(ss / (n - 1));
-    },
+    f: sampleStdDev,
   },
 };
 const MULTI_SKIP_NAN = new Set(["sum", "mean", "min", "max", "median", "sd", "std"]);
