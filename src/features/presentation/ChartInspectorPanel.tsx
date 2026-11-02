@@ -300,7 +300,7 @@ export function ChartInspectorPanel({
             </details>
 
             {/* Accordion 2: Style & Palette */}
-            <details open className="group">
+            <details className="group">
               <summary className="w-full px-4 py-3 flex items-center justify-between font-semibold text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 cursor-pointer select-none transition-colors list-none [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:bg-neutral-50 dark:focus-visible:bg-neutral-800/50">
                 <span className="flex items-center gap-2">
                   <Palette className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
@@ -373,7 +373,7 @@ export function ChartInspectorPanel({
 
             {/* Accordion 3: Error Bars - only for bar, barH, line */}
             {hasErrorBars && (
-              <details open className="group">
+              <details className="group">
                 <summary className="w-full px-4 py-3 flex items-center justify-between font-semibold text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 cursor-pointer select-none transition-colors list-none [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:bg-neutral-50 dark:focus-visible:bg-neutral-800/50">
                   <span className="flex items-center gap-2">
                     <ShieldAlert className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
@@ -689,7 +689,7 @@ export function ChartInspectorPanel({
 
             {/* Accordion 2: Options */}
             {supportsOptions(chartType) && (
-              <details open className="group">
+              <details className="group">
                 <summary className="w-full px-4 py-3 flex items-center justify-between font-semibold text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 cursor-pointer select-none transition-colors list-none [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:bg-neutral-50 dark:focus-visible:bg-neutral-800/50">
                   <span className="flex items-center gap-2">
                     <SlidersHorizontal className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
@@ -881,7 +881,7 @@ export function ChartInspectorPanel({
         )}
 
         {/* Universal Accordion: Labels & Typography */}
-        <details open className="group">
+        <details className="group">
           <summary className="w-full px-4 py-3 flex items-center justify-between font-semibold text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50/80 dark:hover:bg-neutral-800/40 cursor-pointer select-none transition-colors list-none [&::-webkit-details-marker]:hidden focus:outline-none focus-visible:bg-neutral-50 dark:focus-visible:bg-neutral-800/50">
             <span className="flex items-center gap-2">
               <Type className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />

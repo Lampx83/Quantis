@@ -92,6 +92,37 @@ describe("ChartInspectorPanel Component", () => {
     expect(htmlVi).toContain(toHtmlEntities(t("presentationView.accordionLabels")));
   });
 
+  it("defaults to only opening Data & Axes accordion and closing the rest", () => {
+    // Academic chart (e.g., bar)
+    const htmlBar = renderToStaticMarkup(
+      <ChartInspectorPanel
+        chartType="bar"
+        dataset={mockDataset}
+        config={DEFAULT_CHART_CONFIG}
+        onChange={() => {}}
+      />
+    );
+    // Data & Axes is open
+    expect(htmlBar).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Axes/);
+    // Style & Palette, Error Bars, Labels & Typography are closed (no open attribute)
+    expect(htmlBar).toMatch(/<details\s+class="group">[\s\S]*?Style &amp; Palette/);
+    expect(htmlBar).toMatch(/<details\s+class="group">[\s\S]*?Error Bars/);
+    expect(htmlBar).toMatch(/<details\s+class="group">[\s\S]*?Labels &amp; Typography/);
+
+    // Non-academic chart with options (e.g., pie)
+    const htmlPie = renderToStaticMarkup(
+      <ChartInspectorPanel
+        chartType="pie"
+        dataset={mockDataset}
+        config={DEFAULT_CHART_CONFIG}
+        onChange={() => {}}
+      />
+    );
+    expect(htmlPie).toMatch(/<details\s+open=""\s+class="group">[\s\S]*?Data &amp; Axes/);
+    expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Options/);
+    expect(htmlPie).toMatch(/<details\s+class="group">[\s\S]*?Labels &amp; Typography/);
+  });
+
   it("shows Legend selector for bar, line, and scatter, but hides it for pie and heatmap", () => {
     // Bar chart: should have legend selector
     const htmlBar = renderToStaticMarkup(
