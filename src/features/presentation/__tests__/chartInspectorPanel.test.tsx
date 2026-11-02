@@ -826,5 +826,46 @@ describe("ChartInspectorPanel Component", () => {
       // Nothing to judge from: do not hide the column rather than guess it is text.
       expect(ySelectMatch![0]).toContain('value="Score"');
     });
+
+    it("rejects mixed columns in numeric fallback when dataset has no variable metadata", () => {
+      const mixedDataset: Dataset = {
+        id: "ds_mixed_fallback",
+        name: "Mixed Dataset",
+        rows: 2,
+        columns: 3,
+        columnNames: ["Department", "Room", "Score"],
+        preview: [
+          ["Department", "Room", "Score"],
+          ["HR", "101", "4.2"],
+          ["Sales", "Suite B", "3.8"],
+        ],
+        data: [
+          ["Department", "Room", "Score"],
+          ["HR", "101", "4.2"],
+          ["Sales", "Suite B", "3.8"],
+        ],
+        variables: {},
+        sourceFormat: "csv",
+        createdAt: "2026-10-22",
+        updatedAt: "2026-10-22",
+      };
+
+      const html = renderToStaticMarkup(
+        <ChartInspectorPanel
+          chartType="bar"
+          dataset={mixedDataset}
+          config={DEFAULT_CHART_CONFIG}
+          onChange={() => {}}
+        />
+      );
+
+      const ySelectMatch = html.match(/<select[^>]*data-testid="y-col-select"[^>]*>([\s\S]*?)<\/select>/);
+      expect(ySelectMatch).toBeTruthy();
+      const ySelectHtml = ySelectMatch![0];
+
+      expect(ySelectHtml).toContain('value="Score"');
+      expect(ySelectHtml).not.toContain('value="Room"');
+      expect(ySelectHtml).not.toContain('value="Department"');
+    });
   });
 });

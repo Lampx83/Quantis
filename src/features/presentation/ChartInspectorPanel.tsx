@@ -79,7 +79,7 @@ export function ChartInspectorPanel({
     if (meta) {
       return meta.type === "numeric" || meta.measure === "scale";
     }
-    // Fallback for datasets without metadata: numeric only if a sampled cell parses.
+    // Fallback for datasets without metadata: numeric only if all non-blank sampled cells parse.
     // Scan past blank cells and keep the column when there is nothing to judge from,
     // so a numeric column with empty leading cells is not silently hidden.
     const dataRows = dataset?.data && dataset.data.length > 0 ? dataset.data : dataset?.preview ?? [];
@@ -87,17 +87,17 @@ export function ChartInspectorPanel({
     if (!header) return false;
     const idx = header.indexOf(col);
     if (idx === -1) return false;
-    let sawValue = false;
     for (let r = 1; r < Math.min(dataRows.length, 50); r++) {
       const raw = dataRows[r]?.[idx];
       const text = raw === undefined || raw === null ? "" : String(raw).trim();
       if (text === "") continue;
-      sawValue = true;
-      if (!Number.isNaN(Number(text))) {
-        return true;
+      if (Number.isNaN(Number(text))) {
+        return false;
       }
     }
-    return !sawValue;
+    // Return true if at least one non-blank was seen and all were numeric,
+    // or if all sampled cells were blank (keep as fallback cannot judge).
+    return true;
   });
 
   // Determine categorical columns
