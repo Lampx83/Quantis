@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Server, X, User, Cpu, Sparkles, RotateCcw } from "lucide-react";
 import * as quantisApi from "@/api";
 import type { AuthUser } from "@/api";

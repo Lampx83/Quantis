@@ -150,3 +150,70 @@ export interface AIRecommendation {
   message: string;
   createdAt: string;
 }
+
+
+export type BarMode = "clustered" | "stacked";
+export type ErrorBarType = "none" | "ci95" | "se" | "sd";
+export type ColorPaletteName = "academic" | "colorblind" | "grayscale";
+export type ChartSortOrder =
+  | "category-asc"
+  | "category-desc"
+  | "value-asc"
+  | "value-desc"
+  | "none";
+
+export interface ChartConfig {
+  xCol: string;
+  yCol: string;
+  legendCol: string;
+  aggregation: import("./utils/aggregation").AggregateFunction;
+  barMode: BarMode;
+  errorBar: ErrorBarType;
+  palette: ColorPaletteName;
+  titleOverride: string;
+  subtitle: string;
+  showDataLabels: boolean;
+  decimals: number;
+  sortOrder: ChartSortOrder;
+}
+
+export const DEFAULT_CHART_CONFIG: ChartConfig = {
+  xCol: "",
+  yCol: "",
+  legendCol: "",
+  aggregation: "mean",
+  barMode: "clustered",
+  errorBar: "none",
+  palette: "academic",
+  titleOverride: "",
+  subtitle: "",
+  showDataLabels: false,
+  decimals: 2,
+  sortOrder: "category-asc",
+};
+
+export interface ChartControls {
+  histogramCol: string;
+  showHistogramDensity: boolean;
+  heatmapCorrMethod: "pearson" | "spearman" | "kendall";
+  radarGroupCol: string;
+  radarNumericCols: string[];
+  densityGroupCol: string;
+  densityValueCol: string;
+  pieBinNumeric: boolean;
+  pieBinCount: number;
+  pieNumericCol: string;
+}
+
+export const DEFAULT_CHART_CONTROLS: ChartControls = {
+  histogramCol: "",
+  showHistogramDensity: false,
+  heatmapCorrMethod: "pearson",
+  radarGroupCol: "",
+  radarNumericCols: [],
+  densityGroupCol: "",
+  densityValueCol: "",
+  pieBinNumeric: false,
+  pieBinCount: 4,
+  pieNumericCol: "",
+};

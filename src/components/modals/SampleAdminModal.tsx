@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { X, Plus, Edit2, Trash2 } from "lucide-react";
 import { useUIStore, useSyncStore } from "@/stores";
 import * as quantisApi from "@/api";

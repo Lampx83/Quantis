@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TransformTab, HotDeckLoadingBanner } from "../TransformTab";
 import { useDataStore } from "@/stores/useDataStore";
@@ -854,5 +853,325 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
       expect(html).not.toContain("Select at least one column. With");
       expect(html).not.toContain("columns selected");
     }
+  });
+
+  it("Task 4: Compute Variable initializes metadata with empty label instead of formula", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function ComputeHarness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "compute",
+        initialComputeName: "MEDIAN_INC",
+        initialComputeFormula: "MEDIAN([INCOME])",
+        initialShowChoiceModal: true,
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<ComputeHarness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    await createNewBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets.length).toBe(2);
+    const newDs = datasets[1];
+    expect(newDs.columnNames).toContain("MEDIAN_INC");
+    expect(newDs.variables).toBeDefined();
+    expect(newDs.variables!["MEDIAN_INC"]).toBeDefined();
+    expect(newDs.variables!["MEDIAN_INC"].name).toBe("MEDIAN_INC");
+    expect(newDs.variables!["MEDIAN_INC"].type).toBe("numeric");
+    expect(newDs.variables!["MEDIAN_INC"].measure).toBe("scale");
+    // CRITICAL: Label must be empty string, NOT the formula!
+    expect(newDs.variables!["MEDIAN_INC"].label).toBe("");
+  });
+
+  it("Task 5: Recode with Range rules into Different Variable creates column and metadata", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function RecodeHarness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "recode",
+        initialShowChoiceModal: true,
+        initialRecodeCol: "INCOME",
+        initialRecodeTargetMode: "different",
+        initialRecodeNewColName: "INCOME_LEVEL",
+        initialRecodeRules: [
+          { type: "range", rangeMin: "900", rangeMax: "1100", to: "Level 1" },
+          { type: "range", rangeMin: "1400", rangeMax: "1600", to: "Level 2" },
+        ],
+        initialRecodeElseEnabled: true,
+        initialRecodeElseAction: "custom",
+        initialRecodeElseValue: "Other",
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<RecodeHarness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    await createNewBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets.length).toBe(2);
+    const newDs = datasets[1];
+    expect(newDs.columnNames).toContain("INCOME_LEVEL");
+    expect(newDs.variables!["INCOME_LEVEL"]).toBeDefined();
+    expect(newDs.variables!["INCOME_LEVEL"].type).toBe("string");
+    expect(newDs.variables!["INCOME_LEVEL"].measure).toBe("nominal");
+
+    // Check recoded data rows
+    // Row 1: INCOME 1000 -> Level 1
+    // Row 2: empty -> Other
+    // Row 3: 99 -> Other
+    // Row 4: 1500 -> Level 2
+    const data = newDs.data!;
+    const levelColIdx = newDs.columnNames.indexOf("INCOME_LEVEL");
+    expect(data[1][levelColIdx]).toBe("Level 1");
+    expect(data[2][levelColIdx]).toBe("Other");
+    expect(data[3][levelColIdx]).toBe("Other");
+    expect(data[4][levelColIdx]).toBe("Level 2");
+
+    // Original INCOME is untouched
+    const origIncIdx = newDs.columnNames.indexOf("INCOME");
+    expect(data[1][origIncIdx]).toBe("1000");
+  });
+
+  it("Recode into Different Variable infers numeric variable metadata when recoded values are numeric", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function RecodeNumericHarness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "recode",
+        initialShowChoiceModal: true,
+        initialRecodeCol: "INCOME",
+        initialRecodeTargetMode: "different",
+        initialRecodeNewColName: "INCOME_TIER",
+        initialRecodeRules: [
+          { type: "range", rangeMin: "900", rangeMax: "1100", to: "1" },
+          { type: "range", rangeMin: "1400", rangeMax: "1600", to: "2" },
+        ],
+        initialRecodeElseEnabled: true,
+        initialRecodeElseAction: "custom",
+        initialRecodeElseValue: "3",
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<RecodeNumericHarness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    await createNewBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets.length).toBe(2);
+    const newDs = datasets[1];
+    expect(newDs.columnNames).toContain("INCOME_TIER");
+    expect(newDs.variables!["INCOME_TIER"]).toBeDefined();
+    expect(newDs.variables!["INCOME_TIER"].type).toBe("numeric");
+    expect(newDs.variables!["INCOME_TIER"].measure).toBe("ordinal");
+    expect(newDs.variables!["INCOME_TIER"].align).toBe("right");
+  });
+
+  it("Recode into Same Variable re-infers string variable metadata when numeric column is recoded to strings", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function RecodeSameStringHarness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "recode",
+        initialShowChoiceModal: true,
+        initialRecodeCol: "INCOME",
+        initialRecodeTargetMode: "same",
+        initialRecodeRules: [
+          { type: "value", from: "1000", to: "Low" },
+          { type: "value", from: "1500", to: "High" },
+        ],
+        initialRecodeElseEnabled: true,
+        initialRecodeElseAction: "custom",
+        initialRecodeElseValue: "Medium",
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<RecodeSameStringHarness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const createNewBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.createNewButton"))
+    );
+    expect(createNewBtn).toBeDefined();
+
+    await createNewBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets.length).toBe(2);
+    const newDs = datasets[1];
+    expect(newDs.variables!["INCOME"]).toBeDefined();
+    expect(newDs.variables!["INCOME"].type).toBe("string");
+    expect(newDs.variables!["INCOME"].measure).toBe("nominal");
+  });
+
+  it("Task 6: renders all new Recode UI controls (Same/Diff, Range, ELSE) in static markup", () => {
+    setLocale("en");
+    const html = renderToStaticMarkup(
+      <TransformTab
+        selectedDs={sampleDatasetWithMissing}
+        setDatasets={vi.fn()}
+        onSelectDataset={vi.fn()}
+        initialAction="recode"
+        initialRecodeElseEnabled={true}
+      />
+    );
+
+    expect(html).toContain('name="recodeTargetMode"');
+    expect(html).toContain(t("transformTab.recodeTargetSame"));
+    expect(html).toContain(t("transformTab.recodeTargetDifferent"));
+    expect(html).toContain(t("transformTab.recodeTypeValue"));
+    expect(html).toContain(t("transformTab.recodeTypeRange"));
+    expect(html).toContain(t("transformTab.recodeElseToggle"));
+    expect(html).toContain(t("transformTab.recodeElseActionCopy"));
+    expect(html).toContain(t("transformTab.recodeElseActionSysmis"));
+    expect(html).toContain(t("transformTab.recodeElseActionCustom"));
+  });
+
+  it("Task 6: Recode into Same Variable overwrites in place when overwriteOriginal is true", async () => {
+    setLocale("en");
+    useDataStore.setState({
+      datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
+      selectedDatasetId: "ds_transform_test",
+    });
+
+    let rendered: any = null;
+    function SameVarHarness() {
+      rendered = TransformTab({
+        selectedDs: sampleDatasetWithMissing,
+        setDatasets: useDataStore.getState().setDatasets,
+        onSelectDataset: vi.fn(),
+        initialAction: "recode",
+        initialShowChoiceModal: true,
+        initialRecodeCol: "GENDER",
+        initialRecodeTargetMode: "same",
+        initialRecodeRules: [
+          { type: "value", from: "Nam", to: "Male" },
+          { type: "value", from: "Nữ", to: "Female" },
+        ],
+        initialRecodeElseEnabled: false,
+      });
+      return rendered;
+    }
+
+    renderToStaticMarkup(<SameVarHarness />);
+
+    const buttons: any[] = [];
+    function collectButtons(node: any) {
+      if (!node) return;
+      if (node.type === "button") buttons.push(node);
+      if (node.props?.children) {
+        const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+        ch.forEach(collectButtons);
+      }
+    }
+    collectButtons(rendered);
+
+    const overwriteBtn = buttons.find((b) =>
+      String(b.props?.children).includes(t("transformTab.overwriteOriginalButton"))
+    );
+    expect(overwriteBtn).toBeDefined();
+
+    await overwriteBtn.props.onClick();
+
+    const datasets = useDataStore.getState().datasets;
+    expect(datasets.length).toBe(1);
+    const updatedDs = datasets[0];
+    const genderIdx = updatedDs.columnNames.indexOf("GENDER");
+    expect(updatedDs.data![1][genderIdx]).toBe("Male");
+    expect(updatedDs.data![2][genderIdx]).toBe("Female");
   });
 });

@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: TypeScript Ratchet Check (tsc <= 46)
+      - name: TypeScript Ratchet Check (tsc = 0 errors)
         run: npm run typecheck
 
       - name: Run Vitest Unit Tests

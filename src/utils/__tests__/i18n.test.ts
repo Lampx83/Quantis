@@ -69,4 +69,226 @@ describe("i18n Core Engine", () => {
     expect(t("mi.invalidateConfirm")).toBe("Xoá bộ MI và tiếp tục");
     expect(t("mi.invalidateCancel")).toBe("Huỷ");
   });
+
+  describe("Compute & Recode i18n keys", () => {
+    const requiredKeys = [
+      "transformTab.computeHint",
+      "transformTab.recodeTargetMode",
+      "transformTab.recodeTargetSame",
+      "transformTab.recodeTargetDifferent",
+      "transformTab.recodeNewColLabel",
+      "transformTab.recodeNewColPlaceholder",
+      "transformTab.recodeNewColErrorEmpty",
+      "transformTab.recodeNewColErrorDuplicate",
+      "transformTab.recodeTypeValue",
+      "transformTab.recodeTypeRange",
+      "transformTab.recodeFromPlaceholder",
+      "transformTab.recodeMinPlaceholder",
+      "transformTab.recodeMaxPlaceholder",
+      "transformTab.recodeToPlaceholder",
+      "transformTab.recodeElseToggle",
+      "transformTab.recodeElseActionCopy",
+      "transformTab.recodeElseActionSysmis",
+      "transformTab.recodeElseActionCustom",
+      "transformTab.recodeElseCustomPlaceholder",
+      "transformTab.recodeAddRule",
+      "transformTab.recodeDeleteRule",
+      "transformTab.resultRecode",
+      "transformTab.suffixRecode",
+    ];
+
+    it("has all keys defined in both English and Vietnamese", () => {
+      for (const key of requiredKeys) {
+        setLocale("en");
+        const enVal = t(key);
+        expect(enVal, `Missing English key: ${key}`).not.toBe(key);
+
+        setLocale("vi");
+        const viVal = t(key);
+        expect(viVal, `Missing Vietnamese key: ${key}`).not.toBe(key);
+      }
+    });
+
+    it("includes MEDIAN and SD in computeHint", () => {
+      setLocale("en");
+      expect(t("transformTab.computeHint")).toContain("median");
+      expect(t("transformTab.computeHint")).toContain("sd");
+
+      setLocale("vi");
+      expect(t("transformTab.computeHint")).toContain("median");
+      expect(t("transformTab.computeHint")).toContain("sd");
+    });
+
+    it("interpolates resultRecode correctly", () => {
+      setLocale("en");
+      expect(t("transformTab.resultRecode", { recoded: 5, total: 10 })).toContain("5");
+      expect(t("transformTab.resultRecode", { recoded: 5, total: 10 })).toContain("10");
+
+      setLocale("vi");
+      expect(t("transformTab.resultRecode", { recoded: 5, total: 10 })).toContain("5");
+      expect(t("transformTab.resultRecode", { recoded: 5, total: 10 })).toContain("10");
+    });
+  });
+
+  describe("Aggregation Engine i18n keys", () => {
+    const requiredKeys = [
+      "presentationView.aggregationLabel",
+      "presentationView.aggLabel.mean",
+      "presentationView.aggLabel.sum",
+      "presentationView.aggLabel.count",
+      "presentationView.aggLabel.median",
+      "presentationView.aggLabel.std",
+      "presentationView.aggLabel.min",
+      "presentationView.aggLabel.max",
+      "presentationView.ofPreposition",
+      "presentationView.aggTooltipSampleSize",
+      "presentationView.aggTooltipStd",
+      "presentationView.contextAggregationLabel",
+    ];
+
+    it("has all aggregation keys defined in both English and Vietnamese", () => {
+      for (const key of requiredKeys) {
+        setLocale("en");
+        const enVal = t(key);
+        expect(enVal, `Missing English key: ${key}`).not.toBe(key);
+
+        setLocale("vi");
+        const viVal = t(key);
+        expect(viVal, `Missing Vietnamese key: ${key}`).not.toBe(key);
+      }
+    });
+
+    it("verifies accurate translation values for aggregation keys", () => {
+      setLocale("en");
+      expect(t("presentationView.aggregationLabel")).toBe("Aggregation");
+      expect(t("presentationView.aggLabel.mean")).toBe("Mean");
+      expect(t("presentationView.aggLabel.sum")).toBe("Sum");
+      expect(t("presentationView.aggLabel.count")).toBe("Count");
+      expect(t("presentationView.aggLabel.median")).toBe("Median");
+      expect(t("presentationView.aggLabel.std")).toBe("Std Dev");
+      expect(t("presentationView.aggLabel.min")).toBe("Min");
+      expect(t("presentationView.aggLabel.max")).toBe("Max");
+      expect(t("presentationView.ofPreposition")).toBe("of");
+      expect(t("presentationView.aggTooltipSampleSize")).toBe("n");
+      expect(t("presentationView.aggTooltipStd")).toBe("s");
+      expect(t("presentationView.contextAggregationLabel")).toBe("Aggregation:");
+
+      setLocale("vi");
+      expect(t("presentationView.aggregationLabel")).toBe("Phép gộp");
+      expect(t("presentationView.aggLabel.mean")).toBe("Trung bình");
+      expect(t("presentationView.aggLabel.sum")).toBe("Tổng");
+      expect(t("presentationView.aggLabel.count")).toBe("Đếm");
+      expect(t("presentationView.aggLabel.median")).toBe("Trung vị");
+      expect(t("presentationView.aggLabel.std")).toBe("Độ lệch chuẩn");
+      expect(t("presentationView.aggLabel.min")).toBe("Nhỏ nhất");
+      expect(t("presentationView.aggLabel.max")).toBe("Lớn nhất");
+      expect(t("presentationView.ofPreposition")).toBe("của");
+      expect(t("presentationView.aggTooltipSampleSize")).toBe("n");
+      expect(t("presentationView.aggTooltipStd")).toBe("s");
+      expect(t("presentationView.contextAggregationLabel")).toBe("Phép gộp:");
+    });
+  });
+
+  describe("Academic Visualization Suite i18n keys", () => {
+    const vizKeys = [
+      "presentationView.inspectorTitle",
+      "presentationView.accordionData",
+      "presentationView.accordionOptions",
+      "presentationView.accordionStyle",
+      "presentationView.accordionErrorBars",
+      "presentationView.accordionLabels",
+      "presentationView.accordionExport",
+      "presentationView.legendLabel",
+      "presentationView.noneOption",
+      "presentationView.barModeLabel",
+      "presentationView.barModeClustered",
+      "presentationView.barModeStacked",
+      "presentationView.errorBarLabel",
+      "presentationView.errorBarNone",
+      "presentationView.errorBarCi95",
+      "presentationView.errorBarSe",
+      "presentationView.errorBarSd",
+      "presentationView.errorBarMeanOnlyNotice",
+      "presentationView.showDataLabelsLabel",
+      "presentationView.decimalsLabel",
+      "presentationView.titleOverrideLabel",
+      "presentationView.titleOverridePlaceholder",
+      "presentationView.subtitleLabel",
+      "presentationView.subtitlePlaceholder",
+      "presentationView.autoTitleMeanOf",
+      "presentationView.autoTitleBy",
+      "presentationView.autoTitleAnd",
+      "presentationView.paletteLabel",
+      "presentationView.paletteAcademic",
+      "presentationView.paletteColorblind",
+      "presentationView.paletteGrayscale",
+    ];
+
+    it("has all visualization suite keys defined in both English and Vietnamese", () => {
+      for (const key of vizKeys) {
+        setLocale("en");
+        const enVal = t(key);
+        expect(enVal, `Missing English key: ${key}`).not.toBe(key);
+
+        setLocale("vi");
+        const viVal = t(key);
+        expect(viVal, `Missing Vietnamese key: ${key}`).not.toBe(key);
+      }
+    });
+  });
+
+  describe("Task 2: Smart Titles i18n Dictionary", () => {
+    const autoTitleKeys = [
+      "presentationView.autoTitlePieCategorical",
+      "presentationView.autoTitlePieBinned",
+      "presentationView.autoTitleHistogram",
+      "presentationView.autoTitleBox",
+      "presentationView.autoTitleArea",
+      "presentationView.autoTitleDensityGrouped",
+      "presentationView.autoTitleDensitySingle",
+      "presentationView.autoTitleHeatmap",
+      "presentationView.autoTitleRadarGrouped",
+      "presentationView.autoTitleRadarNoGroup",
+    ];
+
+    it("has all smart title template keys defined in both English and Vietnamese with 100% parity", () => {
+      for (const key of autoTitleKeys) {
+        setLocale("en");
+        const enVal = t(key);
+        expect(enVal, `Missing English key: ${key}`).not.toBe(key);
+
+        setLocale("vi");
+        const viVal = t(key);
+        expect(viVal, `Missing Vietnamese key: ${key}`).not.toBe(key);
+      }
+    });
+
+    it("verifies accurate translations and parameter interpolation for all smart title templates", () => {
+      // English
+      setLocale("en");
+      expect(t("presentationView.autoTitlePieCategorical", { x: "Department" })).toBe("Distribution of Department");
+      expect(t("presentationView.autoTitlePieBinned", { col: "Score" })).toBe("Distribution of Score (Binned)");
+      expect(t("presentationView.autoTitleHistogram", { col: "Score" })).toBe("Frequency Distribution of Score");
+      expect(t("presentationView.autoTitleBox", { x: "Department", y: "Score" })).toBe("Distribution of Score by Department");
+      expect(t("presentationView.autoTitleArea", { x: "Department", y: "Score" })).toBe("Score by Department");
+      expect(t("presentationView.autoTitleDensityGrouped", { x: "Department", y: "Score" })).toBe("Density Estimation of Score by Department");
+      expect(t("presentationView.autoTitleDensitySingle", { y: "Score" })).toBe("Density Estimation of Score");
+      expect(t("presentationView.autoTitleHeatmap", { method: "Pearson" })).toBe("Pearson Correlation Matrix");
+      expect(t("presentationView.autoTitleRadarGrouped", { group: "Department" })).toBe("Radar Profile by Department");
+      expect(t("presentationView.autoTitleRadarNoGroup")).toBe("Multi-axis Radar Chart");
+
+      // Vietnamese
+      setLocale("vi");
+      expect(t("presentationView.autoTitlePieCategorical", { x: "Phòng ban" })).toBe("Phân phối của Phòng ban");
+      expect(t("presentationView.autoTitlePieBinned", { col: "Điểm" })).toBe("Phân phối theo khoảng Điểm");
+      expect(t("presentationView.autoTitleHistogram", { col: "Điểm" })).toBe("Phân phối tần số Điểm");
+      expect(t("presentationView.autoTitleBox", { x: "Phòng ban", y: "Điểm" })).toBe("Phân phối Điểm theo Phòng ban");
+      expect(t("presentationView.autoTitleArea", { x: "Phòng ban", y: "Điểm" })).toBe("Điểm theo Phòng ban");
+      expect(t("presentationView.autoTitleDensityGrouped", { x: "Phòng ban", y: "Điểm" })).toBe("Ước lượng mật độ Điểm theo Phòng ban");
+      expect(t("presentationView.autoTitleDensitySingle", { y: "Điểm" })).toBe("Ước lượng mật độ Điểm");
+      expect(t("presentationView.autoTitleHeatmap", { method: "Pearson" })).toBe("Ma trận tương quan Pearson");
+      expect(t("presentationView.autoTitleRadarGrouped", { group: "Phòng ban" })).toBe("Hồ sơ đa chiều theo Phòng ban");
+      expect(t("presentationView.autoTitleRadarNoGroup")).toBe("Biểu đồ radar đa chiều");
+    });
+  });
 });

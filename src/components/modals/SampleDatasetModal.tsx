@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { useUIStore, useDataStore, useWorkflowStore, useSyncStore } from "@/stores";
 import type { SampleDatasetListItem } from "@/api";

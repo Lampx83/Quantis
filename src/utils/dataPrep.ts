@@ -170,6 +170,16 @@ function tokenize(src: string): Tok[] {
 
 const finite = (xs: number[]) => xs.filter((x) => Number.isFinite(x));
 
+/** Độ lệch chuẩn mẫu (hiệu chỉnh Bessel, n - 1); ít hơn 2 giá trị -> thiếu. Dùng chung cho `sd` và `std`. */
+const sampleStdDev = (a: number[]): number => {
+  const vals = finite(a);
+  const n = vals.length;
+  if (n < 2) return NaN;
+  const mean = vals.reduce((s, x) => s + x, 0) / n;
+  const ss = vals.reduce((s, x) => s + (x - mean) ** 2, 0);
+  return Math.sqrt(ss / (n - 1));
+};
+
 const FUNCS: Record<string, { min: number; max: number; f: (a: number[]) => number }> = {
   ln: { min: 1, max: 1, f: (a) => (a[0] > 0 ? Math.log(a[0]) : NaN) },
   log: { min: 1, max: 1, f: (a) => (a[0] > 0 ? Math.log10(a[0]) : NaN) }, // như Excel: LOG = log10
@@ -192,8 +202,29 @@ const FUNCS: Record<string, { min: number; max: number; f: (a: number[]) => numb
   mean: { min: 1, max: 99, f: (a) => (finite(a).length ? finite(a).reduce((s, x) => s + x, 0) / finite(a).length : NaN) },
   min: { min: 1, max: 99, f: (a) => safeMin(finite(a), NaN) },
   max: { min: 1, max: 99, f: (a) => safeMax(finite(a), NaN) },
+  median: {
+    min: 1,
+    max: 99,
+    f: (a) => {
+      const vals = finite(a).sort((x, y) => x - y);
+      const n = vals.length;
+      if (n === 0) return NaN;
+      const mid = Math.floor(n / 2);
+      return n % 2 !== 0 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
+    },
+  },
+  sd: {
+    min: 1,
+    max: 99,
+    f: sampleStdDev,
+  },
+  std: {
+    min: 1,
+    max: 99,
+    f: sampleStdDev,
+  },
 };
-const MULTI_SKIP_NAN = new Set(["sum", "mean", "min", "max"]);
+const MULTI_SKIP_NAN = new Set(["sum", "mean", "min", "max", "median", "sd", "std"]);
 
 /** Biên dịch công thức thành hàm tính theo một dòng. `header` dùng để tra tên cột. */
 export function compileFormula(formula: string, header: string[]): { fn: (cells: string[]) => number; refs: string[] } {
@@ -430,4 +461,117 @@ export function removeDuplicates(rows: Rows, cols: string[]): PrepResult {
     }
   }
   return { rows: out, stats: { removed, kept: out.length - 1 } };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Recode biến số (SPSS-style: Same/Different Variable, Value/Range, ELSE)
+// ---------------------------------------------------------------------------------------------
+export type RecodeRuleType = "value" | "range";
+
+export interface RecodeRule {
+  type: RecodeRuleType;
+  /** Dùng khi type === "value": Khớp chuỗi chính xác (trimmed) */
+  from?: string;
+  /** Dùng khi type === "range": Cận dưới (inclusive) */
+  rangeMin?: string;
+  /** Dùng khi type === "range": Cận trên (inclusive) */
+  rangeMax?: string;
+  /** Giá trị mới được gán */
+  to: string;
+}
+
+export type RecodeElseAction = "copy" | "sysmis" | "custom";
+
+export interface RecodeConfig {
+  sourceCol: string;
+  targetMode: "same" | "different";
+  targetCol?: string; // Bắt buộc khi targetMode === "different"
+  rules: RecodeRule[];
+  elseRule?: {
+    enabled: boolean;
+    action: RecodeElseAction;
+    customValue?: string;
+  };
+}
+
+export function applyRecode(rows: Rows, config: RecodeConfig): PrepResult {
+  const header = rows[0] ?? [];
+  const ci = headerIndex(rows, config.sourceCol);
+  if (ci < 0) return fail(rows, "Chưa chọn cột nguồn để recode.");
+
+  const isDifferent = config.targetMode === "different";
+  const targetCol = (config.targetCol ?? "").trim();
+  if (isDifferent) {
+    if (!targetCol) return fail(rows, "Hãy đặt tên cho cột mới.");
+    if (header.includes(targetCol)) return fail(rows, `Đã có cột tên «${targetCol}».`);
+  }
+
+  const outHeader = isDifferent ? [...header, targetCol] : [...header];
+  const outRows: Rows = [outHeader];
+  let recoded = 0;
+  const total = rows.length - 1;
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const rawCell = (row[ci] ?? "").toString();
+    const cellStr = rawCell.trim();
+    const vNum = cellNum(rawCell);
+
+    let matched = false;
+    let newValue = rawCell;
+
+    for (const rule of config.rules) {
+      if (rule.type === "value") {
+        if (rule.from !== undefined && cellStr === rule.from.trim()) {
+          newValue = rule.to;
+          matched = true;
+          break;
+        }
+      } else if (rule.type === "range") {
+        if (Number.isFinite(vNum)) {
+          const min = rule.rangeMin !== undefined && rule.rangeMin.trim() !== "" ? Number(rule.rangeMin.trim().replace(",", ".")) : NaN;
+          const max = rule.rangeMax !== undefined && rule.rangeMax.trim() !== "" ? Number(rule.rangeMax.trim().replace(",", ".")) : NaN;
+          if (Number.isFinite(min) && Number.isFinite(max) && vNum >= min && vNum <= max) {
+            newValue = rule.to;
+            matched = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!matched) {
+      if (config.elseRule?.enabled) {
+        if (config.elseRule.action === "copy") {
+          newValue = rawCell;
+        } else if (config.elseRule.action === "sysmis") {
+          newValue = "";
+        } else if (config.elseRule.action === "custom") {
+          newValue = config.elseRule.customValue ?? "";
+        }
+      } else {
+        newValue = rawCell;
+      }
+    }
+
+    if (newValue !== rawCell) {
+      recoded++;
+    }
+
+    if (isDifferent) {
+      outRows.push([...row, newValue]);
+    } else {
+      const outRow = [...row];
+      outRow[ci] = newValue;
+      outRows.push(outRow);
+    }
+  }
+
+  return {
+    rows: outRows,
+    stats: {
+      total,
+      recoded,
+    },
+  };
 }

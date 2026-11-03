@@ -61,7 +61,7 @@ describe("ConfirmDialog", () => {
     const modalContent = captured!.props.children;
     const body = modalContent.props.children[1];
     const footer = body.props.children[1];
-    const [cancelBtn, confirmBtn] = footer.props.children;
+    const [, confirmBtn] = footer.props.children;
 
     confirmBtn.props.onClick();
 

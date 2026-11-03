@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { Download, Copy } from "lucide-react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { Download, Copy, SlidersHorizontal, PanelRightOpen } from "lucide-react";
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -18,6 +18,7 @@ import {
   Cell,
   ComposedChart,
   ErrorBar,
+  LabelList,
   AreaChart,
   Area,
   RadarChart,
@@ -26,7 +27,18 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
 } from "recharts";
-import type { Dataset } from "@/types";
+import type { Dataset, ChartConfig, ChartControls } from "@/types";
+import { DEFAULT_CHART_CONFIG } from "@/types";
+import {
+  ChartInspectorPanel,
+  usesConfigAxes,
+  supportsLegend,
+  supportsAutoTitle,
+} from "./ChartInspectorPanel";
+import { pivotByLegend, getSeriesKeys, calculateErrorOffsets } from "@/utils/seriesPivot";
+import { computeAxisScale } from "@/utils/chartScale";
+import { ChartPlaceholderFrame } from "./ChartPlaceholderFrame";
+import { getPaletteColor } from "./colorPalettes";
 import type { PresentationTab, PresentationChartType } from "@/stores";
 import type {
   TTestResult,
@@ -47,8 +59,16 @@ import {
 } from "@/utils/stats";
 import { safeMax, safeMin, safeMinMax } from "@/utils/math";
 import * as quantisApi from "@/api";
-import { t, aiAnswerLangHint } from "@/i18n";
+import { t, aiAnswerLangHint, getLocale } from "@/i18n";
 import { AIAssistPanel, type AIQuickPrompt } from "@/features/ai";
+import {
+  aggregateData,
+  countByCategory,
+  sortChartCategories,
+  compareCategoryLabels,
+  type AggregateFunction,
+  type AggregateMetrics,
+} from "@/utils/aggregation";
 
 export interface PresentationViewProps {
   tab: PresentationTab;
@@ -63,6 +83,11 @@ export interface PresentationViewProps {
   chartType: PresentationChartType;
   setChartType: (t: PresentationChartType) => void;
   showToast?: (msg: string) => void;
+  initialXCol?: string;
+  initialYCol?: string;
+  initialYAggregation?: AggregateFunction;
+  initialConfig?: Partial<ChartConfig>;
+  initialControls?: Partial<ChartControls>;
 }
 
 export function PresentationView({
@@ -74,37 +99,63 @@ export function PresentationView({
   chartType,
   setChartType: _setChartType,
   showToast,
+  initialXCol = "",
+  initialYCol = "",
+  initialYAggregation = "mean",
+  initialConfig,
+  initialControls,
 }: PresentationViewProps) {
-  const [chartXCol, setChartXCol] = useState("");
-  const [chartYCol, setChartYCol] = useState("");
-  const [histogramCol, setHistogramCol] = useState("");
-  const [showHistogramDensity, setShowHistogramDensity] = useState(false);
+  const [chartConfig, setChartConfig] = useState<ChartConfig>(() => ({
+    ...DEFAULT_CHART_CONFIG,
+    xCol: initialConfig?.xCol ?? initialXCol,
+    yCol: initialConfig?.yCol ?? initialYCol,
+    aggregation: initialConfig?.aggregation ?? initialYAggregation,
+    ...initialConfig,
+    showDataLabels: initialConfig?.showDataLabels ?? (chartType === "pie" || chartType === "donut"),
+  }));
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [yAggregation] = useState<AggregateFunction>(initialYAggregation);
+  const [histogramCol, setHistogramCol] = useState(initialControls?.histogramCol ?? "");
+  const [showHistogramDensity, setShowHistogramDensity] = useState(initialControls?.showHistogramDensity ?? false);
   const [stackByCol, setStackByCol] = useState("");
-  const [heatmapCorrMethod, setHeatmapCorrMethod] = useState<"pearson" | "spearman" | "kendall">("pearson");
-  const [radarGroupCol, setRadarGroupCol] = useState("");
-  const [radarNumericCols, setRadarNumericCols] = useState<string[]>([]);
-  const [multiLineYCols, setMultiLineYCols] = useState<string[]>([]);
-  const [crosstabCol1, setCrosstabCol1] = useState("");
-  const [crosstabCol2, setCrosstabCol2] = useState("");
-  const [barSortOrder, setBarSortOrder] = useState<"none" | "asc" | "desc">("none");
-  const [densityGroupCol, setDensityGroupCol] = useState("");
-  const [densityValueCol, setDensityValueCol] = useState("");
-  const [pieBinNumeric, setPieBinNumeric] = useState(false);
-  const [pieBinCount, setPieBinCount] = useState(4);
-  const [pieNumericCol, setPieNumericCol] = useState("");
+  const [heatmapCorrMethod, setHeatmapCorrMethod] = useState<"pearson" | "spearman" | "kendall">(initialControls?.heatmapCorrMethod ?? "pearson");
+  const [radarGroupCol, setRadarGroupCol] = useState(initialControls?.radarGroupCol ?? "");
+  const [radarNumericCols, setRadarNumericCols] = useState<string[]>(initialControls?.radarNumericCols ?? []);
+  const [multiLineYCols] = useState<string[]>([]);
+  const [crosstabCol1] = useState("");
+  const [crosstabCol2] = useState("");
+  const [densityGroupCol, setDensityGroupCol] = useState(initialControls?.densityGroupCol ?? "");
+  const [densityValueCol, setDensityValueCol] = useState(initialControls?.densityValueCol ?? "");
+  const [pieBinNumeric, setPieBinNumeric] = useState(initialControls?.pieBinNumeric ?? false);
+  const [pieBinCount, setPieBinCount] = useState(initialControls?.pieBinCount ?? 4);
+  const [pieNumericCol, setPieNumericCol] = useState(initialControls?.pieNumericCol ?? "");
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [boxStatsBackendResult, setBoxStatsBackendResult] = useState<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null>(null);
-  const [histBinsBackendResult, setHistBinsBackendResult] = useState<Array<{ binStart: number; binEnd: number; count: number }> | null>(null);
-  const PIE_COLORS = ["#0061bb", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"];
+  const prevChartTypeRef = useRef(chartType);
 
   useEffect(() => {
-    if (tab !== "visualization" || !selectedDataset || chartType !== "box" || !chartXCol || !chartYCol || !analysisBackendAvailable) {
+    const prev = prevChartTypeRef.current;
+    prevChartTypeRef.current = chartType;
+    if (prev !== chartType) {
+      const isPieOrDonut = chartType === "pie" || chartType === "donut";
+      const wasPieOrDonut = prev === "pie" || prev === "donut";
+      if (isPieOrDonut && !wasPieOrDonut) {
+        setChartConfig((c) => ({ ...c, showDataLabels: true }));
+      } else if (!isPieOrDonut && wasPieOrDonut) {
+        setChartConfig((c) => ({ ...c, showDataLabels: false }));
+      }
+    }
+  }, [chartType]);
+  const [boxStatsBackendResult, setBoxStatsBackendResult] = useState<Array<{ group: string; min: number; q1: number; median: number; q3: number; max: number; n: number }> | null>(null);
+  const [histBinsBackendResult, setHistBinsBackendResult] = useState<Array<{ binStart: number; binEnd: number; count: number }> | null>(null);
+
+  useEffect(() => {
+    if (tab !== "visualization" || !selectedDataset || chartType !== "box" || !chartConfig.xCol || !chartConfig.yCol || !analysisBackendAvailable) {
       setBoxStatsBackendResult(null);
       return;
     }
     const rows = getAnalysisRows(selectedDataset);
-    quantisApi.analyzeBoxStats(rows, chartXCol, chartYCol).then(setBoxStatsBackendResult);
-  }, [tab, selectedDataset?.id, chartType, chartXCol, chartYCol, analysisBackendAvailable]);
+    quantisApi.analyzeBoxStats(rows, chartConfig.xCol, chartConfig.yCol).then(setBoxStatsBackendResult);
+  }, [tab, selectedDataset?.id, chartType, chartConfig.xCol, chartConfig.yCol, analysisBackendAvailable]);
 
   useEffect(() => {
     if (tab !== "visualization" || !selectedDataset || chartType !== "histogram" || !histogramCol || !analysisBackendAvailable) {
@@ -119,93 +170,92 @@ export function PresentationView({
     quantisApi.analyzeHistogramBins(histValues).then(setHistBinsBackendResult);
   }, [tab, selectedDataset?.id, chartType, histogramCol, analysisBackendAvailable]);
 
-  if (tab === "visualization" && selectedDataset) {
+  const activeYAggregation = usesConfigAxes(chartType) ? chartConfig.aggregation : yAggregation;
+
+  // Column typing depends only on the dataset, so it lives in its own memo:
+  // changing X/Y/legend must not rescan every cell of the table.
+  const numericCols = useMemo(() => {
+    if (tab !== "visualization" || !selectedDataset) return [];
     const rows = getAnalysisRows(selectedDataset);
     const cols = selectedDataset.columnNames || [];
-    const xCol = chartXCol;
-    const setXCol = setChartXCol;
-    const yCol = chartYCol;
-    const setYCol = setChartYCol;
-    const numericCols = rows.length >= 2 ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); }) : [];
+    if (rows.length < 2) return [];
+    return cols.filter((c) => {
+      const ci = rows[0].indexOf(c);
+      if (ci < 0) return false;
+      for (let i = 1; i < rows.length; i++) {
+        const v = rows[i][ci];
+        if (v === "") continue;
+        if (Number.isNaN(Number(v))) return false;
+      }
+      return true;
+    });
+  }, [tab, selectedDataset]);
+
+  // Chart data is expensive on large tables: each aggregateData pass scans every row
+  // (≈45 ms at the documented 50k cap) and the arrays below are built per row. The Chart
+  // Inspector calls setChartConfig on every keystroke, so without memoization typing a
+  // subtitle re-scans the whole table. Depend only on the fields that change the data —
+  // never the whole chartConfig object, or the memo would re-run on a title edit.
+  const vizData = useMemo(() => {
+    if (tab !== "visualization" || !selectedDataset) return null;
+    const rows = getAnalysisRows(selectedDataset);
+    const cols = selectedDataset.columnNames || [];
+    const xCol = chartConfig.xCol;
+    const yCol = chartConfig.yCol;
     const xIdx = cols.indexOf(xCol);
     const yIdx = cols.indexOf(yCol);
     const isScatter = xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol);
+    const isAggregated = Boolean(yCol && yIdx >= 0 && numericCols.includes(yCol));
     const chartData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
       ? rows.slice(1).map((r) => ({ x: isScatter ? numCell(r[xIdx]) : r[xIdx], y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y) && (!isScatter || !Number.isNaN(Number(d.x))))
       : [];
-    const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
-    /** Biểu đồ cột: dùng X làm danh mục; nếu có Y (số) thì chiều cao = tổng Y theo nhóm, không thì = tần số */
+    const hasLegend = Boolean(
+      supportsLegend(chartType) &&
+      chartConfig.legendCol &&
+      chartConfig.legendCol.trim() !== "" &&
+      cols.includes(chartConfig.legendCol) &&
+      chartConfig.legendCol !== xCol
+    );
+    const barData = !isScatter && xCol && xIdx >= 0 ? countByCategory(rows, xIdx).slice(0, 20) : [];
     const barChartData = (chartType === "bar" || chartType === "barH") && xCol && xIdx >= 0
       ? (yCol && yIdx >= 0 && numericCols.includes(yCol)
-          ? (() => {
-              const sums: Record<string, number> = {};
-              rows.slice(1).forEach((r) => {
-                const name = String(r[xIdx] ?? "").trim();
-                const val = numCell(r[yIdx]);
-                if (name === "" || Number.isNaN(val)) return;
-                sums[name] = (sums[name] || 0) + val;
-              });
-              return Object.entries(sums).map(([name, count]) => ({ name, count })).slice(0, 24);
-            })()
-          : (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ??""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 24); })())
+          ? aggregateData(rows, {
+              groupByCols: [xCol],
+              measureCol: yCol,
+              func: activeYAggregation,
+              limit: 30,
+              sortOrder: chartConfig.sortOrder,
+            }).map((g) => ({
+              name: g.name,
+              count: g.value,
+              metrics: g.metrics,
+              error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
+            }))
+          : sortChartCategories(
+              countByCategory(rows, xIdx),
+              (c) => c.name,
+              (c) => c.count,
+              chartConfig.sortOrder || "category-asc"
+            ).slice(0, 30))
       : barData;
-    const barDataSorted = barSortOrder === "none" ? barChartData : [...barChartData].sort((a, b) => (barSortOrder === "asc" ? a.count - b.count : b.count - a.count));
-    const boxStats = (chartType === "box" && xCol && yCol && numericCols.includes(yCol))
-      ? (analysisBackendAvailable && boxStatsBackendResult ? boxStatsBackendResult : getBoxStatsByGroup(rows, xCol, yCol))
+    const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
+      ? rows.slice(1).map((r) => ({ x: r[xIdx] ?? "", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
       : [];
-    // Hộp xếp chồng: phần đệm trong suốt (0→Q1) + hộp Q1→Median + hộp Median→Q3; râu = ErrorBar (Q1→Min, Q3→Max).
-    const boxChartData = boxStats.map((b) => ({ name: b.group, median: b.median, min: b.min, max: b.max, q1: b.q1, q3: b.q3, n: b.n, boxLower: b.median - b.q1, boxUpper: b.q3 - b.median, whiskerLow: [b.q1 - b.min, 0], whiskerHigh: [0, b.max - b.q3] }));
-    const boxYDomain: [number, number] = (() => {
-      if (boxStats.length === 0) return [0, 1];
-      const lo = safeMin(boxStats.map((b) => b.min));
-      const hi = safeMax(boxStats.map((b) => b.max));
-      const pad = (hi - lo) * 0.05 || 1;
-      return [Math.floor(lo - pad), Math.ceil(hi + pad)];
-    })();
-    const densityGroupIdx = densityGroupCol ? cols.indexOf(densityGroupCol) : -1;
-    const densityValueIdx = densityValueCol ? cols.indexOf(densityValueCol) : -1;
-    const densityData = (chartType === "density" && densityGroupCol && densityValueCol && numericCols.includes(densityValueCol) && densityGroupIdx >= 0 && densityValueIdx >= 0 && rows.length >= 2) ? (() => {
-      const groups: Record<string, number[]> = {};
-      rows.slice(1).forEach((r) => {
-        const g = String(r[densityGroupIdx] ?? "").trim();
-        const v = numCell(r[densityValueIdx]);
-        if (g === "" || Number.isNaN(v)) return;
-        if (!groups[g]) groups[g] = [];
-        groups[g].push(v);
-      });
-      const allVals = Object.values(groups).flat();
-      if (allVals.length < 2) return [];
-      const [lo, hi] = safeMinMax(allVals);
-      const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
-      const series: { group: string; points: { x: number; density: number }[] }[] = [];
-      Object.entries(groups).forEach(([group, vals]) => {
-        if (vals.length < 2) return;
-        const pts = kernelDensityEstimate(vals, grid);
-        series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
-      });
-      return series;
-    })() : [];
-    const histColIdx = cols.indexOf(histogramCol);
-    const histValues = histogramCol && histColIdx >= 0 ? rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v)) : [];
-    const histBins = histValues.length > 0 ? (analysisBackendAvailable && histBinsBackendResult ? histBinsBackendResult : getHistogramBins(histValues)) : [];
-    const histChartData = histBins.map((b) => ({ name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1), count: b.count }));
-    const histDensityCurve = (chartType === "histogram" && showHistogramDensity && histValues.length >= 2) ? (() => {
-      const [lo, hi] = safeMinMax(histValues);
-      const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
-      return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
-    })() : [];
-    const histComboData = (chartType === "histogram" && showHistogramDensity && histChartData.length > 0 && histDensityCurve.length > 0) ? (() => {
-      const maxCount = safeMax(histChartData.map((d) => d.count));
-      const maxDens = safeMax(histDensityCurve.map((d) => d.density));
-      const scale = maxDens > 0 ? maxCount / maxDens : 1;
-      return histChartData.map((d, i) => {
-        const binStart = histBins[i].binStart;
-        const binEnd = histBins[i].binEnd;
-        const center = (binStart + binEnd) / 2;
-        const nearest = histDensityCurve.reduce((a, p) => (Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a));
-        return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
-      });
-    })() : [];
+    // Line chart keeps source row order (sortOrder: "none") to preserve time/sequence trends; keeps up to 1000 points because a time series must not be truncated
+    const lineChartData = (chartType === "line" && xCol && yCol && xIdx >= 0 && yIdx >= 0 && numericCols.includes(yCol))
+      ? aggregateData(rows, {
+          groupByCols: [xCol],
+          measureCol: yCol,
+          func: activeYAggregation,
+          sortOrder: "none",
+          limit: 1000,
+        }).map((g) => ({
+          x: g.name,
+          y: g.value,
+          metrics: g.metrics,
+          error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
+        }))
+      : lineData;
     const pieData = (chartType === "pie" || chartType === "donut")
       ? (pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol)
           ? (() => {
@@ -215,57 +265,502 @@ export function PresentationView({
               return binned.map((b) => ({ name: b.label, value: b.count })).filter((d) => d.value > 0);
             })()
           : (xCol && xIdx >= 0
-              ? (() => {
-                  const counts: Record<string, number> = {};
-                  rows.slice(1).forEach((r) => {
-                    const v = String(r[xIdx] ?? "").trim();
-                    if (v !== "") counts[v] = (counts[v] || 0) + 1;
-                  });
-                  return Object.entries(counts)
-                    .map(([name, count]) => ({ name, value: count }))
-                    .filter((d) => d.value > 0)
-                    .slice(0, 24);
-                })()
+              ? (yCol && yIdx >= 0 && numericCols.includes(yCol)
+                  ? aggregateData(rows, {
+                      groupByCols: [xCol],
+                      measureCol: yCol,
+                      func: chartConfig.aggregation || "sum",
+                      limit: 30,
+                    })
+                      .map((g) => ({ name: g.name, value: g.value, metrics: g.metrics }))
+                      .filter((d) => Number.isFinite(d.value) && d.value > 0)
+                  : countByCategory(rows, xIdx, { trim: true, skipEmpty: true })
+                      .map((c) => ({ name: c.name, value: c.count }))
+                      .filter((d) => d.value > 0)
+                      .slice(0, 24))
               : []))
       : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
-    const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
-      ? rows.slice(1).map((r) => ({ x: r[xIdx] ??"", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
-      : [];
-    const areaData = lineData;
-    const stackByIdx = stackByCol ? cols.indexOf(stackByCol) : -1;
-    const stackedBarData = (chartType === "stackedBar" && xCol && stackByCol && yCol && xIdx >= 0 && yIdx >= 0 && stackByIdx >= 0 && rows.length >= 2) ? (() => {
-      const xVals = Array.from(new Set(rows.slice(1).map((r) => r[xIdx] ??"")));
-      const stackVals = Array.from(new Set(rows.slice(1).map((r) => r[stackByIdx] ??"")));
-      const map: Record<string, Record<string, number>> = {};
-      xVals.forEach((x) => { map[x] = {}; stackVals.forEach((s) => { map[x][s] = 0; }); });
-      rows.slice(1).forEach((r) => {
-        const x = r[xIdx] ??"";
-        const s = r[stackByIdx] ??"";
-        const y = numCell(r[yIdx]);
-        if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
-      });
-      return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
-    })() : [];
-    const radarGroups = (radarGroupCol && rows.length >= 2) ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? ""))) : [t("presentationView.radarAllLabel")];
-    const radarData = (chartType === "radar" && radarNumericCols.length >= 2) ? (() => {
-      const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
-      const fullMark = 100;
-      return radarNumericCols.map((col) => {
-        const colIdx = cols.indexOf(col);
-        const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
-        radarGroups.forEach((g) => {
-          const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
-          const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
-          entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+
+    const { pivotedBarData, pivotedLineData, legendSeriesKeys } = (() => {
+      if (!hasLegend || !xCol || xIdx < 0) {
+        return { pivotedBarData: [], pivotedLineData: [], legendSeriesKeys: [] };
+      }
+
+      if (!isAggregated) {
+        const legIdx = cols.indexOf(chartConfig.legendCol);
+        if (legIdx < 0) return { pivotedBarData: [], pivotedLineData: [], legendSeriesKeys: [] };
+
+        const countsMap = new Map<string, Map<string, number>>();
+        const xOrder: string[] = [];
+        for (let r = 1; r < rows.length; r++) {
+          const row = rows[r];
+          const xVal = String(row[xIdx] ?? "").trim();
+          const legVal = String(row[legIdx] ?? "").trim();
+          if (!xVal || !legVal) continue;
+          if (!countsMap.has(xVal)) {
+            xOrder.push(xVal);
+            countsMap.set(xVal, new Map<string, number>());
+          }
+          const m = countsMap.get(xVal)!;
+          m.set(legVal, (m.get(legVal) || 0) + 1);
+        }
+
+        const allKeys = new Set<string>();
+        countsMap.forEach((m) => m.forEach((_, k) => allKeys.add(k)));
+        const keys = Array.from(allKeys).sort(compareCategoryLabels);
+
+        const sortMode = chartConfig.sortOrder || "category-asc";
+        const sortedXOrder = sortChartCategories(xOrder, (name) => name, () => 0, sortMode);
+
+        const barDataList = sortedXOrder.slice(0, 30).map((name) => {
+          const m = countsMap.get(name)!;
+          const item: Record<string, any> = { name, _errors: {} };
+          for (const k of keys) {
+            item[k] = m.get(k) || 0;
+          }
+          return item;
         });
-        return entry;
+
+        // Line charts follow source row order from unsorted xOrder; keep up to 1000 points because a time series must not be truncated
+        const lineDataList = xOrder.slice(0, 1000).map((name) => {
+          const m = countsMap.get(name)!;
+          const item: Record<string, any> = { name, x: name, _errors: {} };
+          for (const k of keys) {
+            item[k] = m.get(k) || 0;
+          }
+          return item;
+        });
+
+        return {
+          pivotedBarData: barDataList,
+          pivotedLineData: lineDataList,
+          legendSeriesKeys: keys,
+        };
+      }
+
+      // Line charts keep source row order via sortOrder: "none"; bar charts sort via sortedPivoted below
+      const multiAgg = aggregateData(rows, {
+        groupByCols: [xCol, chartConfig.legendCol],
+        measureCol: yCol,
+        func: activeYAggregation,
+        sortOrder: "none",
+        limit: 1000,
       });
-    })() : [];
-    const corrResult = (chartType === "heatmap" && rows.length >= 2) ? computeCorrelationMatrix(rows, heatmapCorrMethod) : null;
-    const summaryStats = (chartType === "summary" && rows.length >= 2) ? computeDescriptive(rows) : [];
-    const dashboardCorrResult = (chartType === "dashboard" && rows.length >= 2) ? computeCorrelationMatrix(rows, "pearson") : null;
-    const dashboardStats = (chartType === "dashboard" && rows.length >= 2) ? computeDescriptive(rows) : [];
-    const multiLineXIdx = chartType === "multiLine" && chartXCol ? cols.indexOf(chartXCol) : -1;
+      const pivoted = pivotByLegend(multiAgg, chartConfig.legendCol, chartConfig.errorBar);
+      const keys = getSeriesKeys(pivoted);
+
+      const sortMode = chartConfig.sortOrder || "category-asc";
+      const sortedPivoted = [...pivoted];
+      if (sortMode === "category-asc") {
+        sortedPivoted.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+        );
+      } else if (sortMode === "category-desc") {
+        sortedPivoted.sort((a, b) =>
+          b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" })
+        );
+      }
+
+      const barDataList = sortedPivoted.slice(0, 30).map((p) => {
+        const item: Record<string, any> = {
+          name: p.name,
+          ...p.series,
+          _errors: p.errors,
+        };
+        for (const [k, err] of Object.entries(p.errors)) {
+          item[`_err_${k}`] = err;
+        }
+        return item;
+      });
+      // Line charts follow source row order from unsorted pivoted; keep up to 1000 points because a time series must not be truncated
+      const lineDataList = pivoted.slice(0, 1000).map((p) => {
+        const item: Record<string, any> = {
+          name: p.name,
+          x: p.name,
+          ...p.series,
+          _errors: p.errors,
+        };
+        for (const [k, err] of Object.entries(p.errors)) {
+          item[`_err_${k}`] = err;
+        }
+        return item;
+      });
+      return {
+        pivotedBarData: barDataList,
+        pivotedLineData: lineDataList,
+        legendSeriesKeys: keys,
+      };
+    })();
+
+    const groupedScatterData = (() => {
+      if (chartType !== "scatter" || !hasLegend || !isScatter) {
+        return [];
+      }
+      const legIdx = cols.indexOf(chartConfig.legendCol);
+      if (legIdx < 0) return [];
+
+      const map = new Map<string, Array<{ x: number; y: number }>>();
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const legVal = String(row[legIdx] ?? "").trim();
+        if (!legVal) continue;
+        const xVal = numCell(row[xIdx]);
+        const yVal = numCell(row[yIdx]);
+        if (Number.isNaN(xVal) || Number.isNaN(yVal)) continue;
+
+        let list = map.get(legVal);
+        if (!list) {
+          list = [];
+          map.set(legVal, list);
+        }
+        list.push({ x: xVal, y: yVal });
+      }
+
+      const sortedKeys = Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
+      return sortedKeys.map((key) => ({
+        key,
+        points: map.get(key)!,
+      }));
+    })();
+
+    return {
+      rows,
+      cols,
+      xIdx,
+      yIdx,
+      isScatter,
+      isAggregated,
+      hasLegend,
+      chartData,
+      barData,
+      barChartData,
+      lineData,
+      lineChartData,
+      pieData,
+      pivotedBarData,
+      pivotedLineData,
+      legendSeriesKeys,
+      groupedScatterData,
+    };
+  }, [
+    tab,
+    selectedDataset,
+    chartType,
+    chartConfig.xCol,
+    chartConfig.yCol,
+    chartConfig.legendCol,
+    chartConfig.aggregation,
+    chartConfig.errorBar,
+    chartConfig.sortOrder,
+    pieBinNumeric,
+    pieBinCount,
+    pieNumericCol,
+    activeYAggregation,
+    numericCols,
+  ]);
+
+  const rows = vizData?.rows;
+  const cols = vizData?.cols;
+  const xCol = chartConfig.xCol;
+  const yCol = chartConfig.yCol;
+
+  const boxStats = useMemo(() => {
+    if (
+      tab !== "visualization" ||
+      !selectedDataset ||
+      chartType !== "box" ||
+      !xCol ||
+      !yCol ||
+      !rows ||
+      !numericCols ||
+      !numericCols.includes(yCol)
+    ) {
+      return [];
+    }
+    return analysisBackendAvailable && boxStatsBackendResult
+      ? boxStatsBackendResult
+      : getBoxStatsByGroup(rows, xCol, yCol);
+  }, [
+    tab,
+    chartType,
+    xCol,
+    yCol,
+    numericCols,
+    rows,
+    analysisBackendAvailable,
+    boxStatsBackendResult,
+  ]);
+
+  const boxChartData = useMemo(() => {
+    return boxStats.map((b) => ({
+      name: b.group,
+      median: b.median,
+      min: b.min,
+      max: b.max,
+      q1: b.q1,
+      q3: b.q3,
+      n: b.n,
+      boxLower: b.median - b.q1,
+      boxUpper: b.q3 - b.median,
+      whiskerLow: [b.q1 - b.min, 0] as [number, number],
+      whiskerHigh: [0, b.max - b.q3] as [number, number],
+    }));
+  }, [boxStats]);
+
+  const boxYDomain: [number, number] = useMemo(() => {
+    if (boxStats.length === 0) return [0, 1];
+    const lo = safeMin(boxStats.map((b) => b.min));
+    const hi = safeMax(boxStats.map((b) => b.max));
+    const pad = (hi - lo) * 0.05 || 1;
+    return [Math.floor(lo - pad), Math.ceil(hi + pad)];
+  }, [boxStats]);
+
+  const densityData = useMemo(() => {
+    if (
+      tab !== "visualization" ||
+      !selectedDataset ||
+      chartType !== "density" ||
+      !densityGroupCol ||
+      !densityValueCol ||
+      !rows ||
+      !cols ||
+      !numericCols ||
+      !numericCols.includes(densityValueCol) ||
+      rows.length < 2
+    ) {
+      return [];
+    }
+    const densityGroupIdx = cols.indexOf(densityGroupCol);
+    const densityValueIdx = cols.indexOf(densityValueCol);
+    if (densityGroupIdx < 0 || densityValueIdx < 0) return [];
+
+    const groups: Record<string, number[]> = {};
+    rows.slice(1).forEach((r) => {
+      const g = String(r[densityGroupIdx] ?? "").trim();
+      const v = numCell(r[densityValueIdx]);
+      if (g === "" || Number.isNaN(v)) return;
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(v);
+    });
+    const allVals = Object.values(groups).flat();
+    if (allVals.length < 2) return [];
+    const [lo, hi] = safeMinMax(allVals);
+    const grid = Array.from({ length: 60 }, (_, i) => lo + (hi - lo) * i / 59);
+    const series: { group: string; points: { x: number; density: number }[] }[] = [];
+    Object.entries(groups).forEach(([group, vals]) => {
+      if (vals.length < 2) return;
+      const pts = kernelDensityEstimate(vals, grid);
+      series.push({ group, points: pts.map((p) => ({ x: p.x, density: p.density })) });
+    });
+    return series;
+  }, [
+    tab,
+    selectedDataset,
+    chartType,
+    densityGroupCol,
+    densityValueCol,
+    rows,
+    cols,
+    numericCols,
+  ]);
+
+  const histValues = useMemo(() => {
+    if (
+      tab !== "visualization" ||
+      !selectedDataset ||
+      chartType !== "histogram" ||
+      !histogramCol ||
+      !rows ||
+      !cols
+    ) {
+      return [];
+    }
+    const histColIdx = cols.indexOf(histogramCol);
+    if (histColIdx < 0) return [];
+    return rows.slice(1).map((r) => numCell(r[histColIdx])).filter((v) => !Number.isNaN(v));
+  }, [tab, selectedDataset, chartType, histogramCol, rows, cols]);
+
+  const histBins = useMemo(() => {
+    if (histValues.length === 0) return [];
+    return analysisBackendAvailable && histBinsBackendResult
+      ? histBinsBackendResult
+      : getHistogramBins(histValues);
+  }, [histValues, analysisBackendAvailable, histBinsBackendResult]);
+
+  const histChartData = useMemo(() => {
+    return histBins.map((b) => ({
+      name: b.binStart.toFixed(1) + "–" + b.binEnd.toFixed(1),
+      count: b.count,
+    }));
+  }, [histBins]);
+
+  const histDensityCurve = useMemo(() => {
+    if (chartType !== "histogram" || !showHistogramDensity || histValues.length < 2) {
+      return [];
+    }
+    const [lo, hi] = safeMinMax(histValues);
+    const grid = Array.from({ length: 80 }, (_, i) => lo + (hi - lo) * i / 79);
+    return kernelDensityEstimate(histValues, grid).map((p) => ({ x: p.x, density: p.density }));
+  }, [chartType, showHistogramDensity, histValues]);
+
+  const histComboData = useMemo(() => {
+    if (
+      chartType !== "histogram" ||
+      !showHistogramDensity ||
+      histChartData.length === 0 ||
+      histDensityCurve.length === 0
+    ) {
+      return [];
+    }
+    const maxCount = safeMax(histChartData.map((d) => d.count));
+    const maxDens = safeMax(histDensityCurve.map((d) => d.density));
+    const scale = maxDens > 0 ? maxCount / maxDens : 1;
+    return histChartData.map((d, i) => {
+      const binStart = histBins[i].binStart;
+      const binEnd = histBins[i].binEnd;
+      const center = (binStart + binEnd) / 2;
+      const nearest = histDensityCurve.reduce((a, p) =>
+        Math.abs(p.x - center) < Math.abs(a.x - center) ? p : a
+      );
+      return { name: d.name, count: d.count, densityScaled: nearest.density * scale };
+    });
+  }, [chartType, showHistogramDensity, histChartData, histDensityCurve, histBins]);
+
+  // Per-chart statistics live in their own memos so typing in the Chart Inspector
+  // (which calls setChartConfig on every keystroke) does not rescan the table.
+  const stackedBarData = useMemo(() => {
+    const rows = vizData?.rows;
+    const cols = vizData?.cols;
+    const xIdx = vizData?.xIdx ?? -1;
+    const yIdx = vizData?.yIdx ?? -1;
+    if (
+      chartType !== "stackedBar" ||
+      !rows || !cols || !chartConfig.xCol || !stackByCol || !chartConfig.yCol ||
+      xIdx < 0 || yIdx < 0 || rows.length < 2
+    ) {
+      return [];
+    }
+    const stackByIdx = cols.indexOf(stackByCol);
+    if (stackByIdx < 0) return [];
+    const xVals = Array.from(new Set(rows.slice(1).map((r) => r[xIdx] ?? "")));
+    const stackVals = Array.from(new Set(rows.slice(1).map((r) => r[stackByIdx] ?? "")));
+    const map: Record<string, Record<string, number>> = {};
+    xVals.forEach((x) => { map[x] = {}; stackVals.forEach((s) => { map[x][s] = 0; }); });
+    rows.slice(1).forEach((r) => {
+      const x = r[xIdx] ?? "";
+      const s = r[stackByIdx] ?? "";
+      const y = numCell(r[yIdx]);
+      if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
+    });
+    return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
+  }, [chartType, vizData, chartConfig.xCol, chartConfig.yCol, stackByCol]);
+
+  const radarData = useMemo(() => {
+    if (chartType !== "radar" || radarNumericCols.length < 2) return [];
+    const rows = vizData?.rows;
+    const cols = vizData?.cols;
+    if (!rows || !cols) return [];
+    const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
+    const groups = radarGroupCol && rows.length >= 2
+      ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? "")))
+      : [t("presentationView.radarAllLabel")];
+    const fullMark = 100;
+    return radarNumericCols.map((col) => {
+      const colIdx = cols.indexOf(col);
+      const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
+      groups.forEach((g) => {
+        const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ?? "") === g);
+        const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
+        entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      });
+      return entry;
+    });
+  }, [chartType, vizData, radarGroupCol, radarNumericCols, getLocale()]);
+
+  const corrResult = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "heatmap" || !rows || rows.length < 2) return null;
+    return computeCorrelationMatrix(rows, heatmapCorrMethod);
+  }, [chartType, vizData, heatmapCorrMethod]);
+
+  const summaryStats = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "summary" || !rows || rows.length < 2) return [];
+    return computeDescriptive(rows);
+  }, [chartType, vizData]);
+
+  const dashboardCorrResult = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "dashboard" || !rows || rows.length < 2) return null;
+    return computeCorrelationMatrix(rows, "pearson");
+  }, [chartType, vizData]);
+
+  const dashboardStats = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "dashboard" || !rows || rows.length < 2) return [];
+    return computeDescriptive(rows);
+  }, [chartType, vizData]);
+
+  if (tab === "visualization" && selectedDataset) {
+    const {
+      rows,
+      cols,
+      isScatter,
+      isAggregated,
+      hasLegend,
+      chartData,
+      barData,
+      barChartData,
+      lineData,
+      lineChartData,
+      pieData,
+      pivotedBarData,
+      pivotedLineData,
+      legendSeriesKeys,
+      groupedScatterData,
+    } = vizData!;
+    const setXCol = (val: string) => setChartConfig((c) => ({ ...c, xCol: val }));
+    const setYCol = (val: string) => setChartConfig((c) => ({ ...c, yCol: val }));
+    const barDataSorted = barChartData;
+    const areaData = lineData;
+    const variables = selectedDataset?.variables ?? {};
+    const xLabel = xCol ? (variables[xCol]?.label?.trim() || xCol) : "";
+    const yLabel = yCol ? (variables[yCol]?.label?.trim() || yCol) : "";
+    const legendLabel = chartConfig.legendCol ? (variables[chartConfig.legendCol]?.label?.trim() || chartConfig.legendCol) : "";
+
+    const activeAggLegendName = isAggregated
+      ? `${t("presentationView.aggLabel." + activeYAggregation)} ${t("presentationView.ofPreposition")} ${yLabel}`
+      : "";
+
+    const renderAggTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
+      if (!active || !payload?.length || !payload[0]?.payload) return null;
+      const p = payload[0].payload as { name?: string; x?: string; count?: number; y?: number; metrics?: AggregateMetrics };
+      const label = p.name ?? p.x ?? "";
+      const val = p.count ?? p.y;
+      if (!p.metrics) {
+        return (
+          <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
+            <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
+            <p className="text-neutral-600 dark:text-neutral-300">{val !== undefined ? val : ""}</p>
+          </div>
+        );
+      }
+      const formattedVal = val !== undefined ? Number(val).toFixed(2) : "";
+      const stdVal = Number(p.metrics.std).toFixed(2);
+      const funcLabel = t(`presentationView.aggLabel.${activeYAggregation}`);
+      return (
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
+          <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
+          <p className="text-neutral-700 dark:text-neutral-200">
+            <span className="font-medium">{funcLabel}:</span> {formattedVal}
+          </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+            {t("presentationView.aggTooltipSampleSize")} = {p.metrics.count} | {t("presentationView.aggTooltipStd")} = {stdVal}
+          </p>
+        </div>
+      );
+    };
+    const multiLineXIdx = chartType === "multiLine" && xCol ? cols.indexOf(xCol) : -1;
     const multiLineData = (chartType === "multiLine" && multiLineXIdx >= 0 && multiLineYCols.length > 0 && rows.length >= 2) ? (() => {
       const yIndices = multiLineYCols.map((c) => cols.indexOf(c)).filter((i) => i >= 0);
       if (yIndices.length === 0) return [];
@@ -280,9 +775,130 @@ export function PresentationView({
     })() : [];
     const crosstabResult: { rowLabels: string[]; colLabels: string[]; counts: number[][] } | null = (chartType === "crosstab" && crosstabCol1 && crosstabCol2 && rows.length >= 2) ? getCrosstab(rows, crosstabCol1, crosstabCol2) : null;
 
+    const showErrorBars = Boolean(
+      isAggregated &&
+      activeYAggregation === "mean" &&
+      chartConfig.errorBar !== "none" &&
+      ["bar", "barH", "line"].includes(chartType)
+    );
+
+    const barScale = computeAxisScale(
+      hasLegend ? pivotedBarData : barDataSorted,
+      {
+        hasLegend,
+        legendKeys: legendSeriesKeys,
+        barMode: chartConfig.barMode,
+        includeErrors: showErrorBars,
+      },
+      { isBar: true, padRatio: 0.15 }
+    );
+
+    const lineScale = computeAxisScale(
+      hasLegend ? pivotedLineData : lineChartData,
+      {
+        hasLegend,
+        legendKeys: legendSeriesKeys,
+        includeErrors: showErrorBars,
+      },
+      { isBar: false, padRatio: 0.12 }
+    );
+
+    const autoTitle = (() => {
+      if (!supportsAutoTitle(chartType)) return "";
+      if (chartType === "scatter") {
+        if (!xLabel || !yLabel) return "";
+        const base = `${yLabel} vs ${xLabel}`;
+        return hasLegend ? `${base} ${t("presentationView.autoTitleAnd")} ${legendLabel}` : base;
+      }
+      if (chartType === "pie" || chartType === "donut") {
+        if (pieBinNumeric) {
+          const col = pieNumericCol || xCol;
+          const colLabel = col ? (variables[col]?.label?.trim() || col) : "";
+          return colLabel ? t("presentationView.autoTitlePieBinned", { col: colLabel }) : "";
+        }
+        if (xLabel && yLabel && numericCols.includes(yCol)) {
+          const aggFunc = chartConfig.aggregation || "sum";
+          const aggPrefix = t("presentationView.aggLabel." + aggFunc);
+          return `${aggPrefix} ${t("presentationView.ofPreposition")} ${yLabel} ${t("presentationView.autoTitleBy")} ${xLabel}`;
+        }
+        return xLabel ? t("presentationView.autoTitlePieCategorical", { x: xLabel }) : "";
+      }
+      if (chartType === "histogram") {
+        const histLabel = histogramCol ? (variables[histogramCol]?.label?.trim() || histogramCol) : "";
+        return histLabel ? t("presentationView.autoTitleHistogram", { col: histLabel }) : "";
+      }
+      if (chartType === "box") {
+        if (xLabel && yLabel) {
+          return t("presentationView.autoTitleBox", { x: xLabel, y: yLabel });
+        }
+        return yLabel || xLabel || "";
+      }
+      if (chartType === "area") {
+        if (xLabel && yLabel) {
+          return t("presentationView.autoTitleArea", { x: xLabel, y: yLabel });
+        }
+        return yLabel || xLabel || "";
+      }
+      if (chartType === "density") {
+        const valLabel = densityValueCol ? (variables[densityValueCol]?.label?.trim() || densityValueCol) : "";
+        const grpLabel = densityGroupCol ? (variables[densityGroupCol]?.label?.trim() || densityGroupCol) : "";
+        if (valLabel && grpLabel) {
+          return t("presentationView.autoTitleDensityGrouped", { x: grpLabel, y: valLabel });
+        }
+        if (valLabel) {
+          return t("presentationView.autoTitleDensitySingle", { y: valLabel });
+        }
+        return "";
+      }
+      if (chartType === "heatmap") {
+        const method = heatmapCorrMethod === "spearman" ? "Spearman" : heatmapCorrMethod === "kendall" ? "Kendall" : "Pearson";
+        return t("presentationView.autoTitleHeatmap", { method });
+      }
+      if (chartType === "radar") {
+        if (radarGroupCol) {
+          const grpLabel = variables[radarGroupCol]?.label?.trim() || radarGroupCol;
+          return t("presentationView.autoTitleRadarGrouped", { group: grpLabel });
+        }
+        return t("presentationView.autoTitleRadarNoGroup");
+      }
+      if (isAggregated) {
+        const aggPrefix = activeYAggregation === "mean"
+          ? t("presentationView.autoTitleMeanOf")
+          : `${t("presentationView.aggLabel." + activeYAggregation)} ${t("presentationView.ofPreposition")}`;
+        const base = `${aggPrefix} ${yLabel} ${t("presentationView.autoTitleBy")} ${xLabel}`;
+        return hasLegend ? `${base} ${t("presentationView.autoTitleAnd")} ${legendLabel}` : base;
+      }
+      if (xLabel) {
+        return xLabel;
+      }
+      return "";
+    })();
+
+    const effectiveTitle = (chartConfig.titleOverride && chartConfig.titleOverride.trim() !== "")
+      ? chartConfig.titleOverride
+      : autoTitle;
+
+    const effectiveSubtitle = chartConfig.subtitle?.trim() || "";
+
+    const chartTitleBlock = (effectiveTitle || effectiveSubtitle) ? (
+      <div className="mb-3 text-center" data-testid="chart-title-block">
+        {effectiveTitle && <h3 data-testid="chart-title" className="text-base font-semibold text-neutral-800 dark:text-neutral-100">{effectiveTitle}</h3>}
+        {effectiveSubtitle && <p data-testid="chart-subtitle" className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{effectiveSubtitle}</p>}
+      </div>
+    ) : null;
+
+    const activeDecimals = chartConfig.decimals ?? (yCol && variables[yCol]?.decimals !== undefined ? variables[yCol].decimals : 2);
+    const formatDataLabel = (val: any) => {
+      if (val === null || val === undefined || val === "" || Number.isNaN(Number(val))) return "";
+      return Number(val).toFixed(activeDecimals);
+    };
+
     const visualizationContext = [
       selectedDataset ? `${t("presentationView.contextDatasetLabel")} ${selectedDataset.name}, ${rows.length} ${t("transformTab.rowsUnit")}, ${cols.length} ${t("transformTab.columnsUnit")}.` : "",
       `${t("presentationView.contextChartTypeLabel")} ${chartType}.`,
+      (chartType === "bar" || chartType === "barH" || chartType === "line") && yCol && numericCols.includes(yCol)
+        ? `${t("presentationView.contextAggregationLabel")} ${t("presentationView.aggLabel." + activeYAggregation)}.`
+        : "",
       (chartType === "scatter" || chartType === "line" || chartType === "area") && xCol && yCol
         ? `${t("presentationView.axisXLabel")}: ${xCol}, ${t("presentationView.axisYLabel")}: ${yCol}. ${t("presentationView.contextPointsCountLabel")} ${chartData.length}.`
         : "",
@@ -299,7 +915,7 @@ export function PresentationView({
       chartType === "radar" && radarNumericCols.length > 0
         ? `${t("presentationView.contextAxesLabel")} ${radarNumericCols.slice(0, 6).join(", ")}${radarNumericCols.length > 6 ? "..." : ""}.`
         : "",
-      chartType === "multiLine" && chartXCol ? `${t("presentationView.axisXLabel")}: ${chartXCol}, ${t("presentationView.contextMultiLineSuffix")}` : "",
+      chartType === "multiLine" && xCol ? `${t("presentationView.axisXLabel")}: ${xCol}, ${t("presentationView.contextMultiLineSuffix")}` : "",
       chartType === "crosstab" && crosstabCol1 && crosstabCol2
         ? `${t("presentationView.contextCrosstabLabel")} ${crosstabCol1} × ${crosstabCol2}.`
         : "",
@@ -312,7 +928,25 @@ export function PresentationView({
       { label: t("presentationView.quickPromptHowToReadLabel"), systemHint: `${t("presentationView.quickPromptHowToReadHint")} ${aiAnswerLangHint()}`, userMessage: t("presentationView.quickPromptHowToReadUserMessage") },
     ];
 
-    const hasExportableChart = (chartType === "scatter" && chartData.length > 0) || (chartType === "bar" && barChartData.length > 0) || (chartType === "barH" && barChartData.length > 0) || (chartType === "line" && lineData.length > 0) || (chartType === "pie" && pieData.length > 0) || (chartType === "donut" && pieData.length > 0) || (chartType === "area" && areaData.length > 0) || (chartType === "stackedBar" && stackedBarData.length > 0) || (chartType === "box" && boxChartData.length > 0) || (chartType === "histogram" && histChartData.length > 0) || (chartType === "density" && densityData.length > 0) || (chartType === "radar" && radarData.length > 0) || (chartType === "multiLine" && multiLineData.length > 0);
+    const isChartRendered =
+      (chartType === "scatter" && isScatter && (hasLegend ? groupedScatterData.length > 0 : chartData.length > 0)) ||
+      (chartType === "bar" && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0)) ||
+      (chartType === "barH" && xCol && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0)) ||
+      (chartType === "line" && (hasLegend ? pivotedLineData.length > 0 : lineChartData.length > 0)) ||
+      (chartType === "pie" && pieData.length > 0) ||
+      (chartType === "donut" && pieData.length > 0) ||
+      (chartType === "box" && boxChartData.length > 0) ||
+      (chartType === "histogram" && histChartData.length > 0) ||
+      (chartType === "area" && areaData.length > 0) ||
+      (chartType === "stackedBar" && stackedBarData.length > 0) ||
+      (chartType === "density" && densityData.length > 0) ||
+      (chartType === "radar" && radarData.length > 0) ||
+      (chartType === "multiLine" && multiLineData.length > 0 && multiLineYCols.length > 0) ||
+      (chartType === "crosstab" && crosstabResult !== null) ||
+      (chartType === "heatmap" && corrResult && corrResult.columnNames.length >= 2) ||
+      (chartType === "summary" && summaryStats.length > 0) ||
+      (chartType === "dashboard" && (dashboardStats.length > 0 || (dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2)));
+
     const getChartSvgFromButton = (btn: HTMLElement): SVGElement | null => {
       const wrapper = btn.closest("[data-chart-export-wrapper]");
       if (!wrapper) return null;
@@ -387,252 +1021,84 @@ export function PresentationView({
       img.onerror = () => URL.revokeObjectURL(url);
       img.src = url;
     };
-    const chartExportIcons = hasExportableChart ? (
+    const handleExportHeatmapCsv = () => {
+      if (!corrResult || corrResult.columnNames.length < 2) return;
+      const headers = ["", ...corrResult.columnNames];
+      const csvRows = corrResult.matrix.map((row, i) => [corrResult.columnNames[i], ...row.map((v) => v.toFixed(4))]);
+      const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `quantis-correlation-${heatmapCorrMethod}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    const chartControls: ChartControls = {
+      histogramCol,
+      showHistogramDensity,
+      heatmapCorrMethod,
+      radarGroupCol,
+      radarNumericCols,
+      densityGroupCol,
+      densityValueCol,
+      pieBinNumeric,
+      pieBinCount,
+      pieNumericCol,
+    };
+
+    const handleControlsChange = (patch: Partial<ChartControls>) => {
+      if (patch.histogramCol !== undefined) setHistogramCol(patch.histogramCol);
+      if (patch.showHistogramDensity !== undefined) setShowHistogramDensity(patch.showHistogramDensity);
+      if (patch.heatmapCorrMethod !== undefined) setHeatmapCorrMethod(patch.heatmapCorrMethod);
+      if (patch.radarGroupCol !== undefined) setRadarGroupCol(patch.radarGroupCol);
+      if (patch.radarNumericCols !== undefined) setRadarNumericCols(patch.radarNumericCols);
+      if (patch.densityGroupCol !== undefined) setDensityGroupCol(patch.densityGroupCol);
+      if (patch.densityValueCol !== undefined) setDensityValueCol(patch.densityValueCol);
+      if (patch.pieBinNumeric !== undefined) setPieBinNumeric(patch.pieBinNumeric);
+      if (patch.pieBinCount !== undefined) setPieBinCount(patch.pieBinCount);
+      if (patch.pieNumericCol !== undefined) setPieNumericCol(patch.pieNumericCol);
+    };
+
+    const chartExportIcons = (
       <div className="absolute top-2 right-2 z-10 flex gap-1 rounded-lg bg-white/95 dark:bg-neutral-800/95 border border-neutral-200 dark:border-neutral-600 p-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
         <button type="button" onClick={handleExportPng} title={t("presentationView.savePngTitle")} className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Download className="w-4 h-4" /></button>
         <button type="button" onClick={handleCopyToClipboard} title={t("presentationView.copyToClipboardTitle")} className="p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700"><Copy className="w-4 h-4" /></button>
       </div>
-    ) : null;
+    );
 
     return (
       <div ref={chartContainerRef} className="w-full max-w-full">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
           <div className="flex flex-wrap items-center gap-4">
-        <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 shrink-0">
-          {({ bar: t("presentationView.chartTypeBar"), line: t("presentationView.chartTypeLine"), scatter: t("presentationView.chartTypeScatter"), histogram: t("presentationView.chartTypeHistogram"), box: t("presentationView.chartTypeBox"), heatmap: t("presentationView.chartTypeHeatmap"), pie: t("presentationView.chartTypePie"), stackedBar: t("presentationView.chartTypeStackedBar"), barH: t("presentationView.chartTypeBarH"), area: t("presentationView.chartTypeArea"), donut: t("presentationView.chartTypeDonut"), density: t("presentationView.chartTypeDensity"), radar: t("presentationView.chartTypeRadar") } as Record<string, string>)[chartType] ?? chartType}
-        </span>
-        {(chartType === "scatter" || chartType === "bar" || chartType === "line" || chartType === "pie" || chartType === "area") && (
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.axisXLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.axisYNumericLabel")}</label>
-              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            {chartType === "bar" && (
-              <div>
-                <label className="block text-sm font-medium mb-1">{t("presentationView.sortAxisXLabel")}</label>
-                <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                  <option value="none">{t("presentationView.sortNone")}</option>
-                  <option value="asc">{t("presentationView.sortAsc")}</option>
-                  <option value="desc">{t("presentationView.sortDesc")}</option>
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-        {chartType === "stackedBar" && (
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.axisXCategoryLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.stackByLabel")}</label>
-              <select value={stackByCol} onChange={(e) => setStackByCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {cols.filter((c) => c !== xCol).map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.valueNumericLabel")}</label>
-              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-        {chartType === "radar" && (
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.groupColumnOptionalLabel")}</label>
-              <select value={radarGroupCol} onChange={(e) => setRadarGroupCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("presentationView.noGroupOption")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="w-full">
-              <label className="block text-sm font-medium mb-1">{t("presentationView.numericAxesLabel")}</label>
-              <div className="flex flex-wrap gap-2">
-                {numericCols.slice(0, 16).map((c) => {
-                  const checked = radarNumericCols.includes(c);
-                  const canAdd = checked || radarNumericCols.length < 8;
-                  return (
-                    <label key={c} className={`flex items-center gap-1.5 text-sm ${!canAdd ? "opacity-50" : ""}`}>
-                      <input type="checkbox" checked={checked} disabled={!canAdd} onChange={() => setRadarNumericCols((prev) => checked ? prev.filter((x) => x !== c) : prev.length < 8 ? [...prev, c] : prev)} className="rounded border-neutral-400" />
-                      {c.length > 18 ? c.slice(0, 16) + "…" : c}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-        {chartType === "heatmap" && (
-          <div className="flex flex-wrap gap-4 mb-4">
-            <span className="text-sm font-medium">{t("presentationView.coefficientLabel")}</span>
-            <button type="button" onClick={() => setHeatmapCorrMethod("pearson")} className={`rounded-md px-3 py-1.5 text-sm ${heatmapCorrMethod === "pearson" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Pearson</button>
-            <button type="button" onClick={() => setHeatmapCorrMethod("spearman")} className={`rounded-md px-3 py-1.5 text-sm ${heatmapCorrMethod === "spearman" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Spearman</button>
-            <button type="button" onClick={() => setHeatmapCorrMethod("kendall")} className={`rounded-md px-3 py-1.5 text-sm ${heatmapCorrMethod === "kendall" ? "bg-brand text-white" : "border border-neutral-300 dark:border-neutral-600"}`}>Kendall</button>
-            {corrResult && corrResult.columnNames.length >= 2 && (
-              <button
-                type="button"
-                onClick={() => {
-                  const headers = ["", ...corrResult!.columnNames];
-                  const rows = corrResult!.matrix.map((row, i) => [corrResult!.columnNames[i], ...row.map((v) => v.toFixed(4))]);
-                  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-                  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-                  const a = document.createElement("a");
-                  a.href = URL.createObjectURL(blob);
-                  a.download = `quantis-correlation-${heatmapCorrMethod}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(a.href);
-                }}
-                className="rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700"
-              >
-                <Download className="w-4 h-4" /> {t("presentationView.exportCsvButton")}
-              </button>
-            )}
-          </div>
-        )}
-        {chartType === "pie" && (
-          <div className="mb-4 space-y-3">
-            <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("presentationView.pieHint")}</p>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
-              {t("presentationView.binNumericLabel")}
-            </label>
-            {pieBinNumeric && (
-              <div className="flex flex-wrap gap-4">
+            <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 shrink-0">
+              {({ bar: t("presentationView.chartTypeBar"), line: t("presentationView.chartTypeLine"), scatter: t("presentationView.chartTypeScatter"), histogram: t("presentationView.chartTypeHistogram"), box: t("presentationView.chartTypeBox"), heatmap: t("presentationView.chartTypeHeatmap"), pie: t("presentationView.chartTypePie"), stackedBar: t("presentationView.chartTypeStackedBar"), barH: t("presentationView.chartTypeBarH"), area: t("presentationView.chartTypeArea"), donut: t("presentationView.chartTypeDonut"), density: t("presentationView.chartTypeDensity"), radar: t("presentationView.chartTypeRadar") } as Record<string, string>)[chartType] ?? chartType}
+            </span>
+            {chartType === "stackedBar" && (
+              <div className="flex flex-wrap gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-medium mb-1">{t("presentationView.numericColumnLabel")}</label>
-                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
+                  <label className="block text-sm font-medium mb-1">{t("presentationView.axisXCategoryLabel")}</label>
+                  <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                    <option value="">{t("analysisView.selectPlaceholder")}</option>
+                    {cols.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">{t("presentationView.stackByLabel")}</label>
+                  <select value={stackByCol} onChange={(e) => setStackByCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
+                    <option value="">{t("analysisView.selectPlaceholder")}</option>
+                    {cols.filter((c) => c !== xCol).map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">{t("presentationView.valueNumericLabel")}</label>
+                  <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
                     <option value="">{t("analysisView.selectPlaceholder")}</option>
                     {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">{t("presentationView.binCountLabel")}</label>
-                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} {t("presentationView.binCountUnit")}</option>)}
-                  </select>
-                </div>
               </div>
             )}
-          </div>
-        )}
-        {chartType === "donut" && (
-          <div className="mb-4 space-y-3">
-            <label className="block text-sm font-medium mb-1">{t("presentationView.categoricalColumnLabel")}</label>
-            <select value={xCol} onChange={(e) => { setXCol(e.target.value); setPieBinNumeric(false); }} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-              <option value="">{t("analysisView.selectPlaceholder")}</option>
-              {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={pieBinNumeric} onChange={(e) => setPieBinNumeric(e.target.checked)} className="rounded border-neutral-400" />
-              {t("presentationView.binNumericLabel")}
-            </label>
-            {pieBinNumeric && (
-              <div className="flex flex-wrap gap-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1">{t("presentationView.numericColumnLabel")}</label>
-                  <select value={pieNumericCol} onChange={(e) => setPieNumericCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    <option value="">{t("analysisView.selectPlaceholder")}</option>
-                    {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">{t("presentationView.binCountLabel")}</label>
-                  <select value={pieBinCount} onChange={(e) => setPieBinCount(Number(e.target.value))} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n} {t("presentationView.binCountUnit")}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {chartType === "barH" && (
-          <div className="mb-4 flex flex-wrap items-end gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.axisCategoryLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.sortAxisLabel")}</label>
-              <select value={barSortOrder} onChange={(e) => setBarSortOrder(e.target.value as "none" | "asc" | "desc")} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="none">{t("presentationView.sortNone")}</option>
-                <option value="asc">{t("presentationView.sortAsc")}</option>
-                <option value="desc">{t("presentationView.sortDesc")}</option>
-              </select>
-            </div>
-          </div>
-        )}
-        {chartType === "box" && (
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.groupVarXLabel")}</label>
-              <select value={xCol} onChange={(e) => setXCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.numericVarYLabel")}</label>
-              <select value={yCol} onChange={(e) => setYCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-        {chartType === "histogram" && (
-          <div className="mb-4 flex flex-wrap items-center gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.distributionColumnLabel")}</label>
-              <select value={histogramCol} onChange={(e) => setHistogramCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer mt-6">
-              <input type="checkbox" checked={showHistogramDensity} onChange={(e) => setShowHistogramDensity(e.target.checked)} className="rounded border-neutral-400" />
-              <span className="text-sm text-neutral-700 dark:text-neutral-300">{t("presentationView.showKdeLabel")}</span>
-            </label>
-          </div>
-        )}
-        {chartType === "density" && (
-          <div className="flex flex-wrap gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.densityGroupLabel")}</label>
-              <select value={densityGroupCol} onChange={(e) => setDensityGroupCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {cols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t("presentationView.densityValueLabel")}</label>
-              <select value={densityValueCol} onChange={(e) => setDensityValueCol(e.target.value)} className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2">
-                <option value="">{t("analysisView.selectPlaceholder")}</option>
-                {numericCols.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
           </div>
           <AIAssistPanel
             context={visualizationContext}
@@ -642,29 +1108,42 @@ export function PresentationView({
             includeStandardResultPrompts={false}
           />
         </div>
-        {chartType === "scatter" && isScatter && chartData.length > 0 && (
+        <div className="flex gap-4 items-start w-full">
+          <div className="flex-1 min-w-0">
+            {chartType === "scatter" && isScatter && (hasLegend ? groupedScatterData.length > 0 : chartData.length > 0) && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid />
-                  <XAxis dataKey="x" name={xCol} type="number" domain={["auto", "auto"]} label={{ value: xCol, position: "insideBottom", offset: -10 }} />
-                  <YAxis dataKey="y" name={yCol} type="number" domain={["auto", "auto"]} label={{ value: yCol, angle: -90, position: "insideLeft", offset: 0 }} />
+                  <XAxis dataKey="x" name={xLabel} type="number" domain={["auto", "auto"]} label={{ value: xLabel, position: "insideBottom", offset: -10 }} />
+                  <YAxis dataKey="y" name={yLabel} type="number" domain={["auto", "auto"]} label={{ value: yLabel, angle: -90, position: "insideLeft", offset: 0 }} />
                   <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-                  <Scatter data={chartData} fill="#0061bb" name={t("presentationView.scatterPointName")} />
+                  {hasLegend ? (
+                    <>
+                      <Legend />
+                      {groupedScatterData.map((grp, i) => (
+                        <Scatter
+                          key={grp.key}
+                          data={grp.points}
+                          fill={getPaletteColor(chartConfig.palette, i)}
+                          name={grp.key}
+                        />
+                      ))}
+                    </>
+                  ) : (
+                    <Scatter data={chartData} fill={getPaletteColor(chartConfig.palette, 0)} name={t("presentationView.scatterPointName")} />
+                  )}
                 </ScatterChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
-        {chartType === "scatter" && (() => {
-          if (!xCol || !yCol) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterNoAxisWarningPart1")} <strong>{t("presentationView.axisXLabel")}</strong> {t("presentationView.scatterNoDataPart2")} <strong>{t("presentationView.axisYLabel")}</strong> {t("presentationView.scatterNoAxisWarningPart2")}</p>;
-          if (!numericCols.includes(xCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterXNotNumericPart1")} <strong>"{xCol}"</strong> {t("presentationView.scatterXNotNumericPart2")}</p>;
-          if (!numericCols.includes(yCol)) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterYNotNumericPart1")} <strong>"{yCol}"</strong> {t("presentationView.scatterYNotNumericPart2")}</p>;
-          if (chartData.length === 0) return <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.scatterNoDataPart1")} <strong>"{xCol}"</strong> {t("presentationView.scatterNoDataPart2")} <strong>"{yCol}"</strong> {t("presentationView.scatterNoDataPart3")}</p>;
-          return null;
-        })()}
+        
         {chartType === "density" && densityData.length > 0 && (() => {
           const keys = densityData.map((d) => d.group);
           const merged = densityData[0].points.map((_, i) => ({
@@ -674,133 +1153,300 @@ export function PresentationView({
           return (
             <div className="relative group" data-chart-export-wrapper>
               {chartExportIcons}
-              <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={merged} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="x" name={densityValueCol} type="number" tick={{ fontSize: 11 }} />
-                    <YAxis name={t("presentationView.densityYAxisLabel")} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Legend />
-                    {keys.map((key, i) => (
-                      <Line key={key} type="monotone" dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={false} name={key} />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
+              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+                {chartTitleBlock}
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={merged} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="x" name={densityValueCol} type="number" tick={{ fontSize: 11 }} />
+                      <YAxis name={t("presentationView.densityYAxisLabel")} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Legend />
+                      {keys.map((key, i) => (
+                        <Line key={key} type="monotone" dataKey={key} stroke={getPaletteColor(chartConfig.palette, i)} strokeWidth={2} dot={false} name={key} />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           );
         })()}
-        {chartType === "bar" && barDataSorted.length > 0 && (
+        {chartType === "bar" && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0) && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barDataSorted} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <BarChart data={hasLegend ? pivotedBarData : barDataSorted} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `${t("presentationView.barTotalPrefix")} ${yCol}` : t("presentationView.barCountLabel")} />
+                  <YAxis domain={barScale.domain} ticks={barScale.ticks} />
+                  {isAggregated ? <Tooltip content={renderAggTooltip} /> : <Tooltip />}
+                  {hasLegend ? (
+                    <>
+                      <Legend />
+                      {legendSeriesKeys.map((key, i) => (
+                        <Bar
+                          key={key}
+                          dataKey={key}
+                          name={key}
+                          stackId={chartConfig.barMode === "stacked" ? "stack" : undefined}
+                          fill={getPaletteColor(chartConfig.palette, i)}
+                        >
+                          {showErrorBars && (
+                            <ErrorBar
+                              dataKey={`_err_${key}`}
+                              direction="y"
+                              width={4}
+                              stroke="#475569"
+                              strokeWidth={1.5}
+                            />
+                          )}
+                          {chartConfig.showDataLabels && (
+                            <LabelList dataKey={key} position="top" formatter={formatDataLabel} />
+                          )}
+                        </Bar>
+                      ))}
+                    </>
+                  ) : (
+                    <Bar dataKey="count" fill={getPaletteColor(chartConfig.palette, 0)} name={isAggregated ? activeAggLegendName : t("presentationView.barCountLabel")}>
+                      {showErrorBars && (
+                        <ErrorBar
+                          dataKey="error"
+                          direction="y"
+                          width={4}
+                          stroke="#475569"
+                          strokeWidth={1.5}
+                        />
+                      )}
+                      {chartConfig.showDataLabels && (
+                        <LabelList dataKey="count" position="top" formatter={formatDataLabel} />
+                      )}
+                    </Bar>
+                  )}
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
-        {chartType === "barH" && xCol && barDataSorted.length > 0 && (
+        {chartType === "barH" && xCol && (hasLegend ? pivotedBarData.length > 0 : barDataSorted.length > 0) && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={barDataSorted} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <BarChart data={hasLegend ? pivotedBarData : barDataSorted} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
+                  <XAxis type="number" domain={barScale.domain} ticks={barScale.ticks} />
                   <YAxis type="category" dataKey="name" width={100} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name={yCol && numericCols.includes(yCol) ? `${t("presentationView.barTotalPrefix")} ${yCol}` : t("presentationView.barCountLabel")} />
+                  {isAggregated ? <Tooltip content={renderAggTooltip} /> : <Tooltip />}
+                  {hasLegend ? (
+                    <>
+                      <Legend />
+                      {legendSeriesKeys.map((key, i) => (
+                        <Bar
+                          key={key}
+                          dataKey={key}
+                          name={key}
+                          stackId={chartConfig.barMode === "stacked" ? "stack" : undefined}
+                          fill={getPaletteColor(chartConfig.palette, i)}
+                        >
+                          {showErrorBars && (
+                            <ErrorBar
+                              dataKey={`_err_${key}`}
+                              direction="x"
+                              width={4}
+                              stroke="#475569"
+                              strokeWidth={1.5}
+                            />
+                          )}
+                          {chartConfig.showDataLabels && (
+                            <LabelList dataKey={key} position="right" formatter={formatDataLabel} />
+                          )}
+                        </Bar>
+                      ))}
+                    </>
+                  ) : (
+                    <Bar dataKey="count" fill={getPaletteColor(chartConfig.palette, 0)} name={isAggregated ? activeAggLegendName : t("presentationView.barCountLabel")}>
+                      {showErrorBars && (
+                        <ErrorBar
+                          dataKey="error"
+                          direction="x"
+                          width={4}
+                          stroke="#475569"
+                          strokeWidth={1.5}
+                        />
+                      )}
+                      {chartConfig.showDataLabels && (
+                        <LabelList dataKey="count" position="right" formatter={formatDataLabel} />
+                      )}
+                    </Bar>
+                  )}
                 </BarChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
-        {chartType === "line" && lineData.length > 0 && (
+        {chartType === "line" && (hasLegend ? pivotedLineData.length > 0 : lineChartData.length > 0) && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={lineData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <LineChart data={hasLegend ? pivotedLineData : lineChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
-                  <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="y" stroke="#0061bb" strokeWidth={2} dot={{ r: 4 }} name={yCol || t("presentationView.lineDefaultValueName")} />
+                  <XAxis dataKey="x" name={xLabel} tick={{ fontSize: 11 }} />
+                  <YAxis dataKey={hasLegend ? undefined : "y"} name={yLabel} domain={lineScale.domain} ticks={lineScale.ticks} tick={{ fontSize: 11 }} />
+                  {isAggregated ? <Tooltip content={renderAggTooltip} /> : <Tooltip />}
+                  {hasLegend ? (
+                    <>
+                      <Legend />
+                      {legendSeriesKeys.map((key, i) => (
+                        <Line
+                          key={key}
+                          type="monotone"
+                          dataKey={key}
+                          stroke={getPaletteColor(chartConfig.palette, i)}
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          name={key}
+                        >
+                          {showErrorBars && (
+                            <ErrorBar
+                              dataKey={`_err_${key}`}
+                              direction="y"
+                              width={4}
+                              stroke="#475569"
+                              strokeWidth={1.5}
+                            />
+                          )}
+                          {chartConfig.showDataLabels && (
+                            <LabelList dataKey={key} position="top" formatter={formatDataLabel} />
+                          )}
+                        </Line>
+                      ))}
+                    </>
+                  ) : (
+                    <Line
+                      type="monotone"
+                      dataKey="y"
+                      stroke={getPaletteColor(chartConfig.palette, 0)}
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      name={isAggregated ? activeAggLegendName : (yLabel || t("presentationView.lineDefaultValueName"))}
+                    >
+                      {showErrorBars && (
+                        <ErrorBar
+                          dataKey="error"
+                          direction="y"
+                          width={4}
+                          stroke="#475569"
+                          strokeWidth={1.5}
+                        />
+                      )}
+                      {chartConfig.showDataLabels && (
+                        <LabelList dataKey="y" position="top" formatter={formatDataLabel} />
+                      )}
+                    </Line>
+                  )}
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
         {chartType === "pie" && pieData.length > 0 && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(0)}%`}>
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => [v, t("presentationView.barCountLabel")]} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={chartConfig.showDataLabels ? ({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(chartConfig.decimals ?? 0)}%` : false}>
+                      {pieData.map((_, i) => (
+                        <Cell key={i} fill={getPaletteColor(chartConfig.palette, i)} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: number) => [
+                        v,
+                        yCol && numericCols.includes(yCol)
+                          ? `${t("presentationView.aggLabel." + (chartConfig.aggregation || "sum"))} ${t("presentationView.ofPreposition")} ${yLabel}`
+                          : t("presentationView.barCountLabel"),
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
         {chartType === "donut" && pieData.length > 0 && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={60} label={({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(0)}%`}>
-                    {pieData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => [v, t("presentationView.barCountLabel")]} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={60} label={chartConfig.showDataLabels ? ({ name, percent }) => `${name} ${(percent != null ? percent * 100 : 0).toFixed(chartConfig.decimals ?? 0)}%` : false}>
+                      {pieData.map((_, i) => (
+                        <Cell key={i} fill={getPaletteColor(chartConfig.palette, i)} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: number) => [
+                        v,
+                        yCol && numericCols.includes(yCol)
+                          ? `${t("presentationView.aggLabel." + (chartConfig.aggregation || "sum"))} ${t("presentationView.ofPreposition")} ${yLabel}`
+                          : t("presentationView.barCountLabel"),
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
         {chartType === "box" && boxChartData.length > 0 && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 mb-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis domain={boxYDomain} allowDataOverflow />
-                  <Tooltip content={({ active, payload }) => {
-                    if (!active || !payload?.length || !payload[0].payload) return null;
-                    const b = payload[0].payload as { name: string; min: number; q1: number; median: number; q3: number; max: number; n: number };
-                    return (
-                      <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
-                        <p className="font-medium">{b.name}</p>
-                        <p>n = {b.n} | Min = {b.min.toFixed(2)} | Q1 = {b.q1.toFixed(2)} | Median = {b.median.toFixed(2)} | Q3 = {b.q3.toFixed(2)} | Max = {b.max.toFixed(2)}</p>
-                      </div>
-                    );
-                  }} />
-                  <Bar dataKey="q1" stackId="box" fill="transparent" stroke="none" isAnimationActive={false} legendType="none">
-                    <ErrorBar dataKey="whiskerLow" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
-                  </Bar>
-                  <Bar dataKey="boxLower" stackId="box" fill="#0061bb" fillOpacity={0.55} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none" />
-                  <Bar dataKey="boxUpper" stackId="box" fill="#0061bb" fillOpacity={0.85} stroke="#3b82f6" strokeWidth={1.5} isAnimationActive={false} legendType="none">
-                    <ErrorBar dataKey="whiskerHigh" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
-                  </Bar>
-                </ComposedChart>
-              </ResponsiveContainer>
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 mb-2">
+              {chartTitleBlock}
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={boxChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis domain={boxYDomain} allowDataOverflow />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length || !payload[0].payload) return null;
+                      const b = payload[0].payload as { name: string; min: number; q1: number; median: number; q3: number; max: number; n: number };
+                      return (
+                        <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
+                          <p className="font-medium">{b.name}</p>
+                          <p>n = {b.n} | Min = {b.min.toFixed(2)} | Q1 = {b.q1.toFixed(2)} | Median = {b.median.toFixed(2)} | Q3 = {b.q3.toFixed(2)} | Max = {b.max.toFixed(2)}</p>
+                        </div>
+                      );
+                    }} />
+                    <Bar dataKey="q1" stackId="box" fill="transparent" stroke="none" isAnimationActive={false} legendType="none">
+                      <ErrorBar dataKey="whiskerLow" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
+                    </Bar>
+                    <Bar dataKey="boxLower" stackId="box" fill={getPaletteColor(chartConfig.palette, 0)} fillOpacity={0.55} stroke={getPaletteColor(chartConfig.palette, 0)} strokeWidth={1.5} isAnimationActive={false} legendType="none" />
+                    <Bar dataKey="boxUpper" stackId="box" fill={getPaletteColor(chartConfig.palette, 0)} fillOpacity={0.85} stroke={getPaletteColor(chartConfig.palette, 0)} strokeWidth={1.5} isAnimationActive={false} legendType="none">
+                      <ErrorBar dataKey="whiskerHigh" width={12} stroke="#94a3b8" strokeWidth={1.75} direction="y" />
+                    </Bar>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
               <table className="w-full">
@@ -820,49 +1466,70 @@ export function PresentationView({
         {chartType === "histogram" && histChartData.length > 0 && !(showHistogramDensity && histComboData.length > 0) && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={histChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
-                  <YAxis label={{ value: t("presentationView.histogramFrequencyLabel"), angle: -90, position: "insideLeft" }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name={t("presentationView.histogramFrequencyLabel")} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={histChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
+                    <YAxis label={{ value: t("presentationView.histogramFrequencyLabel"), angle: -90, position: "insideLeft" }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={getPaletteColor(chartConfig.palette, 0)} name={t("presentationView.histogramFrequencyLabel")}>
+                      {chartConfig.showDataLabels && (
+                        <LabelList dataKey="count" position="top" formatter={formatDataLabel} />
+                      )}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
         {chartType === "histogram" && showHistogramDensity && histComboData.length > 0 && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={histComboData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
-                  <YAxis label={{ value: t("presentationView.histogramFrequencyDensityLabel"), angle: -90, position: "insideLeft" }} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#0061bb" name={t("presentationView.histogramFrequencyLabel")} />
-                  <Line type="monotone" dataKey="densityScaled" stroke="#f59e0b" strokeWidth={2} dot={false} name={t("presentationView.kdeLineLabel")} />
-                </ComposedChart>
-              </ResponsiveContainer>
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={histComboData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" label={{ value: histogramCol, position: "insideBottom", offset: -5 }} />
+                    <YAxis label={{ value: t("presentationView.histogramFrequencyDensityLabel"), angle: -90, position: "insideLeft" }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill={getPaletteColor(chartConfig.palette, 0)} name={t("presentationView.histogramFrequencyLabel")}>
+                      {chartConfig.showDataLabels && (
+                        <LabelList dataKey="count" position="top" formatter={formatDataLabel} />
+                      )}
+                    </Bar>
+                    <Line type="monotone" dataKey="densityScaled" stroke={getPaletteColor(chartConfig.palette, 1)} strokeWidth={2} dot={false} name={t("presentationView.kdeLineLabel")} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
         {chartType === "area" && areaData.length > 0 && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
-            <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={areaData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
-                  <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="y" stroke="#0061bb" fill="#0061bb" fillOpacity={0.4} name={yCol || t("presentationView.lineDefaultValueName")} />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+              {chartTitleBlock}
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={areaData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="x" name={xCol} tick={{ fontSize: 11 }} />
+                    <YAxis dataKey="y" name={yCol} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="y" stroke={getPaletteColor(chartConfig.palette, 0)} fill={getPaletteColor(chartConfig.palette, 0)} fillOpacity={0.4} name={yCol || t("presentationView.lineDefaultValueName")}>
+                      {chartConfig.showDataLabels && (
+                        <LabelList dataKey="y" position="top" formatter={formatDataLabel} />
+                      )}
+                    </Area>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         )}
@@ -880,7 +1547,7 @@ export function PresentationView({
                     <Tooltip />
                     <Legend />
                     {stackKeys.map((key, i) => (
-                      <Bar key={key} dataKey={key} stackId="stack" fill={PIE_COLORS[i % PIE_COLORS.length]} name={key.length > 16 ? key.slice(0, 14) + "…" : key} />
+                      <Bar key={key} dataKey={key} stackId="stack" fill={getPaletteColor(chartConfig.palette, i)} name={key.length > 16 ? key.slice(0, 14) + "…" : key} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
@@ -893,18 +1560,25 @@ export function PresentationView({
           return (
             <div className="relative group" data-chart-export-wrapper>
               {chartExportIcons}
-              <div className="h-80 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={radarData}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="subject" />
-                    <PolarRadiusAxis angle={90} domain={[0, "auto"]} />
-                    {radarKeys.map((key, i) => (
-                      <Radar key={key} name={key} dataKey={key} stroke={PIE_COLORS[i % PIE_COLORS.length]} fill={PIE_COLORS[i % PIE_COLORS.length]} fillOpacity={0.3} strokeWidth={2} />
-                    ))}
-                    <Legend />
-                  </RadarChart>
-                </ResponsiveContainer>
+              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
+                {chartTitleBlock}
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="subject" />
+                      <PolarRadiusAxis angle={90} domain={[0, "auto"]} />
+                      {radarKeys.map((key, i) => (
+                        <Radar key={key} name={key} dataKey={key} stroke={getPaletteColor(chartConfig.palette, i)} fill={getPaletteColor(chartConfig.palette, i)} fillOpacity={0.3} strokeWidth={2}>
+                          {chartConfig.showDataLabels && (
+                            <LabelList dataKey={key} position="top" formatter={formatDataLabel} />
+                          )}
+                        </Radar>
+                      ))}
+                      <Legend />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           );
@@ -921,7 +1595,7 @@ export function PresentationView({
                   <Tooltip />
                   <Legend />
                   {multiLineYCols.map((col, i) => (
-                    <Line key={col} type="monotone" dataKey={col} stroke={PIE_COLORS[i % PIE_COLORS.length]} strokeWidth={2} dot={{ r: 3 }} name={col.length > 14 ? col.slice(0, 12) + "…" : col} />
+                    <Line key={col} type="monotone" dataKey={col} stroke={getPaletteColor(chartConfig.palette, i)} strokeWidth={2} dot={{ r: 3 }} name={col.length > 14 ? col.slice(0, 12) + "…" : col} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -980,7 +1654,7 @@ export function PresentationView({
                   <Tooltip />
                   <Legend />
                   {crosstabResult.colLabels.slice(0, 8).map((col, i) => (
-                    <Bar key={col} dataKey={col} stackId="ct" fill={PIE_COLORS[i % PIE_COLORS.length]} name={col.length > 12 ? col.slice(0, 10) + "…" : col} />
+                    <Bar key={col} dataKey={col} stackId="ct" fill={getPaletteColor(chartConfig.palette, i)} name={col.length > 12 ? col.slice(0, 10) + "…" : col} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>
@@ -988,7 +1662,8 @@ export function PresentationView({
           </div>
         )}
         {chartType === "heatmap" && corrResult && (
-          <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto overflow-y-auto max-h-96 space-y-2">
+          <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto overflow-y-auto max-h-96 space-y-2 p-4">
+            {chartTitleBlock}
             <div className="p-2">
               <AIAssistPanel
                 context={`Ma trận tương quan (trực quan): ${corrResult.columnNames.join(", ")}. Mẫu hệ số: ${corrResult.matrix.slice(0, 3).map((row, i) => `${corrResult.columnNames[i]}: ${row.slice(0, 4).map((v) => v.toFixed(2)).join(", ")}`).join("; ")}.`}
@@ -1085,20 +1760,69 @@ export function PresentationView({
             )}
           </div>
         )}
-        {chartType === "bar" && xCol && barChartData.length === 0 && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.barNoDataPart1")} &quot;{xCol}&quot;{yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. {t("presentationView.barNoDataPart2")}</p>}
-        {chartType === "line" && (!xCol || !yCol || lineData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}
+        {!isChartRendered && (
+          <ChartPlaceholderFrame chartType={chartType} />
+        )}
+        {chartType === "scatter" && (!xCol || !yCol) && <p className="text-neutral-500 text-sm">{t("presentationView.scatterEmptyHint")}</p>}
+        {chartType === "scatter" && xCol && !numericCols.includes(xCol) && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {t("presentationView.scatterXNotNumericPart1")} <strong>&quot;{xCol}&quot;</strong> {t("presentationView.scatterXNotNumericPart2")}
+          </p>
+        )}
+        {chartType === "scatter" && yCol && !numericCols.includes(yCol) && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {t("presentationView.scatterYNotNumericPart1")} <strong>&quot;{yCol}&quot;</strong> {t("presentationView.scatterYNotNumericPart2")}
+          </p>
+        )}
+        {chartType === "scatter" && xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol) && (hasLegend ? groupedScatterData.length === 0 : chartData.length === 0) && (
+          <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {t("presentationView.scatterNoDataPart1")} <strong>&quot;{xCol}&quot;</strong> {t("presentationView.scatterNoDataPart2")} <strong>&quot;{yCol}&quot;</strong> {t("presentationView.scatterNoDataPart3")}
+          </p>
+        )}
+        {chartType === "bar" && !xCol && <p className="text-neutral-500 text-sm">{t("presentationView.barEmptyHint")}</p>}
+        {chartType === "bar" && xCol && (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0) && <p className="text-amber-700 dark:text-amber-300 text-sm bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{t("presentationView.barNoDataPart1")} &quot;{xCol}&quot;{yCol ? ` ${t("presentationView.barNoDataYAxisSuffix")} ${yCol})` : ""}. {t("presentationView.barNoDataPart2")}</p>}
+        {chartType === "line" && (!xCol || (!hasLegend && !yCol) || (hasLegend ? pivotedLineData.length === 0 : lineChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.lineEmptyHint")}</p>}
         {chartType === "area" && (!xCol || !yCol || areaData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.areaEmptyHint")}</p>}
         {chartType === "stackedBar" && (!xCol || !stackByCol || !yCol || stackedBarData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.stackedBarEmptyHint")}</p>}
-        {chartType === "pie" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.pieEmptyHint")}</p>}
+        {chartType === "pie" && pieData.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.pieEmptyHint")}</p>}
         {chartType === "box" && (!xCol || !yCol || boxChartData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.boxEmptyHint")}</p>}
         {chartType === "histogram" && !histogramCol && <p className="text-neutral-500 text-sm">{t("presentationView.histogramEmptyHint")}</p>}
         {chartType === "density" && (!densityGroupCol || !densityValueCol) && <p className="text-neutral-500 text-sm">{t("presentationView.densityEmptyHint")}</p>}
         {chartType === "radar" && radarNumericCols.length < 2 && <p className="text-neutral-500 text-sm">{t("presentationView.radarEmptyHint")}</p>}
         {chartType === "heatmap" && (!corrResult || corrResult.columnNames.length < 2) && <p className="text-neutral-500 text-sm">{t("presentationView.heatmapEmptyHint")}</p>}
         {chartType === "summary" && summaryStats.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.summaryEmptyHint")}</p>}
-        {chartType === "donut" && (!xCol || pieData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.donutEmptyHint")}</p>}
-        {chartType === "barH" && (!xCol || barChartData.length === 0) && <p className="text-neutral-500 text-sm">{t("presentationView.barHEmptyHint")}</p>}
+        {chartType === "donut" && pieData.length === 0 && <p className="text-neutral-500 text-sm">{t("presentationView.donutEmptyHint")}</p>}
+        {chartType === "barH" && (!xCol || (hasLegend ? pivotedBarData.length === 0 : barChartData.length === 0)) && <p className="text-neutral-500 text-sm">{t("presentationView.barHEmptyHint")}</p>}
         {chartType === "dashboard" && dashboardStats.length === 0 && !(dashboardCorrResult && dashboardCorrResult.columnNames.length >= 2) && <p className="text-neutral-500 text-sm">{t("presentationView.dashboardEmptyHint")}</p>}
+      </div>
+      {isInspectorOpen ? (
+        <ChartInspectorPanel
+          chartType={chartType}
+          dataset={selectedDataset ?? null}
+          config={chartConfig}
+          onChange={(patch) => setChartConfig((prev) => ({ ...prev, ...patch }))}
+              controls={chartControls}
+              onControlsChange={handleControlsChange}
+              onExportCsv={chartType === "heatmap" ? handleExportHeatmapCsv : undefined}
+              onClose={() => setIsInspectorOpen(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              data-testid="inspector-toggle-btn"
+              onClick={() => setIsInspectorOpen(true)}
+              className="w-10 self-stretch min-h-[380px] bg-white dark:bg-neutral-900 border border-neutral-200/90 dark:border-neutral-800 rounded-xl hover:border-primary-400 dark:hover:border-primary-600 hover:bg-neutral-50/70 dark:hover:bg-neutral-800/50 flex flex-col items-center py-4 gap-3 text-neutral-500 hover:text-primary-600 dark:text-neutral-400 dark:hover:text-primary-400 transition-all shadow-2xs group cursor-pointer sticky top-4 shrink-0"
+              title={t("presentationView.inspectorTitle")}
+              aria-label={t("presentationView.inspectorTitle")}
+            >
+              <PanelRightOpen className="w-4 h-4 group-hover:scale-110 transition-transform text-neutral-600 dark:text-neutral-300 group-hover:text-primary-600 dark:group-hover:text-primary-400" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span className="[writing-mode:vertical-rl] rotate-180 text-[11px] font-semibold tracking-wider uppercase text-neutral-500 dark:text-neutral-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors mt-2 select-none">
+                {t("presentationView.inspectorTitle")}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
     );
   }

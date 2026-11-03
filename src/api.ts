@@ -1880,7 +1880,9 @@ export function truncateForAI(text: string, maxChars: number): { text: string; t
 function extractContent(obj: unknown): string {
   if (obj == null || typeof obj !== "object") return ""
   const o = obj as Record<string, unknown>
-  const choice0 = o.choices?.[0] && typeof o.choices[0] === "object" && o.choices[0] !== null ? (o.choices[0] as Record<string, unknown>) : null
+  const choices = o.choices
+  const first = Array.isArray(choices) ? choices[0] : null
+  const choice0 = first && typeof first === "object" ? (first as Record<string, unknown>) : null
   const msg = choice0?.message && typeof choice0.message === "object" && choice0.message !== null ? (choice0.message as Record<string, unknown>) : null
   if (msg) {
     const content = msg.content

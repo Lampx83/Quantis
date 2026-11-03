@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { FileText, X } from "lucide-react";
 import { saveAppFeedback } from "@/utils/storage";
 import { useUIStore } from "@/stores";

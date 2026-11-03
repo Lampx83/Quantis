@@ -1,4 +1,3 @@
-import React from "react";
 import {
   Table2,
   ScanSearch,
@@ -315,21 +314,6 @@ export function AppToolbar() {
             <PieChartIcon className="w-4 h-4 shrink-0" />
             <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">
               {t("app.chartType.pie")}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPresentationChartType("stackedBar")}
-            className={`relative group flex items-center justify-center p-2 rounded-md text-sm shrink-0 ${
-              presentationChartType === "stackedBar"
-                ? "bg-brand text-white"
-                : "hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300"
-            }`}
-            title={t("app.chartType.stackedBar")}
-          >
-            <Layers className="w-4 h-4 shrink-0" />
-            <span className="absolute left-1/2 -translate-x-1/2 top-full mt-1 px-2 py-0.5 text-xs font-medium bg-neutral-800 dark:bg-neutral-700 text-white rounded opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100 transition-opacity">
-              {t("app.chartType.stackedBar")}
             </span>
           </button>
           <button
