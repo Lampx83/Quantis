@@ -31,7 +31,9 @@ export function reconstructImputedDatasets(dataset: Dataset): string[][][] {
   const colNames = dataset.columnNames || (originalRows[0] ?? []);
 
   for (let i = 1; i <= m; i++) {
-    result.push(reconstructImputedRows(originalRows, colNames, sparsePatches, i, dataset.rows));
+    // Mã khuyết khai báo ở cột không điền vẫn phải coi là khuyết như mọi phân tích khác.
+    const rows = reconstructImputedRows(originalRows, colNames, sparsePatches, i, dataset.rows);
+    result.push(getAnalysisRows({ data: rows, variables: dataset.variables }));
   }
   return result;
 }
@@ -137,6 +139,7 @@ export function RegressionTab({
       try {
         const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected, reconstructed);
         setOlsResult(res ?? null);
+        if (!res && reconstructed) showToast(t("regressionExplainer.miceOlsFailed"));
       } finally {
         setRegressionLoading(null);
       }
@@ -217,7 +220,11 @@ export function RegressionTab({
                 MICE
               </span>
               <span>
-                {t("regressionExplainer.miceBanner", { m: selectedDataset.imputationMeta.m })}
+                {analysisBackendAvailable
+                  ? t("regressionExplainer.miceBanner", { m: selectedDataset.imputationMeta.m })
+                  : t("regressionExplainer.bundleOtherModelsNote", {
+                      active: selectedDataset.imputationMeta.activeImputationIndex,
+                    })}
               </span>
             </div>
           )}

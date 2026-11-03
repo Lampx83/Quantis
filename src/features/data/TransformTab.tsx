@@ -69,6 +69,9 @@ export function HotDeckLoadingBanner({ onCancel }: { onCancel: () => void }) {
  * Chuyển đổi m bảng dữ liệu đã điền (imputedDatasets) thành cấu trúc Sparse Delta sparsePatches.
  * Chỉ lưu các ô ban đầu bị khuyết (hoặc khớp mã khuyết người dùng khai báo).
  */
+/** Chuỗi mà backend MICE coi là khuyết (run_mice_imputation); phải khớp để ô đó có patch ở mọi bộ. */
+const MICE_MISSING_TOKENS = new Set(["nan", "NaN", "None", "<NA>", "NA", "null"]);
+
 export function convertSparsePatches(
   originalRows: string[][],
   imputedDatasets: string[][][],
@@ -91,7 +94,7 @@ export function convertSparsePatches(
     // Bỏ qua header ở dòng 0, duyệt qua các dòng dữ liệu 1..N
     for (let r = 1; r < originalRows.length; r++) {
       const origVal = originalRows[r][colIdx];
-      if (isMissingValue(origVal, meta)) {
+      if (isMissingValue(origVal, meta) || MICE_MISSING_TOKENS.has(String(origVal).trim())) {
         const values: string[] = [];
         for (let i = 0; i < m; i++) {
           values.push(imputedDatasets[i]?.[r]?.[colIdx] ?? "");
@@ -399,9 +402,11 @@ export function TransformTab({
         const dsId = selectedDs.id;
         setIsMiceLoading(true);
         setMiceError(null);
+        // Chạy lại MICE trên một bundle phải đi từ bảng gốc còn ô khuyết, không phải từ bộ đã điền đang xem.
+        const miceBaseRows = selectedDs.imputationMeta?.originalRows ?? dataRows;
         try {
           const res = await analyzeMiceImputation(
-            dataRows,
+            miceBaseRows,
             columnsToApply,
             selectedDs.variables,
             clampMiceIterations(miceMaxIter),
@@ -424,7 +429,7 @@ export function TransformTab({
           if (res.imputedDatasets && res.imputedDatasets.length > 0) {
             const mCount = res.m ?? res.imputedDatasets.length;
             const patches = convertSparsePatches(
-              dataRows,
+              miceBaseRows,
               res.imputedDatasets,
               res.imputedColumns || columnsToApply,
               selectedDs.variables
@@ -440,7 +445,7 @@ export function TransformTab({
               imputedColumns: res.imputedColumns || columnsToApply,
               rubinStatistics: res.rubinStatistics,
               sparsePatches: patches,
-              originalRows: dataRows,
+              originalRows: miceBaseRows,
             };
           }
         } catch (err: unknown) {

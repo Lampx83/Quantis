@@ -2073,6 +2073,49 @@ def _compute_rubin_descriptive(
     return rubin_stats
 
 
+MICE_MAX_AUXILIARY_PREDICTORS = 30
+
+
+def _mice_auxiliary_predictors(
+    cleaned_df: pd.DataFrame,
+    numeric_df: pd.DataFrame,
+    target_cols: list[str],
+    variables: dict[str, dict] | None,
+) -> pd.DataFrame:
+    """Các cột số ngoài danh sách cần điền, chỉ làm biến dự báo. Loại cột định danh, cột gần như không phải số,
+    biến định danh nhiều mức (mã số không có thứ tự); giữ tối đa MICE_MAX_AUXILIARY_PREDICTORS cột tương quan mạnh nhất."""
+    candidates: dict[str, pd.Series] = {}
+    for col in cleaned_df.columns:
+        if col in target_cols:
+            continue
+        raw = cleaned_df[col].replace(r"^\s*$", np.nan, regex=True)
+        raw = raw.replace(["nan", "NaN", "None", "<NA>", "NA", "null"], np.nan)
+        series = pd.to_numeric(raw, errors="coerce")
+        non_blank = int(raw.notna().sum())
+        n_valid = int(series.notna().sum())
+        if n_valid < 3 or n_valid < 0.9 * non_blank:
+            continue
+        n_unique = int(series.nunique(dropna=True))
+        if n_unique < 2:
+            continue
+        # Mã định danh: mọi giá trị khác nhau và đều là số nguyên.
+        if n_unique == n_valid and bool(((series.dropna() % 1) == 0).all()):
+            continue
+        meta = variables.get(col) if variables else None
+        if isinstance(meta, dict) and meta.get("measure") == "nominal" and n_unique > 2:
+            continue
+        candidates[col] = series
+    aux = pd.DataFrame(candidates, index=cleaned_df.index)
+    if aux.shape[1] > MICE_MAX_AUXILIARY_PREDICTORS:
+        strength = {
+            col: float(numeric_df.corrwith(aux[col]).abs().max(skipna=True) or 0.0)
+            for col in aux.columns
+        }
+        keep = sorted(aux.columns, key=lambda c: strength[c], reverse=True)[:MICE_MAX_AUXILIARY_PREDICTORS]
+        aux = aux[keep]
+    return aux
+
+
 def run_mice_imputation(
     rows: list,
     columns: list[str] | None = None,
@@ -2149,6 +2192,11 @@ def run_mice_imputation(
     if len(numeric_target_cols) == 0:
         raise ValueError("Không có cột số hợp lệ nào chứa dữ liệu để thực hiện MICE")
 
+    # Mô hình điền dùng mọi cột số làm biến dự báo, kể cả cột không được chọn để điền. Bỏ biến phụ thuộc
+    # khỏi mô hình điền làm hệ số phân tích sau đó lệch về 0 (van Buuren 2018, mục 6.3).
+    auxiliary_df = _mice_auxiliary_predictors(cleaned_df, numeric_df, numeric_target_cols, variables)
+    model_df = pd.concat([numeric_df, auxiliary_df], axis=1)
+
     # Collect pre-imputation statistics
     statistics = []
     for col in numeric_target_cols:
@@ -2178,9 +2226,16 @@ def run_mice_imputation(
             "statistics": statistics,
         }
 
+    # Một cột không có biến dự báo: sklearn chỉ điền trung bình, m bộ giống hệt nhau, B = 0 và FMI = 0% là kết quả giả.
+    if model_df.shape[1] < 2:
+        raise ValueError(
+            "MICE cần ít nhất 2 cột số để điền khuyết nhiều lần. Bộ dữ liệu chỉ có một cột số dùng được: "
+            "hãy thêm biến dự báo hoặc dùng cách điền khác."
+        )
+
     # Run IterativeImputer m times with sample_posterior=True
-    min_vals = numeric_df.min(skipna=True).to_numpy(dtype=float)
-    max_vals = numeric_df.max(skipna=True).to_numpy(dtype=float)
+    min_vals = model_df.min(skipna=True).to_numpy(dtype=float)
+    max_vals = model_df.max(skipna=True).to_numpy(dtype=float)
     imputed_dfs = []
     iterations_list = []
 
@@ -2201,8 +2256,8 @@ def run_mice_imputation(
                 min_value=min_vals,
                 max_value=max_vals,
             )
-            imputed_array = imputer.fit_transform(numeric_df)
-            imputed_df = pd.DataFrame(imputed_array, columns=numeric_target_cols, index=numeric_df.index)
+            imputed_array = imputer.fit_transform(model_df)
+            imputed_df = pd.DataFrame(imputed_array, columns=model_df.columns, index=model_df.index)[numeric_target_cols]
             # Kẹp chặt trong [min_obs, max_obs]
             for col_idx, col in enumerate(numeric_target_cols):
                 imputed_df[col] = imputed_df[col].clip(lower=min_vals[col_idx], upper=max_vals[col_idx])

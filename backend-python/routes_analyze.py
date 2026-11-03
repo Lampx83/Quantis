@@ -550,9 +550,11 @@ async def analyze_kruskal(body: AnovaBody):
 
 
 @router.post("/ols")
-async def analyze_ols(body: OLSBody):
+def analyze_ols(body: OLSBody):
     try:
         imputed_data = body.imputed_datasets if body.imputed_datasets is not None else body.imputedDatasets
+        if imputed_data is not None and len(imputed_data) > 20:
+            raise HTTPException(status_code=400, detail="Tối đa 20 bộ dữ liệu điền khuyết")
         result = run_ols(body.rows, body.yCol, body.xCols, imputed_datasets=imputed_data)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
@@ -1195,8 +1197,9 @@ async def analyze_ztest_two_means(body: ZTestTwoMeansBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# def thường (không async): FastAPI chạy trong threadpool, MICE lâu không chặn các yêu cầu khác.
 @router.post("/impute-mice")
-async def analyze_impute_mice(body: MiceImputeBody):
+def analyze_impute_mice(body: MiceImputeBody):
     try:
         rand_seed = body.randomState if body.randomState is not None else (body.random_state if body.random_state is not None else 42)
         result = run_mice_imputation(

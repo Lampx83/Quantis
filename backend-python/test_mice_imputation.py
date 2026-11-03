@@ -617,3 +617,47 @@ if __name__ == "__main__":
     test_mice_api_endpoint_with_m()
     print("test_mice_api_endpoint_with_m passed!")
     print("All MICE tests passed!")
+
+
+def _regression_with_missing_x(n=400, seed=7):
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=n)
+    z = rng.normal(size=n)
+    y = 2 * x + 0.5 * z + rng.normal(scale=0.5, size=n)
+    rows = [["id", "y", "x", "z"]]
+    for i in range(n):
+        xv = "" if rng.random() < 0.4 else f"{x[i]:.6f}"
+        rows.append([str(i + 1), f"{y[i]:.6f}", xv, f"{z[i]:.6f}"])
+    return rows
+
+
+def test_mice_uses_unselected_columns_as_predictors():
+    """Y không được chọn để điền vẫn phải vào mô hình điền; nếu không hệ số của x bị kéo về 0."""
+    rows = _regression_with_missing_x()
+    res = run_mice_imputation(rows, columns=["x", "z"], m=5, random_state=1)
+    assert res["imputedColumns"] == ["x", "z"]
+    ols = run_ols(rows, "y", ["x", "z"], imputed_datasets=res["imputedDatasets"])
+    assert ols["coefficients"]["x"] == pytest.approx(2.0, abs=0.15)
+    assert ols["coefficients"]["z"] == pytest.approx(0.5, abs=0.15)
+    # Cột dự báo không bị sửa, cột định danh không bị đưa vào.
+    for ds in res["imputedDatasets"]:
+        assert [r[1] for r in ds] == [r[1] for r in rows]
+        assert [r[0] for r in ds] == [r[0] for r in rows]
+
+
+def test_mice_single_column_without_predictors_is_rejected():
+    """Một cột không có biến dự báo: m bộ giống hệt nhau, Rubin báo FMI = 0% là kết quả giả."""
+    rows = [["v"], ["1"], [""], ["3"], ["4"], [""], ["6"]]
+    with pytest.raises(ValueError, match="ít nhất 2 cột"):
+        run_mice_imputation(rows, columns=["v"], m=3)
+
+
+def test_mice_single_selected_column_varies_when_predictors_exist():
+    rows = _regression_with_missing_x()
+    res = run_mice_imputation(rows, columns=["x"], m=3, random_state=2)
+    miss = [i for i in range(1, len(rows)) if rows[i][2] == ""]
+    assert miss
+    assert any(res["imputedDatasets"][0][i][2] != res["imputedDatasets"][1][i][2] for i in miss)
+    stat = next(s for s in res["rubinStatistics"] if s["column"] == "x")
+    assert stat["fmi"] > 0
+
