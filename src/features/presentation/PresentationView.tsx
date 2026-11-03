@@ -59,10 +59,13 @@ import {
 } from "@/utils/stats";
 import { safeMax, safeMin, safeMinMax } from "@/utils/math";
 import * as quantisApi from "@/api";
-import { t, aiAnswerLangHint } from "@/i18n";
+import { t, aiAnswerLangHint, getLocale } from "@/i18n";
 import { AIAssistPanel, type AIQuickPrompt } from "@/features/ai";
 import {
   aggregateData,
+  countByCategory,
+  sortChartCategories,
+  compareCategoryLabels,
   type AggregateFunction,
   type AggregateMetrics,
 } from "@/utils/aggregation";
@@ -169,6 +172,25 @@ export function PresentationView({
 
   const activeYAggregation = usesConfigAxes(chartType) ? chartConfig.aggregation : yAggregation;
 
+  // Column typing depends only on the dataset, so it lives in its own memo:
+  // changing X/Y/legend must not rescan every cell of the table.
+  const numericCols = useMemo(() => {
+    if (tab !== "visualization" || !selectedDataset) return [];
+    const rows = getAnalysisRows(selectedDataset);
+    const cols = selectedDataset.columnNames || [];
+    if (rows.length < 2) return [];
+    return cols.filter((c) => {
+      const ci = rows[0].indexOf(c);
+      if (ci < 0) return false;
+      for (let i = 1; i < rows.length; i++) {
+        const v = rows[i][ci];
+        if (v === "") continue;
+        if (Number.isNaN(Number(v))) return false;
+      }
+      return true;
+    });
+  }, [tab, selectedDataset]);
+
   // Chart data is expensive on large tables: each aggregateData pass scans every row
   // (≈45 ms at the documented 50k cap) and the arrays below are built per row. The Chart
   // Inspector calls setChartConfig on every keystroke, so without memoization typing a
@@ -180,9 +202,6 @@ export function PresentationView({
     const cols = selectedDataset.columnNames || [];
     const xCol = chartConfig.xCol;
     const yCol = chartConfig.yCol;
-    const numericCols = rows.length >= 2
-      ? cols.filter((c) => { const ci = rows[0].indexOf(c); const vals = rows.slice(1).map((r) => r[ci]); return vals.every((v) => v === "" || !Number.isNaN(Number(v))); })
-      : [];
     const xIdx = cols.indexOf(xCol);
     const yIdx = cols.indexOf(yCol);
     const isScatter = xCol && yCol && numericCols.includes(xCol) && numericCols.includes(yCol);
@@ -197,7 +216,7 @@ export function PresentationView({
       cols.includes(chartConfig.legendCol) &&
       chartConfig.legendCol !== xCol
     );
-    const barData = !isScatter && xCol && xIdx >= 0 ? (() => { const counts: Record<string, number> = {}; rows.slice(1).forEach((r) => { const v = r[xIdx] ?? ""; counts[v] = (counts[v] || 0) + 1; }); return Object.entries(counts).map(([name, count]) => ({ name, count })).slice(0, 20); })() : [];
+    const barData = !isScatter && xCol && xIdx >= 0 ? countByCategory(rows, xIdx).slice(0, 20) : [];
     const barChartData = (chartType === "bar" || chartType === "barH") && xCol && xIdx >= 0
       ? (yCol && yIdx >= 0 && numericCols.includes(yCol)
           ? aggregateData(rows, {
@@ -212,29 +231,12 @@ export function PresentationView({
               metrics: g.metrics,
               error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
             }))
-          : (() => {
-              const counts: Record<string, number> = {};
-              rows.slice(1).forEach((r) => {
-                const v = r[xIdx] ?? "";
-                counts[v] = (counts[v] || 0) + 1;
-              });
-              let entries = Object.entries(counts).map(([name, count]) => ({ name, count }));
-              const sortMode = chartConfig.sortOrder || "category-asc";
-              if (sortMode === "category-asc") {
-                entries.sort((a, b) =>
-                  a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-                );
-              } else if (sortMode === "category-desc") {
-                entries.sort((a, b) =>
-                  b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" })
-                );
-              } else if (sortMode === "value-asc") {
-                entries.sort((a, b) => a.count - b.count);
-              } else if (sortMode === "value-desc") {
-                entries.sort((a, b) => b.count - a.count);
-              }
-              return entries.slice(0, 30);
-            })())
+          : sortChartCategories(
+              countByCategory(rows, xIdx),
+              (c) => c.name,
+              (c) => c.count,
+              chartConfig.sortOrder || "category-asc"
+            ).slice(0, 30))
       : barData;
     const lineData = rows.length >= 2 && xIdx >= 0 && yIdx >= 0
       ? rows.slice(1).map((r) => ({ x: r[xIdx] ?? "", y: numCell(r[yIdx]) })).filter((d) => !Number.isNaN(d.y))
@@ -272,17 +274,10 @@ export function PresentationView({
                     })
                       .map((g) => ({ name: g.name, value: g.value, metrics: g.metrics }))
                       .filter((d) => Number.isFinite(d.value) && d.value > 0)
-                  : (() => {
-                      const counts: Record<string, number> = {};
-                      rows.slice(1).forEach((r) => {
-                        const v = String(r[xIdx] ?? "").trim();
-                        if (v !== "") counts[v] = (counts[v] || 0) + 1;
-                      });
-                      return Object.entries(counts)
-                        .map(([name, count]) => ({ name, value: count }))
-                        .filter((d) => d.value > 0)
-                        .slice(0, 24);
-                    })())
+                  : countByCategory(rows, xIdx, { trim: true, skipEmpty: true })
+                      .map((c) => ({ name: c.name, value: c.count }))
+                      .filter((d) => d.value > 0)
+                      .slice(0, 24))
               : []))
       : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
 
@@ -312,21 +307,10 @@ export function PresentationView({
 
         const allKeys = new Set<string>();
         countsMap.forEach((m) => m.forEach((_, k) => allKeys.add(k)));
-        const keys = Array.from(allKeys).sort((a, b) =>
-          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-        );
+        const keys = Array.from(allKeys).sort(compareCategoryLabels);
 
         const sortMode = chartConfig.sortOrder || "category-asc";
-        const sortedXOrder = [...xOrder];
-        if (sortMode === "category-asc") {
-          sortedXOrder.sort((a, b) =>
-            a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-          );
-        } else if (sortMode === "category-desc") {
-          sortedXOrder.sort((a, b) =>
-            b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" })
-          );
-        }
+        const sortedXOrder = sortChartCategories(xOrder, (name) => name, () => 0, sortMode);
 
         const barDataList = sortedXOrder.slice(0, 30).map((name) => {
           const m = countsMap.get(name)!;
@@ -442,7 +426,6 @@ export function PresentationView({
     return {
       rows,
       cols,
-      numericCols,
       xIdx,
       yIdx,
       isScatter,
@@ -473,11 +456,11 @@ export function PresentationView({
     pieBinCount,
     pieNumericCol,
     activeYAggregation,
+    numericCols,
   ]);
 
   const rows = vizData?.rows;
   const cols = vizData?.cols;
-  const numericCols = vizData?.numericCols;
   const xCol = chartConfig.xCol;
   const yCol = chartConfig.yCol;
 
@@ -643,13 +626,85 @@ export function PresentationView({
     });
   }, [chartType, showHistogramDensity, histChartData, histDensityCurve, histBins]);
 
+  // Per-chart statistics live in their own memos so typing in the Chart Inspector
+  // (which calls setChartConfig on every keystroke) does not rescan the table.
+  const stackedBarData = useMemo(() => {
+    const rows = vizData?.rows;
+    const cols = vizData?.cols;
+    const xIdx = vizData?.xIdx ?? -1;
+    const yIdx = vizData?.yIdx ?? -1;
+    if (
+      chartType !== "stackedBar" ||
+      !rows || !cols || !chartConfig.xCol || !stackByCol || !chartConfig.yCol ||
+      xIdx < 0 || yIdx < 0 || rows.length < 2
+    ) {
+      return [];
+    }
+    const stackByIdx = cols.indexOf(stackByCol);
+    if (stackByIdx < 0) return [];
+    const xVals = Array.from(new Set(rows.slice(1).map((r) => r[xIdx] ?? "")));
+    const stackVals = Array.from(new Set(rows.slice(1).map((r) => r[stackByIdx] ?? "")));
+    const map: Record<string, Record<string, number>> = {};
+    xVals.forEach((x) => { map[x] = {}; stackVals.forEach((s) => { map[x][s] = 0; }); });
+    rows.slice(1).forEach((r) => {
+      const x = r[xIdx] ?? "";
+      const s = r[stackByIdx] ?? "";
+      const y = numCell(r[yIdx]);
+      if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
+    });
+    return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
+  }, [chartType, vizData, chartConfig.xCol, chartConfig.yCol, stackByCol]);
+
+  const radarData = useMemo(() => {
+    if (chartType !== "radar" || radarNumericCols.length < 2) return [];
+    const rows = vizData?.rows;
+    const cols = vizData?.cols;
+    if (!rows || !cols) return [];
+    const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
+    const groups = radarGroupCol && rows.length >= 2
+      ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? "")))
+      : [t("presentationView.radarAllLabel")];
+    const fullMark = 100;
+    return radarNumericCols.map((col) => {
+      const colIdx = cols.indexOf(col);
+      const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
+      groups.forEach((g) => {
+        const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ?? "") === g);
+        const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
+        entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      });
+      return entry;
+    });
+  }, [chartType, vizData, radarGroupCol, radarNumericCols, getLocale()]);
+
+  const corrResult = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "heatmap" || !rows || rows.length < 2) return null;
+    return computeCorrelationMatrix(rows, heatmapCorrMethod);
+  }, [chartType, vizData, heatmapCorrMethod]);
+
+  const summaryStats = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "summary" || !rows || rows.length < 2) return [];
+    return computeDescriptive(rows);
+  }, [chartType, vizData]);
+
+  const dashboardCorrResult = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "dashboard" || !rows || rows.length < 2) return null;
+    return computeCorrelationMatrix(rows, "pearson");
+  }, [chartType, vizData]);
+
+  const dashboardStats = useMemo(() => {
+    const rows = vizData?.rows;
+    if (chartType !== "dashboard" || !rows || rows.length < 2) return [];
+    return computeDescriptive(rows);
+  }, [chartType, vizData]);
+
   if (tab === "visualization" && selectedDataset) {
     const {
       rows,
       cols,
-      numericCols,
-      xIdx,
-      yIdx,
       isScatter,
       isAggregated,
       hasLegend,
@@ -705,39 +760,6 @@ export function PresentationView({
         </div>
       );
     };
-    const stackByIdx = stackByCol ? cols.indexOf(stackByCol) : -1;
-    const stackedBarData = (chartType === "stackedBar" && xCol && stackByCol && yCol && xIdx >= 0 && yIdx >= 0 && stackByIdx >= 0 && rows.length >= 2) ? (() => {
-      const xVals = Array.from(new Set(rows.slice(1).map((r) => r[xIdx] ??"")));
-      const stackVals = Array.from(new Set(rows.slice(1).map((r) => r[stackByIdx] ??"")));
-      const map: Record<string, Record<string, number>> = {};
-      xVals.forEach((x) => { map[x] = {}; stackVals.forEach((s) => { map[x][s] = 0; }); });
-      rows.slice(1).forEach((r) => {
-        const x = r[xIdx] ??"";
-        const s = r[stackByIdx] ??"";
-        const y = numCell(r[yIdx]);
-        if (!Number.isNaN(y) && map[x] && map[x][s] !== undefined) map[x][s] += y;
-      });
-      return xVals.slice(0, 25).map((name) => ({ name, ...map[name] }));
-    })() : [];
-    const radarGroups = (radarGroupCol && rows.length >= 2) ? Array.from(new Set(rows.slice(1).map((r) => r[cols.indexOf(radarGroupCol)] ?? ""))) : [t("presentationView.radarAllLabel")];
-    const radarData = (chartType === "radar" && radarNumericCols.length >= 2) ? (() => {
-      const groupIdx = radarGroupCol ? cols.indexOf(radarGroupCol) : -1;
-      const fullMark = 100;
-      return radarNumericCols.map((col) => {
-        const colIdx = cols.indexOf(col);
-        const entry: Record<string, number | string> = { subject: col.length > 14 ? col.slice(0, 12) + "…" : col, fullMark };
-        radarGroups.forEach((g) => {
-          const subset = rows.slice(1).filter((r) => groupIdx < 0 || (r[groupIdx] ??"") === g);
-          const vals = subset.map((r) => numCell(r[colIdx])).filter((v) => !Number.isNaN(v));
-          entry[g] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-        });
-        return entry;
-      });
-    })() : [];
-    const corrResult = (chartType === "heatmap" && rows.length >= 2) ? computeCorrelationMatrix(rows, heatmapCorrMethod) : null;
-    const summaryStats = (chartType === "summary" && rows.length >= 2) ? computeDescriptive(rows) : [];
-    const dashboardCorrResult = (chartType === "dashboard" && rows.length >= 2) ? computeCorrelationMatrix(rows, "pearson") : null;
-    const dashboardStats = (chartType === "dashboard" && rows.length >= 2) ? computeDescriptive(rows) : [];
     const multiLineXIdx = chartType === "multiLine" && xCol ? cols.indexOf(xCol) : -1;
     const multiLineData = (chartType === "multiLine" && multiLineXIdx >= 0 && multiLineYCols.length > 0 && rows.length >= 2) ? (() => {
       const yIndices = multiLineYCols.map((c) => cols.indexOf(c)).filter((i) => i >= 0);
