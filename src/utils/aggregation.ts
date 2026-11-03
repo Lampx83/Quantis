@@ -19,8 +19,51 @@ export interface AggregateMetrics {
   min: number;
   max: number;
   se: number; // sai số chuẩn = std / sqrt(count); n < 2 -> 0
-  ci95Lower: number; // mean - 1.96 * se
-  ci95Upper: number; // mean + 1.96 * se
+  ci95Lower: number; // mean - t(0.975, n - 1) * se
+  ci95Upper: number; // mean + t(0.975, n - 1) * se
+}
+
+/**
+ * Two-tailed 97.5% critical values of Student's t for df = 1..30.
+ * Above 30 the normal value (1.96) is close enough for chart error bars.
+ * Using 1.96 for a 2-row group would understate the interval by more than 6×.
+ */
+const T_CRITICAL_975: Record<number, number> = {
+  1: 12.706,
+  2: 4.303,
+  3: 3.182,
+  4: 2.776,
+  5: 2.571,
+  6: 2.447,
+  7: 2.365,
+  8: 2.306,
+  9: 2.262,
+  10: 2.228,
+  11: 2.201,
+  12: 2.179,
+  13: 2.160,
+  14: 2.145,
+  15: 2.131,
+  16: 2.120,
+  17: 2.110,
+  18: 2.101,
+  19: 2.093,
+  20: 2.086,
+  21: 2.080,
+  22: 2.074,
+  23: 2.069,
+  24: 2.064,
+  25: 2.060,
+  26: 2.056,
+  27: 2.052,
+  28: 2.048,
+  29: 2.045,
+  30: 2.042,
+};
+
+/** t critical value for a two-tailed 95% interval with df degrees of freedom. */
+function tCritical95(df: number): number {
+  return T_CRITICAL_975[df] ?? 1.96;
 }
 
 export interface AggregatedGroup {
@@ -200,8 +243,8 @@ export function aggregateData(
       se = std / Math.sqrt(n);
     }
 
-    const ci95Lower = mean - 1.96 * se;
-    const ci95Upper = mean + 1.96 * se;
+    const ci95Lower = mean - tCritical95(n - 1) * se;
+    const ci95Upper = mean + tCritical95(n - 1) * se;
 
     const metrics: AggregateMetrics = {
       mean,

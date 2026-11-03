@@ -812,11 +812,54 @@ describe("PresentationView Component — Aggregation Integration", () => {
   });
 
   describe("Error Bar & Academic Axis Scaling", () => {
+    // Five rows per group: with the t-based CI a 2-row group's lower whisker drops
+    // below zero, so the zero-baseline assertions below need a realistic sample size.
+    const errorBarDataset: Dataset = {
+      id: "ds_error_bar_scale",
+      name: "Survey Scores",
+      rows: 10,
+      columns: 2,
+      columnNames: ["Department", "Score"],
+      preview: [
+        ["Department", "Score"],
+        ["Sales", "11"],
+        ["Sales", "13"],
+        ["Sales", "15"],
+        ["Sales", "17"],
+        ["Sales", "19"],
+        ["Marketing", "31"],
+        ["Marketing", "33"],
+        ["Marketing", "35"],
+        ["Marketing", "37"],
+        ["Marketing", "39"],
+      ],
+      data: [
+        ["Department", "Score"],
+        ["Sales", "11"],
+        ["Sales", "13"],
+        ["Sales", "15"],
+        ["Sales", "17"],
+        ["Sales", "19"],
+        ["Marketing", "31"],
+        ["Marketing", "33"],
+        ["Marketing", "35"],
+        ["Marketing", "37"],
+        ["Marketing", "39"],
+      ],
+      variables: {
+        Department: { name: "Department", label: "Department", type: "string", measure: "nominal", decimals: 0, align: "left" },
+        Score: { name: "Score", label: "Score", type: "numeric", measure: "scale", decimals: 2, align: "right" },
+      },
+      sourceFormat: "csv",
+      createdAt: "2026-10-21T00:00:00Z",
+      updatedAt: "2026-10-21T00:00:00Z",
+    };
+
     it("expands YAxis domain ceiling with headroom on vertical Bar chart with error bars", () => {
       const html = renderToStaticMarkup(
         <PresentationView
           tab="visualization"
-          selectedDataset={sampleDataset}
+          selectedDataset={errorBarDataset}
           chartType="bar"
           setChartType={() => {}}
           initialConfig={{
@@ -828,7 +871,7 @@ describe("PresentationView Component — Aggregation Integration", () => {
         />
       );
 
-      // In sampleDataset: Sales mean = 15, Marketing mean = 35.
+      // In errorBarDataset: Sales mean = 15, Marketing mean = 35 (n = 5 each).
       // With CI95 error bars, domain ceiling must be strictly greater than max bar value (35).
       expect(html).toContain('data-testid="y-axis"');
       const domainMatch = html.match(/data-testid="y-axis"[^>]*data-domain="([^"]+)"/);
@@ -872,7 +915,7 @@ describe("PresentationView Component — Aggregation Integration", () => {
       const html = renderToStaticMarkup(
         <PresentationView
           tab="visualization"
-          selectedDataset={sampleDataset}
+          selectedDataset={errorBarDataset}
           chartType="barH"
           setChartType={() => {}}
           initialConfig={{

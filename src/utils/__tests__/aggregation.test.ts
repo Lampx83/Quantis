@@ -91,9 +91,11 @@ describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
     expect(marketing!.value).toBeCloseTo(10, 6);
   });
 
-  it("computes Standard Error (SE) and 95% Confidence Interval (CI)", () => {
+  it("computes Standard Error (SE) and t-based 95% Confidence Interval (CI)", () => {
     // Sales: [10, 20] -> std = sqrt(50), n = 2 -> SE = sqrt(50) / sqrt(2) = 5
-    // 95% CI = mean +- 1.96 * SE = 15 +- 9.8 = [5.2, 24.8]
+    // df = 1 -> t(0.975, 1) = 12.706 -> CI = 15 +- 12.706 * 5 = [-48.53, 78.53]
+    // Marketing: [30, 40, 50] -> std = 10, n = 3 -> SE = 10 / sqrt(3)
+    // df = 2 -> t(0.975, 2) = 4.303 -> CI = 40 +- 4.303 * (10 / sqrt(3))
     const result = aggregateData(sampleRows, {
       groupByCols: ["Department"],
       measureCol: "Score",
@@ -103,8 +105,14 @@ describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
     const sales = result.find((g) => g.name === "Sales");
     expect(sales).toBeDefined();
     expect(sales!.metrics.se).toBeCloseTo(5, 6);
-    expect(sales!.metrics.ci95Lower).toBeCloseTo(5.2, 6);
-    expect(sales!.metrics.ci95Upper).toBeCloseTo(24.8, 6);
+    expect(sales!.metrics.ci95Lower).toBeCloseTo(15 - 12.706 * 5, 6);
+    expect(sales!.metrics.ci95Upper).toBeCloseTo(15 + 12.706 * 5, 6);
+
+    const marketing = result.find((g) => g.name === "Marketing");
+    expect(marketing).toBeDefined();
+    expect(marketing!.metrics.se).toBeCloseTo(10 / Math.sqrt(3), 6);
+    expect(marketing!.metrics.ci95Lower).toBeCloseTo(40 - 4.303 * (10 / Math.sqrt(3)), 6);
+    expect(marketing!.metrics.ci95Upper).toBeCloseTo(40 + 4.303 * (10 / Math.sqrt(3)), 6);
   });
 
   it("skips empty cells and NaN values and reflects valid count only", () => {
