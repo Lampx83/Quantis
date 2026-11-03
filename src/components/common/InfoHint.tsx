@@ -11,7 +11,8 @@ export type GlossaryTerm =
   | "cronbachAlpha" | "correctedItemTotal" | "alphaIfDeleted" | "kmo" | "bartlett" | "efa"
   | "pValue" | "coefficient" | "r2" | "vif" | "ttest" | "anova" | "cohensD" | "correlationMatrix"
   | "panelData" | "pooledOls" | "fixedEffects" | "randomEffects" | "hausman" | "withinBetween"
-  | "zScore" | "iqr" | "nonNumeric";
+  | "zScore" | "iqr" | "nonNumeric"
+  | "mice" | "miceM" | "miceMaxIter";
 
 /** Dải thuật ngữ: «Giải thích thuật ngữ: p-value (i) · t-test (i) …» — đặt ngay dưới tiêu đề của một chức năng. */
 export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {
@@ -28,13 +29,23 @@ export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {
   );
 }
 
-export function InfoHint({ term, className = "" }: { term: GlossaryTerm; className?: string }) {
+export function InfoHint({
+  term,
+  title: titleProp,
+  text: textProp,
+  className = "",
+}: {
+  term?: GlossaryTerm;
+  title?: string;
+  text?: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const title = t(`glossary.${term}.title`);
-  const text = t(`glossary.${term}.text`);
+  const title = titleProp ?? (term ? t(`glossary.${term}.title`) : "");
+  const text = textProp ?? (term ? t(`glossary.${term}.text`) : "");
 
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -71,11 +82,12 @@ export function InfoHint({ term, className = "" }: { term: GlossaryTerm; classNa
       <button
         ref={btnRef}
         type="button"
-        data-testid={`info-hint-${term}`}
+        data-testid={term ? `info-hint-${term}` : undefined}
         aria-label={`${t("glossary.ariaPrefix")}: ${title}`}
         aria-expanded={open}
         title={title}
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
           setOpen((o) => !o);
         }}

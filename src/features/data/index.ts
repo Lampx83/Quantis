@@ -7,3 +7,4 @@ export * from "./grid/VariableViewGrid";
 export * from "./grid/GridContextMenu";
 export * from "./grid/ValueLabelsModal";
 export * from "./grid/MissingValuesModal";
+export * from "./grid/BundleNavigationBar";

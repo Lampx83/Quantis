@@ -318,6 +318,11 @@ export function AppSidebar() {
                                   {sourceLabel}
                                 </span>
                               )}
+                              {d.imputationMeta && (
+                                <span className="rounded-full border border-sky-300 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:border-sky-700 dark:text-sky-300">
+                                  {t("mi.badge", { m: d.imputationMeta.m })}
+                                </span>
+                              )}
                             </span>
                           </button>
                           <button

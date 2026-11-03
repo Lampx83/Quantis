@@ -71,6 +71,9 @@ class MiceImputeBody(BaseModel):
     columns: list[str] | None = None
     variables: dict[str, Any] | None = None
     maxIter: int | None = 10
+    m: int | None = 5
+    randomState: int | None = None
+    random_state: int | None = 42
 
 
 class RowsBody(BaseModel):
@@ -129,9 +132,11 @@ class MancovaBody(BaseModel):
 
 
 class OLSBody(BaseModel):
-    rows: list[list[str]]
+    rows: list[list[Any]] = []
     yCol: str
     xCols: list[str]
+    imputed_datasets: list[list[list[Any]]] | None = None
+    imputedDatasets: list[list[list[Any]]] | None = None
 
 
 class PanelBody(BaseModel):
@@ -545,9 +550,12 @@ async def analyze_kruskal(body: AnovaBody):
 
 
 @router.post("/ols")
-async def analyze_ols(body: OLSBody):
+def analyze_ols(body: OLSBody):
     try:
-        result = run_ols(body.rows, body.yCol, body.xCols)
+        imputed_data = body.imputed_datasets if body.imputed_datasets is not None else body.imputedDatasets
+        if imputed_data is not None and len(imputed_data) > 20:
+            raise HTTPException(status_code=400, detail="Tối đa 20 bộ dữ liệu điền khuyết")
+        result = run_ols(body.rows, body.yCol, body.xCols, imputed_datasets=imputed_data)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
         return {"result": result}
@@ -1189,14 +1197,18 @@ async def analyze_ztest_two_means(body: ZTestTwoMeansBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# def thường (không async): FastAPI chạy trong threadpool, MICE lâu không chặn các yêu cầu khác.
 @router.post("/impute-mice")
-async def analyze_impute_mice(body: MiceImputeBody):
+def analyze_impute_mice(body: MiceImputeBody):
     try:
+        rand_seed = body.randomState if body.randomState is not None else (body.random_state if body.random_state is not None else 42)
         result = run_mice_imputation(
             rows=body.rows,
             columns=body.columns,
             variables=body.variables,
             max_iter=body.maxIter if body.maxIter is not None else 10,
+            m=body.m if body.m is not None else 5,
+            random_state=rand_seed,
         )
         if result is None:
             raise HTTPException(status_code=400, detail="Không thể thực hiện nội suy MICE")
