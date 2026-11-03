@@ -584,7 +584,8 @@ export async function analyzeOLS(
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      body: JSON.stringify({ rows, yCol, xCols, imputedDatasets }),
+      // Có bộ điền khuyết thì backend không dùng rows: không gửi thêm một bản đầy đủ của bảng.
+      body: JSON.stringify({ rows: imputedDatasets?.length ? [] : rows, yCol, xCols, imputedDatasets }),
     });
     if (!res.ok) return null;
     const json = await res.json();

@@ -356,6 +356,11 @@ export function HotDeckLoadingBanner({ onCancel }: { onCancel: () => void }) {
  * Chuyển đổi m bảng dữ liệu đã điền (imputedDatasets) thành cấu trúc Sparse Delta sparsePatches.
  * Chỉ lưu các ô ban đầu bị khuyết (hoặc khớp mã khuyết người dùng khai báo).
  */
+/** Chuỗi mà backend MICE coi là khuyết (run_mice_imputation); phải khớp để ô đó có patch ở mọi bộ. */
+const MICE_MISSING_TOKENS = new Set(["nan", "NaN", "None", "<NA>", "NA", "null"]);
+
+const EMPTY_ROWS: string[][] = [];
+
 export function convertSparsePatches(
   originalRows: string[][],
   imputedDatasets: string[][][],
@@ -377,7 +382,7 @@ export function convertSparsePatches(
 
     for (let r = 1; r < originalRows.length; r++) {
       const origVal = originalRows[r][colIdx];
-      if (isMissingValue(origVal, meta)) {
+      if (isMissingValue(origVal, meta) || MICE_MISSING_TOKENS.has(String(origVal).trim())) {
         const values: string[] = [];
         for (let i = 0; i < m; i++) {
           values.push(imputedDatasets[i]?.[r]?.[colIdx] ?? "");
@@ -571,6 +576,43 @@ export function TransformTab({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showTransformChoiceModal, replaceConfirm, invalidateConfirm]);
 
+  // Mọi hook phải đứng trước return sớm bên dưới: chọn hoặc xoá dataset sẽ đổi nhánh render,
+  // hook nằm sau return làm React báo "Rendered more/fewer hooks" và sập cả ứng dụng.
+  const dsColumnNames = selectedDs?.columnNames;
+  const dsVariables = selectedDs?.variables;
+  const rowsForCounts = selectedDs ? getDataRows(selectedDs) : EMPTY_ROWS;
+
+  const numericCols = useMemo(() => {
+    return (dsColumnNames ?? []).filter((c) => {
+      const meta = dsVariables?.[c];
+      return meta ? meta.type === "numeric" : true;
+    });
+  }, [dsColumnNames, dsVariables]);
+
+  // Missing values count per column
+  const missingCountsPerCol = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const headerRow = rowsForCounts[0] || [];
+    for (const c of dsColumnNames ?? []) {
+      const ci = headerRow.indexOf(c);
+      if (ci === -1) continue;
+      let cnt = 0;
+      const meta = dsVariables?.[c];
+      for (let r = 1; r < rowsForCounts.length; r++) {
+        if (isMissingValue(rowsForCounts[r][ci], meta)) cnt++;
+      }
+      counts[c] = cnt;
+    }
+    return counts;
+  }, [dsColumnNames, rowsForCounts, dsVariables]);
+
+  const filteredCols = useMemo(() => {
+    const all = dsColumnNames ?? [];
+    if (!colSearchQuery.trim()) return all;
+    const q = colSearchQuery.toLowerCase().trim();
+    return all.filter((c) => c.toLowerCase().includes(q));
+  }, [dsColumnNames, colSearchQuery]);
+
   const addRecodeRule = () => setRecodeRules((prev) => [...prev, { type: "value", from: "", to: "" }]);
   const removeRecodeRule = (i: number) => setRecodeRules((prev) => prev.filter((_, j) => j !== i));
   const updateRecodeRule = (i: number, patch: Partial<RecodeRule>) =>
@@ -616,31 +658,6 @@ export function TransformTab({
     selectedDs.data[0]?.[0] === selectedDs.columnNames?.[0] &&
     selectedDs.data.length >= (selectedDs.rows ?? 0);
   const aiContextTransform = `Bộ dữ liệu: ${selectedDs.name}. Số hàng: ${dataRows.length}, số cột: ${cols.length}. Các cột: ${cols.join(", ")}. Công cụ hỗ trợ: bỏ missing, điền mean/median/mode/hot-deck/MICE, chuẩn hóa z-score/min-max, lọc, sắp xếp, recode.`;
-
-  // Numeric column check
-  const numericCols = useMemo(() => {
-    return cols.filter((c) => {
-      const meta = selectedDs.variables?.[c];
-      return meta ? meta.type === "numeric" : true;
-    });
-  }, [cols, selectedDs.variables]);
-
-  // Missing values count per column
-  const missingCountsPerCol = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const c of cols) {
-      const ci = header.indexOf(c);
-      if (ci === -1) continue;
-      let cnt = 0;
-      const meta = selectedDs.variables?.[c];
-      for (let r = 1; r < dataRows.length; r++) {
-        const val = dataRows[r][ci];
-        if (isMissingValue(val, meta)) cnt++;
-      }
-      counts[c] = cnt;
-    }
-    return counts;
-  }, [cols, header, dataRows, selectedDs.variables]);
 
   const fillStrategy = transformAction === "fill_mean" ? "mean" : transformAction === "fill_median" ? "median" : null;
   const modeFallbackCols = fillStrategy
@@ -834,9 +851,11 @@ export function TransformTab({
         const dsId = selectedDs.id;
         setIsMiceLoading(true);
         setMiceError(null);
+        // Chạy lại MICE trên một bundle phải đi từ bảng gốc còn ô khuyết, không phải từ bộ đã điền đang xem.
+        const miceBaseRows = selectedDs.imputationMeta?.originalRows ?? dataRows;
         try {
           const res = await analyzeMiceImputation(
-            dataRows,
+            miceBaseRows,
             columnsToApply,
             selectedDs.variables,
             clampMiceIterations(miceMaxIter),
@@ -859,7 +878,7 @@ export function TransformTab({
           if (res.imputedDatasets && res.imputedDatasets.length > 0) {
             const mCount = res.m ?? res.imputedDatasets.length;
             const patches = convertSparsePatches(
-              dataRows,
+              miceBaseRows,
               res.imputedDatasets,
               res.imputedColumns || columnsToApply,
               selectedDs.variables
@@ -875,7 +894,7 @@ export function TransformTab({
               imputedColumns: res.imputedColumns || columnsToApply,
               rubinStatistics: res.rubinStatistics,
               sparsePatches: patches,
-              originalRows: dataRows,
+              originalRows: miceBaseRows,
             };
           }
         } catch (err: unknown) {
@@ -1062,12 +1081,6 @@ export function TransformTab({
 
   const currentActionMeta = ACTION_DEFINITIONS.find((a) => a.id === transformAction) ?? ACTION_DEFINITIONS[0];
   const CurrentIcon = currentActionMeta.icon;
-
-  const filteredCols = useMemo(() => {
-    if (!colSearchQuery.trim()) return cols;
-    const q = colSearchQuery.toLowerCase().trim();
-    return cols.filter((c) => c.toLowerCase().includes(q));
-  }, [cols, colSearchQuery]);
 
   const usesMultiColumns = [
     "drop_missing",
@@ -1479,8 +1492,9 @@ export function TransformTab({
                       type="number"
                       min={MICE_MIN_M}
                       max={MICE_MAX_M}
-                      value={miceM}
-                      onChange={(e) => setMiceM(clampMiceM(parseInt(e.target.value, 10), 5))}
+                      value={Number.isNaN(miceM) ? "" : miceM}
+                      onChange={(e) => setMiceM(parseInt(e.target.value, 10))}
+                      onBlur={() => setMiceM((v) => clampMiceM(v, 5))}
                       className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs sm:text-sm w-32 font-mono text-neutral-900 dark:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                     />
                   </div>
@@ -1495,8 +1509,9 @@ export function TransformTab({
                       type="number"
                       min={MICE_MIN_ITER}
                       max={MICE_MAX_ITER}
-                      value={miceMaxIter}
-                      onChange={(e) => setMiceMaxIter(clampMiceIterations(parseInt(e.target.value, 10), 10))}
+                      value={Number.isNaN(miceMaxIter) ? "" : miceMaxIter}
+                      onChange={(e) => setMiceMaxIter(parseInt(e.target.value, 10))}
+                      onBlur={() => setMiceMaxIter((v) => clampMiceIterations(v, 10))}
                       className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs sm:text-sm w-32 font-mono text-neutral-900 dark:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
                     />
                   </div>

@@ -108,6 +108,19 @@ export function MainContent() {
           />
         )}
 
+        {mainSection === "analysis" && (!selectedWorkflowId || selectedStep) && selectedDataset?.imputationMeta && analysisTab !== "regression" && (
+          <p
+            role="status"
+            data-testid="analysis-mi-bundle-note"
+            className="mb-3 rounded-md border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+          >
+            {t("analysisView.miBundleNote", {
+              m: selectedDataset.imputationMeta.m,
+              active: selectedDataset.imputationMeta.activeImputationIndex,
+            })}
+          </p>
+        )}
+
         {mainSection === "analysis" && (!selectedWorkflowId || selectedStep) && (
           <AnalysisView
             tab={analysisTab}
