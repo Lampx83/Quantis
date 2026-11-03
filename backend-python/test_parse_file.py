@@ -6,7 +6,12 @@ import os
 import tempfile
 import pandas as pd
 import pyreadstat
-from parse_file import parse_file, parse_sav, parse_dta
+import pytest
+from parse_file import parse_file, parse_sav, parse_dta, parse_sas
+
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
+DTA_FIXTURE_PATH = os.path.join(FIXTURES_DIR, "missing_test.dta")
+SAS_FIXTURE_PATH = os.path.join(FIXTURES_DIR, "missing_test.sas7bdat")
 
 def test_sav_metadata_extraction():
     # Create sample DataFrame
@@ -181,8 +186,122 @@ def test_excel_integer_scale_decimals():
     assert variables["w"]["decimals"] == 2
 
 
+
+
+@pytest.mark.skipif(not os.path.exists(DTA_FIXTURE_PATH), reason="Stata fixture file missing")
+def test_stata_tagged_missing_extraction():
+    """Kiểm thử đọc tệp Stata (.dta) thật chứa mã khuyết tagged .a–.z."""
+    with open(DTA_FIXTURE_PATH, "rb") as f:
+        file_bytes = f.read()
+
+    # 1. Kiểm thử parse_dta trực tiếp
+    rows_direct, vars_direct = parse_dta(io.BytesIO(file_bytes))
+    assert len(rows_direct) == 2  # header + 1 data row
+    assert rows_direct[0] == ["var1", "var2", "var3", "var4", "var5", "var6", "var7", "var8", "var9"]
+    # Tagged missing được giữ nguyên dạng ký tự thường ('a'–'z'), ô khuyết thường thành chuỗi rỗng
+    assert rows_direct[1] == ["a", "b", "c", "x", "y", "z", "", "", "1"]
+    assert vars_direct["var1"]["missingValues"] == ["a"]
+    assert vars_direct["var1"]["valueLabels"] == {"a": "missing"}
+    assert vars_direct["var2"]["missingValues"] == ["b"]
+    assert vars_direct["var6"]["missingValues"] == ["z"]
+
+    # 2. Kiểm thử thông qua parse_file
+    rows, fmt, variables = parse_file(file_bytes, "missing_test.dta")
+    assert fmt == "dta"
+    assert rows == rows_direct
+
+    for i, tag in enumerate(["a", "b", "c", "x", "y", "z"], start=1):
+        var_name = f"var{i}"
+        assert var_name in variables
+        var_meta = variables[var_name]
+        assert var_meta["type"] == "numeric"
+        assert var_meta["missingValues"] == [tag]
+
+    # var7 (._ không hỗ trợ trong Stata) và var8 (.) là khuyết hệ thống, không có user missing
+    assert variables["var7"]["missingValues"] == []
+    assert variables["var8"]["missingValues"] == []
+    # var9 là giá trị hợp lệ 1.0
+    assert variables["var9"]["missingValues"] == []
+
+
+@pytest.mark.skipif(not os.path.exists(SAS_FIXTURE_PATH), reason="SAS fixture file missing")
+def test_sas_tagged_missing_extraction():
+    """Kiểm thử đọc tệp SAS (.sas7bdat) thật chứa mã khuyết tagged .A–.Z và ._."""
+    with open(SAS_FIXTURE_PATH, "rb") as f:
+        file_bytes = f.read()
+
+    # 1. Kiểm thử parse_sas trực tiếp
+    rows_direct, vars_direct = parse_sas(io.BytesIO(file_bytes))
+    assert len(rows_direct) == 2  # header + 1 data row
+    assert rows_direct[0] == ["var1", "var2", "var3", "var4", "var5", "var6", "var7", "var8", "var9"]
+    # SAS tagged missing được trả về dạng ký tự hoa ('A'–'Z') và gạch dưới '_'
+    assert rows_direct[1] == ["A", "B", "C", "X", "Y", "Z", "_", "", "1"]
+    assert vars_direct["var1"]["missingValues"] == ["A"]
+    assert vars_direct["var7"]["missingValues"] == ["_"]
+
+    # 2. Kiểm thử thông qua parse_file
+    rows, fmt, variables = parse_file(file_bytes, "missing_test.sas7bdat")
+    assert fmt == "sas7bdat"
+    assert rows == rows_direct
+
+    tags = [("var1", "A"), ("var2", "B"), ("var3", "C"), ("var4", "X"), ("var5", "Y"), ("var6", "Z"), ("var7", "_")]
+    for var_name, tag in tags:
+        assert var_name in variables
+        var_meta = variables[var_name]
+        assert var_meta["type"] == "numeric"
+        assert var_meta["missingValues"] == [tag]
+
+    assert variables["var8"]["missingValues"] == []
+    assert variables["var9"]["missingValues"] == []
+
+
+@pytest.mark.skipif(
+    not (os.path.exists(DTA_FIXTURE_PATH) and os.path.exists(SAS_FIXTURE_PATH)),
+    reason="Stata hoặc SAS fixture file không tồn tại",
+)
+def test_api_endpoint_stata_and_sas():
+    """Kiểm thử endpoint /parse-file tải lên tệp Stata và SAS có mã khuyết tagged."""
+    from fastapi.testclient import TestClient
+    from main import app
+
+    client = TestClient(app)
+
+    # Test Stata upload
+    with open(DTA_FIXTURE_PATH, "rb") as f:
+        dta_bytes = f.read()
+    res_dta = client.post(
+        "/parse-file",
+        files={"file": ("missing_test.dta", dta_bytes, "application/x-stata")},
+    )
+    assert res_dta.status_code == 200
+    data_dta = res_dta.json()
+    assert data_dta["format"] == "dta"
+    assert data_dta["rows"][1][0] == "a"
+    assert data_dta["variables"]["var1"]["missingValues"] == ["a"]
+
+    # Test SAS upload
+    with open(SAS_FIXTURE_PATH, "rb") as f:
+        sas_bytes = f.read()
+    res_sas = client.post(
+        "/parse-file",
+        files={"file": ("missing_test.sas7bdat", sas_bytes, "application/x-sas-data")},
+    )
+    assert res_sas.status_code == 200
+    data_sas = res_sas.json()
+    assert data_sas["format"] == "sas7bdat"
+    assert data_sas["rows"][1][0] == "A"
+    assert data_sas["variables"]["var1"]["missingValues"] == ["A"]
+    assert data_sas["variables"]["var7"]["missingValues"] == ["_"]
+
+
 if __name__ == "__main__":
     test_sav_metadata_extraction()
     test_excel_fallback()
     test_api_endpoint()
+    if os.path.exists(DTA_FIXTURE_PATH):
+        test_stata_tagged_missing_extraction()
+    if os.path.exists(SAS_FIXTURE_PATH):
+        test_sas_tagged_missing_extraction()
+    if os.path.exists(DTA_FIXTURE_PATH) and os.path.exists(SAS_FIXTURE_PATH):
+        test_api_endpoint_stata_and_sas()
     print("All python tests passed!")
