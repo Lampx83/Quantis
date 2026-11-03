@@ -1,4 +1,3 @@
-import React from "react";
 import { X } from "lucide-react";
 import { useUIStore, useWorkflowStore, useDataStore } from "@/stores";
 import { getDemoWorkflowTemplates } from "@/sample-data";

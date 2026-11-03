@@ -49,7 +49,7 @@ import {
   MICE_MAX_M,
   type MiceImputationResponse,
 } from "@/api";
-import { ensureDatasetMetadata, isMissingValue } from "@/utils/metadata";
+import { ensureDatasetMetadata, inferVariableMetadata, isMissingValue } from "@/utils/metadata";
 import { runHotDeckImputation } from "@/utils/imputation-worker-client";
 import {
   renameColumn,
@@ -58,8 +58,12 @@ import {
   logTransform,
   removeOutliersIQR,
   removeDuplicates,
+  applyRecode,
   type LogKind,
   type PrepResult,
+  type RecodeConfig,
+  type RecodeRule,
+  type RecodeElseAction,
 } from "@/utils/dataPrep";
 
 type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
@@ -415,6 +419,15 @@ export interface TransformTabProps {
     stats?: MiceImputationResponse["statistics"];
     rubinStats?: RubinColumnStatistic[];
   } | null;
+  initialComputeName?: string;
+  initialComputeFormula?: string;
+  initialRecodeCol?: string;
+  initialRecodeTargetMode?: "same" | "different";
+  initialRecodeNewColName?: string;
+  initialRecodeRules?: RecodeRule[];
+  initialRecodeElseEnabled?: boolean;
+  initialRecodeElseAction?: RecodeElseAction;
+  initialRecodeElseValue?: string;
 }
 
 export function TransformTab({
@@ -431,6 +444,15 @@ export function TransformTab({
   initialReplaceConfirm = false,
   initialInvalidateConfirm = false,
   initialLastTransformResult,
+  initialComputeName = "",
+  initialComputeFormula = "",
+  initialRecodeCol = "",
+  initialRecodeTargetMode = "same",
+  initialRecodeNewColName = "",
+  initialRecodeRules = [{ type: "value", from: "", to: "" }],
+  initialRecodeElseEnabled = false,
+  initialRecodeElseAction = "copy",
+  initialRecodeElseValue = "",
 }: TransformTabProps) {
   const [transformCol] = useState("");
   const [transformColsMultiple, setTransformColsMultiple] = useState<string[]>(initialColsMultiple);
@@ -488,8 +510,8 @@ export function TransformTab({
 
   const [renameFrom, setRenameFrom] = useState("");
   const [renameTo, setRenameTo] = useState("");
-  const [computeName, setComputeName] = useState("");
-  const [computeFormula, setComputeFormula] = useState("");
+  const [computeName, setComputeName] = useState(initialComputeName);
+  const [computeFormula, setComputeFormula] = useState(initialComputeFormula);
   const [logKind, setLogKind] = useState<LogKind>("ln");
   const [iqrK, setIqrK] = useState("1.5");
   const [prepNote, setPrepNote] = useState<{ ok: boolean; text: string } | null>(null);
@@ -498,8 +520,13 @@ export function TransformTab({
   const [filterValue, setFilterValue] = useState("");
   const [sortCol, setSortCol] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [recodeCol, setRecodeCol] = useState("");
-  const [recodeRules, setRecodeRules] = useState<{ from: string; to: string }[]>([{ from: "", to: "" }]);
+  const [recodeCol, setRecodeCol] = useState(initialRecodeCol);
+  const [recodeTargetMode, setRecodeTargetMode] = useState<"same" | "different">(initialRecodeTargetMode);
+  const [recodeNewColName, setRecodeNewColName] = useState(initialRecodeNewColName);
+  const [recodeRules, setRecodeRules] = useState<RecodeRule[]>(initialRecodeRules);
+  const [recodeElseEnabled, setRecodeElseEnabled] = useState(initialRecodeElseEnabled);
+  const [recodeElseAction, setRecodeElseAction] = useState<RecodeElseAction>(initialRecodeElseAction);
+  const [recodeElseValue, setRecodeElseValue] = useState(initialRecodeElseValue);
   const [miceM, setMiceM] = useState<number>(clampMiceM(initialMiceM, 5));
   const [miceMaxIter, setMiceMaxIter] = useState<number>(clampMiceIterations(initialMiceMaxIter, 10));
   const [isMiceLoading, setIsMiceLoading] = useState<boolean>(initialIsMiceLoading);
@@ -586,6 +613,23 @@ export function TransformTab({
     return all.filter((c) => c.toLowerCase().includes(q));
   }, [dsColumnNames, colSearchQuery]);
 
+  const addRecodeRule = () => setRecodeRules((prev) => [...prev, { type: "value", from: "", to: "" }]);
+  const removeRecodeRule = (i: number) => setRecodeRules((prev) => prev.filter((_, j) => j !== i));
+  const updateRecodeRule = (i: number, patch: Partial<RecodeRule>) =>
+    setRecodeRules((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  /** Cấu hình recode từ form — dùng chung cho bước kiểm tra trước và bước áp dụng. */
+  const recodeConfig = (): RecodeConfig => ({
+    sourceCol: recodeCol,
+    targetMode: recodeTargetMode,
+    targetCol: recodeNewColName,
+    rules: recodeRules,
+    elseRule: {
+      enabled: recodeElseEnabled,
+      action: recodeElseAction,
+      customValue: recodeElseValue,
+    },
+  });
+
   if (!selectedDs) {
     return (
       <div className="w-full max-w-full p-6 text-center">
@@ -643,6 +687,12 @@ export function TransformTab({
   const requestApply = () => {
     if ((PREP_ACTIONS as string[]).includes(transformAction)) {
       const r = runPrep(transformAction as PrepAction);
+      if (r.error) {
+        setPrepNote({ ok: false, text: r.error });
+        return;
+      }
+    } else if (transformAction === "recode") {
+      const r = applyRecode(dataRows, recodeConfig());
       if (r.error) {
         setPrepNote({ ok: false, text: r.error });
         return;
@@ -730,14 +780,19 @@ export function TransformTab({
       newRows = [header, ...sorted];
     } else if (transformAction === "recode") {
       if (!recodeCol || header.indexOf(recodeCol) === -1) return;
-      const ci = header.indexOf(recodeCol);
-      const map = Object.fromEntries(recodeRules.filter((r) => r.from.trim() !== "").map((r) => [r.from.trim(), r.to.trim()]));
-      newRows = [header, ...dataRows.slice(1).map((r) => {
-        const out = [...r];
-        const v = (r[ci] ?? "").toString().trim();
-        out[ci] = map[v] !== undefined ? map[v] : v;
-        return out;
-      })];
+      const r = applyRecode(dataRows, recodeConfig());
+      if (r.error) {
+        setPrepNote({ ok: false, text: r.error });
+        return;
+      }
+      newRows = r.rows;
+      const recodedCount = r.stats?.recoded ?? 0;
+      const totalCount = r.stats?.total ?? dataRows.length - 1;
+      setPrepNote({
+        ok: true,
+        text: t("transformTab.resultRecode", { recoded: recodedCount, total: totalCount }),
+      });
+      prepSuffix = t("transformTab.suffixRecode");
     } else {
       const columnsToApply = transformColsMultiple.length > 0 ? transformColsMultiple : (transformCol ? [transformCol] : []);
       if (columnsToApply.length === 0 || columnsToApply.some((c) => header.indexOf(c) === -1)) return;
@@ -953,9 +1008,30 @@ export function TransformTab({
           name: computeName,
           type: "numeric",
           measure: "scale",
-          label: computeFormula,
+          label: "",
           decimals: 2,
           align: "right",
+        };
+      } else if (transformAction === "recode" && recodeTargetMode === "different" && recodeNewColName.trim()) {
+        const targetName = recodeNewColName.trim();
+        const targetColIdx = newHeader.indexOf(targetName);
+        const colValues = newRows.slice(1).map((row) => (targetColIdx >= 0 ? row[targetColIdx] : row[row.length - 1]) ?? "");
+        baseVariables[targetName] = {
+          ...inferVariableMetadata(targetName, colValues),
+          name: targetName,
+        };
+      } else if (transformAction === "recode" && recodeTargetMode === "same" && recodeCol) {
+        const recodeColIdx = newHeader.indexOf(recodeCol);
+        const colValues = newRows.slice(1).map((row) => row[recodeColIdx] ?? "");
+        // Chỉ suy lại kiểu dữ liệu: nhãn biến, nhãn giá trị và mã khuyết do người dùng khai báo phải giữ nguyên,
+        // nếu không mã khuyết (vd. 99) sẽ bị tính như giá trị thật ở mọi thống kê sau đó.
+        const inferred = inferVariableMetadata(recodeCol, colValues);
+        const prev = baseVariables[recodeCol];
+        baseVariables[recodeCol] = {
+          ...prev,
+          type: inferred.type,
+          decimals: inferred.decimals,
+          measure: prev && prev.type === inferred.type ? prev.measure : inferred.measure,
         };
       }
     }
@@ -1003,12 +1079,6 @@ export function TransformTab({
     }
   };
 
-  const addRecodeRule = () => setRecodeRules((prev) => [...prev, { from: "", to: "" }]);
-  const setRecodeRule = (i: number, field: "from" | "to", value: string) =>
-    setRecodeRules((prev) => prev.map((r, j) => (j === i ? { ...r, [field]: value } : r)));
-  const removeRecodeRule = (i: number) =>
-    setRecodeRules((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : [{ from: "", to: "" }]));
-
   const currentActionMeta = ACTION_DEFINITIONS.find((a) => a.id === transformAction) ?? ACTION_DEFINITIONS[0];
   const CurrentIcon = currentActionMeta.icon;
 
@@ -1048,7 +1118,11 @@ export function TransformTab({
     ].includes(transformAction) &&
       transformColsMultiple.length === 0) ||
     (transformAction === "rename" && (!renameFrom || !renameTo.trim())) ||
-    (transformAction === "compute" && (!computeName.trim() || !computeFormula.trim()));
+    (transformAction === "compute" && (!computeName.trim() || !computeFormula.trim())) ||
+    (transformAction === "recode" &&
+      (!recodeCol ||
+        (recodeTargetMode === "different" &&
+          (!recodeNewColName.trim() || header.includes(recodeNewColName.trim())))));
 
   const renderActionRow = (act: ActionDefinition) => {
     const isSelected = transformAction === act.id;
@@ -1765,24 +1839,81 @@ export function TransformTab({
             {/* Recode Values */}
             {transformAction === "recode" && (
               <div className="pt-3 border-t border-neutral-200 dark:border-neutral-800 space-y-3">
-                <div className="max-w-xs">
-                  <label htmlFor="transform-recode-col" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                    {t("transformTab.recodeColumnLabel")}
-                  </label>
-                  <select
-                    id="transform-recode-col"
-                    name="recodeCol"
-                    value={recodeCol}
-                    onChange={(e) => setRecodeCol(e.target.value)}
-                    className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
-                  >
-                    <option value="">{t("transformTab.selectPlaceholder")}</option>
-                    {cols.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                <div className="flex flex-wrap gap-4 items-start">
+                  <div className="max-w-xs">
+                    <label htmlFor="transform-recode-col" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                      {t("transformTab.recodeColumnLabel")}
+                    </label>
+                    <select
+                      id="transform-recode-col"
+                      name="recodeCol"
+                      value={recodeCol}
+                      onChange={(e) => setRecodeCol(e.target.value)}
+                      className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    >
+                      <option value="">{t("transformTab.selectPlaceholder")}</option>
+                      {cols.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <fieldset>
+                    <legend className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                      {t("transformTab.recodeTargetMode")}
+                    </legend>
+                    <div className="flex items-center gap-4 py-1.5">
+                      <label className="inline-flex items-center gap-1.5 text-xs sm:text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name="recodeTargetMode"
+                          value="same"
+                          checked={recodeTargetMode === "same"}
+                          onChange={() => setRecodeTargetMode("same")}
+                        />
+                        <span>{t("transformTab.recodeTargetSame")}</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 text-xs sm:text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name="recodeTargetMode"
+                          value="different"
+                          checked={recodeTargetMode === "different"}
+                          onChange={() => setRecodeTargetMode("different")}
+                        />
+                        <span>{t("transformTab.recodeTargetDifferent")}</span>
+                      </label>
+                    </div>
+                  </fieldset>
+
+                  {recodeTargetMode === "different" && (
+                    <div>
+                      <label htmlFor="transform-recode-new-col" className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                        {t("transformTab.recodeNewColLabel")}
+                      </label>
+                      <input
+                        id="transform-recode-new-col"
+                        type="text"
+                        value={recodeNewColName}
+                        onChange={(e) => setRecodeNewColName(e.target.value)}
+                        placeholder={t("transformTab.recodeNewColPlaceholder")}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className={`rounded-md border bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1.5 text-xs sm:text-sm w-48 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                          recodeNewColName.trim() && header.includes(recodeNewColName.trim())
+                            ? "border-red-500"
+                            : "border-neutral-300 dark:border-neutral-700"
+                        }`}
+                      />
+                      {recodeNewColName.trim() && header.includes(recodeNewColName.trim()) && (
+                        <p className="text-xs text-red-500 mt-1">
+                          {t("transformTab.recodeNewColErrorDuplicate", { name: recodeNewColName.trim() })}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -1791,34 +1922,85 @@ export function TransformTab({
 
                 <div className="space-y-2">
                   {recodeRules.map((r, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={r.from}
-                        onChange={(e) => setRecodeRule(i, "from", e.target.value)}
-                        placeholder={t("transformTab.oldValuePlaceholder")}
-                        aria-label={`${t("transformTab.oldValuePlaceholder")} ${i + 1}`}
-                        autoComplete="off"
-                        spellCheck={false}
-                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1 text-xs w-36 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
-                      />
+                    <div key={i} className="flex flex-wrap gap-2 items-center">
+                      <div className="flex items-center gap-2 border border-neutral-200 dark:border-neutral-700 rounded-md px-2 py-1 bg-white dark:bg-neutral-800">
+                        <label className="inline-flex items-center gap-1 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`ruleType_${i}`}
+                            value="value"
+                            checked={r.type === "value"}
+                            onChange={() => updateRecodeRule(i, { type: "value" })}
+                          />
+                          <span>{t("transformTab.recodeTypeValue")}</span>
+                        </label>
+                        <label className="inline-flex items-center gap-1 text-xs cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`ruleType_${i}`}
+                            value="range"
+                            checked={r.type === "range"}
+                            onChange={() => updateRecodeRule(i, { type: "range" })}
+                          />
+                          <span>{t("transformTab.recodeTypeRange")}</span>
+                        </label>
+                      </div>
+
+                      {r.type === "value" ? (
+                        <input
+                          type="text"
+                          value={r.from ?? ""}
+                          onChange={(e) => updateRecodeRule(i, { from: e.target.value })}
+                          placeholder={t("transformTab.recodeFromPlaceholder")}
+                          aria-label={`${t("transformTab.recodeFromPlaceholder")} ${i + 1}`}
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1.5 text-xs sm:text-sm w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={r.rangeMin ?? ""}
+                            onChange={(e) => updateRecodeRule(i, { rangeMin: e.target.value })}
+                            placeholder={t("transformTab.recodeMinPlaceholder")}
+                            aria-label={`${t("transformTab.recodeMinPlaceholder")} ${i + 1}`}
+                            autoComplete="off"
+                            className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2 py-1.5 text-xs sm:text-sm w-24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                          />
+                          <span className="text-xs text-neutral-400" aria-hidden="true">→</span>
+                          <input
+                            type="text"
+                            value={r.rangeMax ?? ""}
+                            onChange={(e) => updateRecodeRule(i, { rangeMax: e.target.value })}
+                            placeholder={t("transformTab.recodeMaxPlaceholder")}
+                            aria-label={`${t("transformTab.recodeMaxPlaceholder")} ${i + 1}`}
+                            autoComplete="off"
+                            className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2 py-1.5 text-xs sm:text-sm w-24 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                          />
+                        </div>
+                      )}
+
                       <ArrowRight aria-hidden="true" className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+
                       <input
                         type="text"
                         value={r.to}
-                        onChange={(e) => setRecodeRule(i, "to", e.target.value)}
-                        placeholder={t("transformTab.newValuePlaceholder")}
-                        aria-label={`${t("transformTab.newValuePlaceholder")} ${i + 1}`}
+                        onChange={(e) => updateRecodeRule(i, { to: e.target.value })}
+                        placeholder={t("transformTab.recodeToPlaceholder")}
+                        aria-label={`${t("transformTab.recodeToPlaceholder")} ${i + 1}`}
                         autoComplete="off"
                         spellCheck={false}
-                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1 text-xs w-36 font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:border-brand"
+                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1.5 text-xs sm:text-sm w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                       />
+
                       {recodeRules.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeRecodeRule(i)}
                           className="p-1 text-neutral-400 hover:text-red-500 transition-colors"
-                          aria-label="Delete rule"
+                          aria-label={t("transformTab.recodeDeleteRule")}
+                          title={t("transformTab.recodeDeleteRule")}
                         >
                           <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
                         </button>
@@ -1833,8 +2015,46 @@ export function TransformTab({
                   className="inline-flex items-center gap-1 text-xs text-brand font-medium hover:underline"
                 >
                   <Plus aria-hidden="true" className="w-3 h-3" />
-                  <span>{t("transformTab.addRuleButton")}</span>
+                  <span>{t("transformTab.recodeAddRule")}</span>
                 </button>
+
+                <div className="pt-2 border-t border-neutral-200 dark:border-neutral-800">
+                  <label className="inline-flex items-center gap-2 text-xs sm:text-sm font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={recodeElseEnabled}
+                      onChange={(e) => setRecodeElseEnabled(e.target.checked)}
+                    />
+                    <span>{t("transformTab.recodeElseToggle")}</span>
+                  </label>
+
+                  {recodeElseEnabled && (
+                    <div className="flex flex-wrap gap-2 items-center mt-2 pl-6">
+                      <select
+                        value={recodeElseAction}
+                        onChange={(e) => setRecodeElseAction(e.target.value as RecodeElseAction)}
+                        aria-label={t("transformTab.recodeElseToggle")}
+                        className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-3 py-1.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                      >
+                        <option value="copy">{t("transformTab.recodeElseActionCopy")}</option>
+                        <option value="sysmis">{t("transformTab.recodeElseActionSysmis")}</option>
+                        <option value="custom">{t("transformTab.recodeElseActionCustom")}</option>
+                      </select>
+
+                      {recodeElseAction === "custom" && (
+                        <input
+                          type="text"
+                          value={recodeElseValue}
+                          onChange={(e) => setRecodeElseValue(e.target.value)}
+                          placeholder={t("transformTab.recodeElseCustomPlaceholder")}
+                          aria-label={t("transformTab.recodeElseCustomPlaceholder")}
+                          autoComplete="off"
+                          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 px-2.5 py-1.5 text-xs sm:text-sm w-36 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

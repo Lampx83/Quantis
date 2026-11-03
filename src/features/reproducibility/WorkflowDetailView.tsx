@@ -66,7 +66,6 @@ export function WorkflowDetailView() {
     setEditingWorkflowNameId,
     editingWorkflowName,
     setEditingWorkflowName,
-    editingWorkflowDescriptionId,
     setEditingWorkflowDescriptionId,
     editingWorkflowDescription,
     setEditingWorkflowDescription,

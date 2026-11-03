@@ -1,4 +1,3 @@
-import React from "react";
 import { X } from "lucide-react";
 import { useUIStore } from "@/stores/useUIStore";
 import { t } from "@/i18n";

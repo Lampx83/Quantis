@@ -1,4 +1,3 @@
-import React from "react";
 import { PanelLeftClose, PanelLeftOpen, User } from "lucide-react";
 import { useUIStore, useDataStore, useWorkflowStore, useSyncStore } from "@/stores";
 import * as quantisApi from "@/api";

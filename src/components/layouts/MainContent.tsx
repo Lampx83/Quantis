@@ -1,4 +1,3 @@
-import React from "react";
 import { AppToolbar } from "./AppToolbar";
 import { WorkflowDetailView } from "@/features/reproducibility";
 import { DataView } from "@/features/data";

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Quality Ratchet for TypeScript Error Budget
- * Enforces that tsc error count does not exceed the legacy baseline (46 errors).
+ * Enforces that tsc reports zero errors (the legacy baseline has been paid off).
  */
 import { execSync } from "node:child_process";
 
-const MAX_ERRORS = Number.parseInt(process.env.TSC_MAX_ERRORS ?? "45", 10);
+const MAX_ERRORS = Number.parseInt(process.env.TSC_MAX_ERRORS ?? "0", 10);
 
 console.log(`Running TypeScript compiler check (threshold: <= ${MAX_ERRORS} errors)...`);
 

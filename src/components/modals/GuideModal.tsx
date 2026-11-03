@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { BookOpen, X, Server, GitBranch, FileText, Settings } from "lucide-react";
 import { t } from "@/i18n";
 import { useUIStore, type ReproducibilityTab } from "@/stores";

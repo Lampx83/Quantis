@@ -1,4 +1,3 @@
-import React from "react";
 import { Loader2, Copy } from "lucide-react";
 import {
   useUIStore,
@@ -47,7 +46,6 @@ export function AppModals() {
     authUser,
     setAuthUser,
     authLoading,
-    analysisBackendAvailable,
     setAnalysisBackendAvailable,
     sidebarImportBusy,
   } = useSyncStore();

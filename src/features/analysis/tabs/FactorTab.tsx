@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
 import { getAnalysisRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";

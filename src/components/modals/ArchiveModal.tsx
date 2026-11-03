@@ -1,4 +1,3 @@
-import React from "react";
 import { Cloud, X } from "lucide-react";
 import { useUIStore, useSyncStore, useDataStore, useWorkflowStore } from "@/stores";
 import * as archiveApi from "@/archive-api";

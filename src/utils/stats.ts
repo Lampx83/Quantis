@@ -1318,7 +1318,6 @@ export function computeCorrelationMatrix(rows: string[][], method: "pearson" | "
     if (vals.every((v) => v === "" || !Number.isNaN(Number(v)))) numericIndices.push(ci);
   });
   if (numericIndices.length < 2) return null;
-  const n = data.length;
   const colNames = numericIndices.map((i) => headers[i]);
   const matrix: number[][] = numericIndices.map(() => numericIndices.map(() => 0));
 
@@ -2278,7 +2277,6 @@ export function computeKMeans(
     if (row.every((v) => !Number.isNaN(v))) data.push(row);
   }
   const n = data.length;
-  const dim = indices.length;
   if (n < K) return null;
   let assignments = data.map(() => Math.floor(Math.random() * K));
   let centroids: number[][] = [];
@@ -2525,7 +2523,7 @@ export function computeLogisticRegression(rows: string[][], yCol: string, xCols:
   for (let iter = 0; iter < 50; iter++) {
     const eta = X.map((row) => row.reduce((s, v, j) => s + v * beta[j], 0));
     const mu = eta.map((e) => 1 / (1 + Math.exp(-Math.max(-20, Math.min(20, e)))));
-    const W = mu.map((m, i) => m * (1 - m));
+    const W = mu.map((m) => m * (1 - m));
     const z = eta.map((e, i) => e + (y[i] - mu[i]) / (W[i] || 0.01));
     const XtWX: number[][] = Array.from({ length: p }, () => Array(p).fill(0));
     const XtWz: number[] = Array(p).fill(0);
@@ -2553,7 +2551,7 @@ export function computeLogisticRegression(rows: string[][], yCol: string, xCols:
   for (let i = 0; i < N; i++) logLik += y[i] * Math.log(mu[i] || 1e-10) + (1 - y[i]) * Math.log(1 - mu[i] || 1e-10);
   const aic = -2 * logLik + 2 * p;
   const invXtWX: number[][] = [];
-  const W = mu.map((m, i) => m * (1 - m));
+  const W = mu.map((m) => m * (1 - m));
   for (let j = 0; j < p; j++) {
     invXtWX[j] = [];
     for (let k = 0; k < p; k++) {
@@ -2587,8 +2585,6 @@ export function computeLogisticRegression(rows: string[][], yCol: string, xCols:
 /** Compute VIF for each predictor in OLS. VIF > 5 suggests multicollinearity. */
 export function computeVIF(rows: string[][], xCols: string[]): Record<string, number> | null {
   if (rows.length < 4 || xCols.length < 2) return null;
-  const headers = rows[0] || [];
-  const data = rows.slice(1);
   const vif: Record<string, number> = {};
   for (let i = 0; i < xCols.length; i++) {
     const target = xCols[i];
@@ -2636,7 +2632,7 @@ export function computeEFA(rows: string[][], columnNames: string[], nFactors?: n
   }
   const { eigenvalues, eigenvectors } = eigenDecomposition(cov);
   const K = nFactors ?? Math.min(p, eigenvalues.filter((e) => e > 1).length || 1);
-  const loadings = eigenvectors.map((ev, i) => ev.map((v, j) => v * Math.sqrt(Math.max(0, eigenvalues[j]))));
+  const loadings = eigenvectors.map((ev) => ev.map((v, j) => v * Math.sqrt(Math.max(0, eigenvalues[j]))));
   const rotated = varimax(loadings.slice(0, p).map((row) => row.slice(0, K)));
   const totalVar = eigenvalues.reduce((a, b) => a + b, 0);
   const varianceExplained = eigenvalues.slice(0, K).map((e) => (e / totalVar) * 100);
@@ -3104,7 +3100,6 @@ export interface SampleSizeChiSquareResult {
 
 /** Sample size for Chi-square test. effectSizeW (Cohen w), df, alpha=0.05, power=0.8. */
 export function computeSampleSizeChiSquare(effectSizeW: number, df: number, alpha: number = 0.05, power: number = 0.8): SampleSizeChiSquareResult {
-  const ncp = effectSizeW * effectSizeW;
   const zBeta = 0.84;
   const zAlpha = 1.96;
   const n = Math.ceil((df + 1 + (zAlpha + zBeta) ** 2) / (effectSizeW * effectSizeW));
@@ -3243,7 +3238,7 @@ export function computeMulticlassLogisticOneVsRest(rows: string[][], yCol: strin
   return { classes, models, predicted, confusionMatrix, metrics };
 }
 
-function predictMulticlassOneVsRest(rows: string[][], models: LogisticResult[], classes: string[], yCol: string, xCols: string[]): string[] {
+function predictMulticlassOneVsRest(rows: string[][], models: LogisticResult[], classes: string[], _yCol: string, xCols: string[]): string[] {
   const headers = rows[0] || [];
   const data = rows.slice(1);
   const xIndices = xCols.map((c) => headers.indexOf(c)).filter((i) => i >= 0);
