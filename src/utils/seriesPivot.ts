@@ -1,4 +1,4 @@
-import type { AggregatedGroup, AggregateMetrics } from "./aggregation";
+import { compareCategoryLabels, type AggregatedGroup, type AggregateMetrics } from "./aggregation";
 
 export interface PivotedSeries {
   /** X-axis category value (Recharts `name`) */
@@ -101,9 +101,7 @@ export function pivotByLegend(
     const row = rowMap.get(xVal);
     if (!row) continue;
 
-    const sortedLegendKeys = Array.from(row.series.keys()).sort((a, b) =>
-      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-    );
+    const sortedLegendKeys = Array.from(row.series.keys()).sort(compareCategoryLabels);
 
     const seriesRecord: Record<string, number> = {};
     const errorsRecord: Record<string, [number, number]> = {};
@@ -140,5 +138,5 @@ export function getSeriesKeys(pivoted: PivotedSeries[]): string[] {
     }
   }
 
-  return Array.from(keySet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  return Array.from(keySet).sort(compareCategoryLabels);
 }

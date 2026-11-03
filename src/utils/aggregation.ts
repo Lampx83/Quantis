@@ -1,4 +1,5 @@
 import { numCell } from "./stats";
+import type { ChartSortOrder } from "../types";
 
 export type AggregateFunction =
   | "mean"
@@ -48,7 +49,59 @@ export interface AggregateOptions {
   /** Giới hạn số lượng nhóm tối đa trả về (mặc định: 30) */
   limit?: number;
   /** Thứ tự sắp xếp kết quả (mặc định: category-asc) */
-  sortOrder?: "category-asc" | "category-desc" | "value-asc" | "value-desc" | "none";
+  sortOrder?: ChartSortOrder;
+}
+
+/** Natural, case-insensitive label comparison ("2" before "10"). */
+export function compareCategoryLabels(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * Sorts chart categories by label or by value. "none" keeps insertion order.
+ * Shared by the aggregation engine and the count-based charts so every chart
+ * follows the same ordering rules.
+ */
+export function sortChartCategories<T>(
+  items: T[],
+  getName: (item: T) => string,
+  getValue: (item: T) => number,
+  sortOrder: ChartSortOrder
+): T[] {
+  if (sortOrder === "category-asc" || sortOrder === "category-desc") {
+    const dir = sortOrder === "category-desc" ? -1 : 1;
+    return [...items].sort((a, b) => dir * compareCategoryLabels(getName(a), getName(b)));
+  }
+  if (sortOrder === "value-asc" || sortOrder === "value-desc") {
+    const dir = sortOrder === "value-asc" ? 1 : -1;
+    return [...items].sort((a, b) => dir * (getValue(a) - getValue(b)));
+  }
+  return items;
+}
+
+export interface CategoryCount {
+  name: string;
+  count: number;
+}
+
+/**
+ * Counts rows per value of one column. `trim` collapses " A" and "A";
+ * `skipEmpty` drops blank categories.
+ */
+export function countByCategory(
+  rows: string[][],
+  colIdx: number,
+  options: { trim?: boolean; skipEmpty?: boolean } = {}
+): CategoryCount[] {
+  const { trim = false, skipEmpty = false } = options;
+  const counts: Record<string, number> = Object.create(null);
+  for (let i = 1; i < rows.length; i++) {
+    const text = rows[i]?.[colIdx] ?? "";
+    const name = trim ? text.trim() : text;
+    if (skipEmpty && name === "") continue;
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return Object.entries(counts).map(([name, count]) => ({ name, count }));
 }
 
 /**
@@ -175,21 +228,7 @@ export function aggregateData(
 
     // Sắp xếp kết quả theo sortOrder (mặc định: category-asc với so sánh số/chữ tự nhiên)
   const sortOrder = options.sortOrder ?? "category-asc";
-  if (sortOrder === "category-asc") {
-    results.sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-    );
-  } else if (sortOrder === "category-desc") {
-    results.sort((a, b) =>
-      b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" })
-    );
-  } else if (sortOrder === "value-asc") {
-    results.sort((a, b) => a.value - b.value);
-  } else if (sortOrder === "value-desc") {
-    results.sort((a, b) => b.value - a.value);
-  }
-  // "none" giữ nguyên thứ tự xuất hiện ban đầu
-
+  const sorted = sortChartCategories(results, (g) => g.name, (g) => g.value, sortOrder);
   const limit = options.limit ?? 30;
-  return results.slice(0, limit);
+  return sorted.slice(0, limit);
 }

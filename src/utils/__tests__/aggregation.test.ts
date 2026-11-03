@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aggregateData } from "../aggregation";
+import { aggregateData, countByCategory, sortChartCategories } from "../aggregation";
 
 describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
   const sampleRows: string[][] = [
@@ -364,5 +364,37 @@ describe("Aggregation Engine (src/utils/aggregation.ts)", () => {
       const names = res.map((r) => r.name);
       expect(names).toEqual(["1", "10", "2", "20", "3"]);
     });
+  });
+});
+
+describe("Shared category helpers", () => {
+  it("countByCategory trims and skips blanks only when asked", () => {
+    const rows = [["g"], [" A"], ["A"], [""], ["  "], ["B"]];
+    expect(countByCategory(rows, 0)).toEqual([
+      { name: " A", count: 1 },
+      { name: "A", count: 1 },
+      { name: "", count: 1 },
+      { name: "  ", count: 1 },
+      { name: "B", count: 1 },
+    ]);
+    expect(countByCategory(rows, 0, { trim: true, skipEmpty: true })).toEqual([
+      { name: "A", count: 2 },
+      { name: "B", count: 1 },
+    ]);
+  });
+
+  it("sortChartCategories sorts by label or value and leaves 'none' untouched", () => {
+    const items = [
+      { name: "10", value: 1 },
+      { name: "2", value: 3 },
+      { name: "1", value: 2 },
+    ];
+    const name = (i: { name: string }) => i.name;
+    const value = (i: { value: number }) => i.value;
+    expect(sortChartCategories(items, name, value, "category-asc").map(name)).toEqual(["1", "2", "10"]);
+    expect(sortChartCategories(items, name, value, "category-desc").map(name)).toEqual(["10", "2", "1"]);
+    expect(sortChartCategories(items, name, value, "value-asc").map(value)).toEqual([1, 2, 3]);
+    expect(sortChartCategories(items, name, value, "value-desc").map(value)).toEqual([3, 2, 1]);
+    expect(sortChartCategories(items, name, value, "none")).toBe(items);
   });
 });
