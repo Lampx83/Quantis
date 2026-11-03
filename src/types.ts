@@ -28,6 +28,49 @@ export interface VariableMetadata {
   width?: number;
 }
 
+/** Ô dữ liệu khuyết được điền theo dạng Sparse Delta */
+export interface ImputationSparseCell {
+  /** Vị trí dòng (0-indexed trong dataRows) */
+  rowIndex: number;
+  /** Mảng m giá trị tương ứng cho m bộ nội suy */
+  values: string[];
+}
+
+/** Thống kê mô tả gộp theo luật Rubin cho một biến số */
+export interface RubinColumnStatistic {
+  column: string;
+  missingCount: number;
+  originalMean?: number | null;
+  originalStd?: number | null;
+  pooledMean: number;
+  withinVariance: number;
+  betweenVariance: number;
+  totalVariance: number;
+  rubinSe: number;
+  df: number;
+  fmi: number;
+  ciLower: number;
+  ciUpper: number;
+}
+
+/** Metadata quản lý Bundle đa nhập liệu (MICE Multiple Imputation) */
+export interface ImputationMeta {
+  /** UUID định danh nhóm bundle */
+  bundleId: string;
+  /** Số lượng bộ dữ liệu (vd: 5) */
+  m: number;
+  /** 0: Gốc, 1..m: Bộ điền i */
+  activeImputationIndex: number;
+  /** Danh sách các cột đã nội suy */
+  imputedColumns: string[];
+  /** Thống kê Rubin tính sẵn */
+  rubinStatistics?: RubinColumnStatistic[];
+  /** Sparse delta: map từng cột khuyết sang danh sách các ô được điền */
+  sparsePatches: Record<string, ImputationSparseCell[]>;
+  /** Bảng dữ liệu gốc ban đầu chứa các ô khuyết */
+  originalRows: string[][];
+}
+
 /** Dataset: bảng dữ liệu đã import (CSV, Excel, SPSS, …) */
 export interface Dataset {
   id: string;
@@ -49,6 +92,10 @@ export interface Dataset {
   sourceKey?: string;
   createdAt: string;
   updatedAt: string;
+  /** Metadata đa nhập liệu nếu dataset là MICE Bundle */
+  imputationMeta?: ImputationMeta;
+  /** Khóa chỉnh sửa nếu là bundle chỉ đọc */
+  readOnly?: boolean;
 }
 
 /** Bước trong workflow phân tích (reproducible) */

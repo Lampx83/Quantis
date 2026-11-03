@@ -2089,6 +2089,11 @@ export interface OLSResult {
   s2: number;
   yName: string;
   xNames: string[];
+  rubinPooled?: boolean;
+  rubinDf?: Record<string, number>;
+  fmi?: Record<string, number>;
+  withinVar?: Record<string, number>;
+  betweenVar?: Record<string, number>;
 }
 
 function matMul(A: number[][], B: number[][]): number[][] {
