@@ -1004,9 +1004,15 @@ export function TransformTab({
       } else if (transformAction === "recode" && recodeTargetMode === "same" && recodeCol) {
         const recodeColIdx = newHeader.indexOf(recodeCol);
         const colValues = newRows.slice(1).map((row) => row[recodeColIdx] ?? "");
+        // Chỉ suy lại kiểu dữ liệu: nhãn biến, nhãn giá trị và mã khuyết do người dùng khai báo phải giữ nguyên,
+        // nếu không mã khuyết (vd. 99) sẽ bị tính như giá trị thật ở mọi thống kê sau đó.
+        const inferred = inferVariableMetadata(recodeCol, colValues);
+        const prev = baseVariables[recodeCol];
         baseVariables[recodeCol] = {
-          ...baseVariables[recodeCol],
-          ...inferVariableMetadata(recodeCol, colValues),
+          ...prev,
+          type: inferred.type,
+          decimals: inferred.decimals,
+          measure: prev && prev.type === inferred.type ? prev.measure : inferred.measure,
         };
       }
     }

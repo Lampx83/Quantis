@@ -90,6 +90,9 @@ export interface PresentationViewProps {
   initialControls?: Partial<ChartControls>;
 }
 
+/** Số điểm tối đa của biểu đồ đường (SVG chậm khi quá nhiều điểm); khi cắt phải báo cho người dùng. */
+const LINE_MAX_POINTS = 1000;
+
 export function PresentationView({
   tab,
   onTabChange: _onTabChange,
@@ -182,6 +185,10 @@ export function PresentationView({
     return cols.filter((c) => {
       const ci = rows[0].indexOf(c);
       if (ci < 0) return false;
+      // Cột khai báo là số trong Variable View vẫn là cột số dù lẫn vài ô như "N/A" (numCell bỏ qua các ô đó);
+      // phải khớp với Chart Inspector, nếu không biểu đồ âm thầm vẽ số đếm dòng thay vì giá trị của cột Y.
+      const meta = selectedDataset.variables?.[c];
+      if (meta && (meta.type === "numeric" || meta.measure === "scale")) return true;
       for (let i = 1; i < rows.length; i++) {
         const v = rows[i][ci];
         if (v === "") continue;
@@ -248,7 +255,7 @@ export function PresentationView({
           measureCol: yCol,
           func: activeYAggregation,
           sortOrder: "none",
-          limit: 1000,
+          limit: Number.MAX_SAFE_INTEGER,
         }).map((g) => ({
           x: g.name,
           y: g.value,
@@ -256,6 +263,7 @@ export function PresentationView({
           error: calculateErrorOffsets(g.metrics, chartConfig.errorBar),
         }))
       : lineData;
+    const lineTotalPoints = lineChartData.length;
     const pieData = (chartType === "pie" || chartType === "donut")
       ? (pieBinNumeric && pieNumericCol && numericCols.includes(pieNumericCol)
           ? (() => {
@@ -281,6 +289,7 @@ export function PresentationView({
               : []))
       : (barData.length > 0 ? barData.map((d) => ({ name: d.name, value: d.count })) : []);
 
+    let pivotedLineTotal = 0;
     const { pivotedBarData, pivotedLineData, legendSeriesKeys } = (() => {
       if (!hasLegend || !xCol || xIdx < 0) {
         return { pivotedBarData: [], pivotedLineData: [], legendSeriesKeys: [] };
@@ -322,7 +331,8 @@ export function PresentationView({
         });
 
         // Line charts follow source row order from unsorted xOrder; keep up to 1000 points because a time series must not be truncated
-        const lineDataList = xOrder.slice(0, 1000).map((name) => {
+        pivotedLineTotal = xOrder.length;
+        const lineDataList = xOrder.slice(0, LINE_MAX_POINTS).map((name) => {
           const m = countsMap.get(name)!;
           const item: Record<string, any> = { name, x: name, _errors: {} };
           for (const k of keys) {
@@ -344,7 +354,7 @@ export function PresentationView({
         measureCol: yCol,
         func: activeYAggregation,
         sortOrder: "none",
-        limit: 1000,
+        limit: Number.MAX_SAFE_INTEGER,
       });
       const pivoted = pivotByLegend(multiAgg, chartConfig.legendCol, chartConfig.errorBar);
       const keys = getSeriesKeys(pivoted);
@@ -373,7 +383,8 @@ export function PresentationView({
         return item;
       });
       // Line charts follow source row order from unsorted pivoted; keep up to 1000 points because a time series must not be truncated
-      const lineDataList = pivoted.slice(0, 1000).map((p) => {
+      pivotedLineTotal = pivoted.length;
+      const lineDataList = pivoted.slice(0, LINE_MAX_POINTS).map((p) => {
         const item: Record<string, any> = {
           name: p.name,
           x: p.name,
@@ -435,7 +446,9 @@ export function PresentationView({
       barData,
       barChartData,
       lineData,
-      lineChartData,
+      lineChartData: lineChartData.slice(0, LINE_MAX_POINTS),
+      lineTotalPoints,
+      pivotedLineTotal,
       pieData,
       pivotedBarData,
       pivotedLineData,
@@ -713,6 +726,8 @@ export function PresentationView({
       barChartData,
       lineData,
       lineChartData,
+      lineTotalPoints,
+      pivotedLineTotal,
       pieData,
       pivotedBarData,
       pivotedLineData,
@@ -738,10 +753,21 @@ export function PresentationView({
       const label = p.name ?? p.x ?? "";
       const val = p.count ?? p.y;
       if (!p.metrics) {
+        // Dòng đã pivot theo Legend không có count/y: giá trị nằm ở từng chuỗi trong payload.
+        const seriesEntries = val === undefined ? payload.filter((e) => e?.value !== undefined && e?.value !== null && e?.value !== "") : [];
         return (
           <div className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 p-2 text-sm shadow-lg">
             <p className="font-medium text-neutral-900 dark:text-neutral-100">{label}</p>
-            <p className="text-neutral-600 dark:text-neutral-300">{val !== undefined ? val : ""}</p>
+            {seriesEntries.length > 0 ? (
+              seriesEntries.map((e, i) => (
+                <p key={i} className="text-neutral-600 dark:text-neutral-300">
+                  <span style={{ color: e.color }}>{e.name}:</span>{" "}
+                  {Number.isInteger(Number(e.value)) ? e.value : Number(e.value).toFixed(2)}
+                </p>
+              ))
+            ) : (
+              <p className="text-neutral-600 dark:text-neutral-300">{val !== undefined ? val : ""}</p>
+            )}
           </div>
         );
       }
@@ -1296,6 +1322,14 @@ export function PresentationView({
         {chartType === "line" && (hasLegend ? pivotedLineData.length > 0 : lineChartData.length > 0) && (
           <div className="relative group" data-chart-export-wrapper>
             {chartExportIcons}
+            {(hasLegend ? pivotedLineTotal : lineTotalPoints) > LINE_MAX_POINTS && (
+              <p role="status" className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                {t("presentationView.lineTruncatedNotice", {
+                  shown: LINE_MAX_POINTS,
+                  total: hasLegend ? pivotedLineTotal : lineTotalPoints,
+                })}
+              </p>
+            )}
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
               {chartTitleBlock}
               <div className="h-80">
@@ -1799,6 +1833,7 @@ export function PresentationView({
         <ChartInspectorPanel
           chartType={chartType}
           dataset={selectedDataset ?? null}
+          numericColumnNames={numericCols}
           config={chartConfig}
           onChange={(patch) => setChartConfig((prev) => ({ ...prev, ...patch }))}
               controls={chartControls}

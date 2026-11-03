@@ -37,6 +37,8 @@ export interface ChartInspectorPanelProps {
   onChange: (patch: Partial<ChartConfig>) => void;
   controls?: ChartControls;
   onControlsChange?: (patch: Partial<ChartControls>) => void;
+  /** Danh sách cột số do PresentationView đã tính; truyền vào để panel và biểu đồ dùng chung một định nghĩa. */
+  numericColumnNames?: string[];
   onExportCsv?: () => void;
   onExportPng?: () => void;
   onCopy?: () => void;
@@ -54,6 +56,7 @@ const labelClass =
 export function ChartInspectorPanel({
   chartType,
   dataset,
+  numericColumnNames,
   config,
   onChange,
   controls = DEFAULT_CHART_CONTROLS,
@@ -74,7 +77,7 @@ export function ChartInspectorPanel({
   };
 
   // Determine numeric columns
-  const numericColumns = columnNames.filter((col) => {
+  const numericColumns = numericColumnNames ?? columnNames.filter((col) => {
     const meta = dataset?.variables?.[col];
     if (meta) {
       return meta.type === "numeric" || meta.measure === "scale";

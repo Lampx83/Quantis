@@ -1,4 +1,4 @@
-import { numCell } from "./stats";
+import { numCell, tCriticalTwoTail } from "./stats";
 import type { ChartSortOrder } from "../types";
 
 export type AggregateFunction =
@@ -61,9 +61,19 @@ const T_CRITICAL_975: Record<number, number> = {
   30: 2.042,
 };
 
+const tCriticalCache = new Map<number, number>();
+
 /** t critical value for a two-tailed 95% interval with df degrees of freedom. */
 function tCritical95(df: number): number {
-  return T_CRITICAL_975[df] ?? 1.96;
+  if (!(df >= 1)) return 0;
+  const fromTable = T_CRITICAL_975[df];
+  if (fromTable !== undefined) return fromTable;
+  let v = tCriticalCache.get(df);
+  if (v === undefined) {
+    v = tCriticalTwoTail(0.05, df);
+    tCriticalCache.set(df, v);
+  }
+  return v;
 }
 
 export interface AggregatedGroup {

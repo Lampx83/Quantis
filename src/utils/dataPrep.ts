@@ -522,7 +522,7 @@ export function applyRecode(rows: Rows, config: RecodeConfig): PrepResult {
 
     for (const rule of config.rules) {
       if (rule.type === "value") {
-        if (rule.from !== undefined && cellStr === rule.from.trim()) {
+        if (rule.from !== undefined && rule.from.trim() !== "" && cellStr === rule.from.trim()) {
           newValue = rule.to;
           matched = true;
           break;
