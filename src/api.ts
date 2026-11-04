@@ -3,7 +3,7 @@
  * Khi backend không có hoặc chưa đăng nhập: dữ liệu chỉ lưu localStorage.
  * Phân tích: nếu có backend Python (proxy qua Node), gọi API phân tích thay vì tính trên client.
  */
-import type { Dataset, Workflow, VariableMetadata, RubinColumnStatistic } from "./types";
+import type { Dataset, Workflow, VariableMetadata, RubinColumnStatistic, DiagnosticsPayload } from "./types";
 import type { MediationResult } from "./utils/stats";
 import { loadBackendApiUrl, type ServerSettings, DEFAULT_AI_MODEL, normalizeAiModelName } from "./utils/storage";
 import { t } from "./i18n";
@@ -557,7 +557,8 @@ export async function analyzeOLS(
   rows: string[][],
   yCol: string,
   xCols: string[],
-  imputedDatasets?: string[][][]
+  imputedDatasets?: string[][][],
+  activeImputationIndex?: number | null
 ): Promise<{
   coefficients: Record<string, number>;
   intercept: number;
@@ -578,14 +579,31 @@ export async function analyzeOLS(
   fmi?: Record<string, number>;
   withinVar?: Record<string, number>;
   betweenVar?: Record<string, number>;
+  /** Phase 4.1 diagnostics — additive, absent on an older backend (R8.2). */
+  nInput?: number;
+  nDropped?: number;
+  missingMethod?: "listwise" | "mice-active";
+  diagnostics?: DiagnosticsPayload;
 } | null> {
   try {
+    const body: Record<string, unknown> = {
+      // Có bộ điền khuyết thì backend không dùng rows: không gửi thêm một bản đầy đủ của bảng.
+      // Ngoại lệ duy nhất là activeImputationIndex = 0: chẩn đoán phải soi đúng bảng gốc (R1.7).
+      rows: activeImputationIndex === 0 || (activeImputationIndex == null && !imputedDatasets?.length)
+        ? rows
+        : [],
+      yCol,
+      xCols,
+      imputedDatasets,
+    };
+    if (activeImputationIndex !== undefined) {
+      body.activeImputationIndex = activeImputationIndex;
+    }
     const res = await fetch(`${getANALYZE_BASE()}/ols`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      // Có bộ điền khuyết thì backend không dùng rows: không gửi thêm một bản đầy đủ của bảng.
-      body: JSON.stringify({ rows: imputedDatasets?.length ? [] : rows, yCol, xCols, imputedDatasets }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) return null;
     const json = await res.json();

@@ -98,8 +98,133 @@ export interface Dataset {
   readOnly?: boolean;
 }
 
-/** Bước trong workflow phân tích (reproducible) */
-export interface WorkflowStep {
+// ---------------------------------------------------------------------------
+// Regression diagnostics (Phase 4.1) — the /ols payload contract (spec R12)
+// ---------------------------------------------------------------------------
+
+export type RegressionVerdict = "pass" | "caution" | "violation";
+
+export type AssumptionId = "linearity" | "normality" | "influence" | "collinearity";
+
+export type NotApplicableReason = "singlePredictor" | "insufficientDf" | "notComputable";
+
+export type DiagnosticsErrorCode = "insufficient_n" | "singular_x" | "not_available" | "internal";
+
+export interface DiagnosticsSample {
+  nInput: number;
+  nUsed: number;
+  nDropped: number;
+  method: "listwise" | "mice-active";
+  /** Multiplicity m; null without MICE. */
+  m: number | null;
+  /** 0 = original data, 1..m = the k-th imputed table; null without MICE. */
+  activeImputation: number | null;
+}
+
+/** One observation of the Model sample; `rowIndex` is an Analysis row coordinate. */
+export interface DiagnosticsObs {
+  rowIndex: number[];
+  fitted: Array<number | null>;
+  resid: Array<number | null>;
+  stdResid: Array<number | null>;
+  studentized: Array<number | null>;
+  leverage: Array<number | null>;
+  cookD: Array<number | null>;
+}
+
+export interface DiagnosticsQq {
+  theoretical: Array<number | null>;
+  sample: Array<number | null>;
+}
+
+export interface LinearityStats {
+  bp: { chi2: number; df: number; p: number };
+  reset: { f: number; df1: number; df2: number; p: number };
+}
+
+export interface NormalityStats {
+  test: "shapiro" | "jarqueBera";
+  stat: number;
+  p: number;
+  skewness: number;
+  excessKurtosis: number;
+}
+
+export interface InfluenceStats {
+  maxCookD: number | null;
+  nAbove4n: number;
+  maxLeverage: number;
+  leverageCut: number;
+  /** null when the externally studentized residual is undefined (df_resid = 1). */
+  maxStudentized: number | null;
+  nStudentizedAbove3: number;
+}
+
+export interface CollinearityStats {
+  maxVif: number | null;
+}
+
+export type AssumptionStats =
+  | LinearityStats
+  | NormalityStats
+  | InfluenceStats
+  | CollinearityStats;
+
+/**
+ * One Assumption Check row. An applicable row carries a Verdict and its statistics;
+ * an inapplicable row carries only the reason (spec R2.5).
+ */
+export type AssumptionRow =
+  | { id: AssumptionId; applicable: true; verdict: RegressionVerdict; stats: AssumptionStats }
+  | { id: AssumptionId; applicable: false; notApplicableReason: NotApplicableReason };
+
+export interface VifEntry {
+  vif: number | null;
+  tolerance: number | null;
+}
+
+/** A flagged observation: Cook's D above 4/n, largest first. */
+export interface InfluentialObservation {
+  rowIndex: number;
+  cookD: number | null;
+  leverage: number | null;
+  studentized: number | null;
+}
+
+export interface RobustHC3Block {
+  se: Record<string, number | null>;
+  tStat: Record<string, number | null>;
+  pValue: Record<string, number | null>;
+  ciLower: Record<string, number | null>;
+  ciUpper: Record<string, number | null>;
+}
+
+export interface DiagnosticsPayloadOk {
+  ok: true;
+  errorCode: null;
+  errorDetail: null;
+  sample: DiagnosticsSample;
+  obs: DiagnosticsObs;
+  qq: DiagnosticsQq;
+  assumptions: AssumptionRow[];
+  vif: Record<string, VifEntry>;
+  influential: InfluentialObservation[];
+  robustHC3: RobustHC3Block;
+  sampled: boolean;
+}
+
+export interface DiagnosticsPayloadFailure {
+  ok: false;
+  errorCode: DiagnosticsErrorCode;
+  errorDetail: string | null;
+  /** Derivable sample accounting survives a failure (spec R1.2, R12). */
+  sample?: DiagnosticsSample;
+}
+
+/** The immutable diagnostics result bound to one OLS run (spec R1.4). */
+export type DiagnosticsPayload = DiagnosticsPayloadOk | DiagnosticsPayloadFailure;
+
+/** Bước trong workflow phân tích (reproducible) */export interface WorkflowStep {
   id: string;
   type: "import" | "clean" | "transform" | "describe" | "test" | "model" | "visualize" | "report";
   label: string;
