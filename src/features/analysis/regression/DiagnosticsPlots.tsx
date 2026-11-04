@@ -72,8 +72,13 @@ export function qqDiagonal(theoretical: Array<number | null>): PlotSegment | nul
     (value): value is number => value != null && Number.isFinite(value)
   );
   if (finite.length === 0) return null;
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
+  let min = finite[0];
+  let max = finite[0];
+  for (let i = 1; i < finite.length; i++) {
+    const val = finite[i];
+    if (val < min) min = val;
+    if (val > max) max = val;
+  }
   return { from: { x: min, y: min }, to: { x: max, y: max } };
 }
 

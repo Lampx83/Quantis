@@ -454,9 +454,13 @@ def _influential_block(
     if n == 0:
         return []
     cut = 4.0 / n
+    finite_mask = np.isfinite(cooks)
+    indices = np.flatnonzero(finite_mask)
+    if indices.size == 0:
+        return []
     out: list[dict] = []
-    for i in np.argsort(-cooks, kind="stable"):
-        if not np.isfinite(cooks[i]) or cooks[i] <= cut:
+    for i in indices[np.argsort(-cooks[indices], kind="stable")]:
+        if cooks[i] <= cut:
             break
         out.append(
             {

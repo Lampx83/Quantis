@@ -270,6 +270,22 @@ def test_large_sample_is_strided_deterministic_and_full_sample_numbers_survive()
     assert abs(first["influential"][0]["cookD"] - full_max) < TOL
 
 
+def test_influential_block_ignores_infinite_or_nan_cooks():
+    from regression_diagnostics import _influential_block
+
+    used = list(range(10))
+    cooks = np.array([np.inf, 0.8, np.nan, 0.6, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06])
+    leverage = np.zeros(10)
+    studentized = np.zeros(10)
+
+    influential = _influential_block(used, cooks, leverage, studentized)
+    assert len(influential) == 2
+    assert influential[0]["rowIndex"] == 1
+    assert influential[0]["cookD"] == 0.8
+    assert influential[1]["rowIndex"] == 3
+    assert influential[1]["cookD"] == 0.6
+
+
 # ---------------------------------------------------------------------------
 # T03 — assumption rows, verdict rules, applicability
 # ---------------------------------------------------------------------------
