@@ -360,6 +360,7 @@ describe("i18n Core Engine", () => {
       "stat.influence",
       "stat.collinearity",
       "stat.unavailable",
+      "vifEntry",
       "plot.residVsFitted",
       "plot.qq",
       "plot.cooks",

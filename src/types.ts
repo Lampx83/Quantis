@@ -164,18 +164,15 @@ export interface CollinearityStats {
   maxVif: number | null;
 }
 
-export type AssumptionStats =
-  | LinearityStats
-  | NormalityStats
-  | InfluenceStats
-  | CollinearityStats;
-
 /**
  * One Assumption Check row. An applicable row carries a Verdict and its statistics;
  * an inapplicable row carries only the reason (spec R2.5).
  */
 export type AssumptionRow =
-  | { id: AssumptionId; applicable: true; verdict: RegressionVerdict; stats: AssumptionStats }
+  | { id: "linearity"; applicable: true; verdict: RegressionVerdict; stats: LinearityStats }
+  | { id: "normality"; applicable: true; verdict: RegressionVerdict; stats: NormalityStats }
+  | { id: "influence"; applicable: true; verdict: RegressionVerdict; stats: InfluenceStats }
+  | { id: "collinearity"; applicable: true; verdict: RegressionVerdict; stats: CollinearityStats }
   | { id: AssumptionId; applicable: false; notApplicableReason: NotApplicableReason };
 
 export interface VifEntry {

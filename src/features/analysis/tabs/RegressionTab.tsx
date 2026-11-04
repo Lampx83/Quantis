@@ -7,7 +7,6 @@ import {
   computeOLS,
   computeLogisticRegression,
   computeVIF,
-  type OLSResult,
   type LogisticResult,
 } from "@/utils/stats";
 import * as quantisApi from "@/api";
@@ -15,6 +14,8 @@ import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
+import { RegressionDiagnosticsPanel } from "@/features/analysis/regression/RegressionDiagnosticsPanel";
+import type { RegressionRun, RegressionRunResult } from "@/stores/useAnalysisStore";
 
 /**
  * Tái tạo m bảng dữ liệu từ Sparse Delta của ImputationMeta.
@@ -44,7 +45,7 @@ export interface RegressionTabProps {
   showToast: (msg: string) => void;
   initialOlsYCol?: string;
   initialOlsXSelected?: string[];
-  initialOlsResult?: OLSResult | null;
+  initialOlsResult?: RegressionRunResult | null;
 }
 
 export function RegressionTab({
@@ -79,7 +80,19 @@ export function RegressionTab({
 
   const [olsYCol, setOlsYCol] = useState(initialOlsYCol ?? "");
   const [olsXSelected, setOlsXSelected] = useState<string[]>(initialOlsXSelected ?? []);
-  const [olsResult, setOlsResult] = useState<OLSResult | null>(initialOlsResult ?? null);
+  const [olsRun, setOlsRun] = useState<RegressionRun | null>(() => {
+    if (!initialOlsResult || !selectedDataset) return null;
+    return {
+      datasetId: selectedDataset.id,
+      datasetUpdatedAt: selectedDataset.updatedAt,
+      datasetRowCount: selectedDataset.rows,
+      yCol: initialOlsYCol ?? "",
+      xCols: initialOlsXSelected ?? [],
+      activeImputationIndex: selectedDataset.imputationMeta?.activeImputationIndex ?? null,
+      result: initialOlsResult,
+    };
+  });
+  const olsResult = olsRun?.result ?? null;
   const [logYCol, setLogYCol] = useState("");
   const [logXSelected, setLogXSelected] = useState<string[]>([]);
   const [logResult, setLogResult] = useState<LogisticResult | null>(null);
@@ -129,6 +142,21 @@ export function RegressionTab({
       prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
     );
 
+  const activeImputationIndex = selectedDataset?.imputationMeta?.activeImputationIndex ?? null;
+
+  const captureOlsRun = (result: RegressionRunResult) => {
+    if (!selectedDataset) return;
+    setOlsRun({
+      datasetId: selectedDataset.id,
+      datasetUpdatedAt: selectedDataset.updatedAt,
+      datasetRowCount: selectedDataset.rows,
+      yCol: olsYCol,
+      xCols: olsXSelected,
+      activeImputationIndex,
+      result,
+    });
+  };
+
   const runOLS = async () => {
     if (!olsYCol || olsXSelected.length === 0 || !rows.length) return;
     const reconstructed = selectedDataset?.imputationMeta
@@ -137,8 +165,15 @@ export function RegressionTab({
     if (analysisBackendAvailable) {
       setRegressionLoading("ols");
       try {
-        const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected, reconstructed);
-        setOlsResult(res ?? null);
+        const res = await quantisApi.analyzeOLS(
+          rows,
+          olsYCol,
+          olsXSelected,
+          reconstructed,
+          activeImputationIndex
+        );
+        if (res) captureOlsRun(res);
+        else setOlsRun(null);
         if (!res && reconstructed) showToast(t("regressionExplainer.miceOlsFailed"));
       } finally {
         setRegressionLoading(null);
@@ -146,7 +181,8 @@ export function RegressionTab({
       return;
     }
     const res = computeOLS(rows, olsYCol, olsXSelected);
-    setOlsResult(res ?? null);
+    if (res) captureOlsRun(res);
+    else setOlsRun(null);
   };
 
   const runLogistic = async () => {
@@ -237,7 +273,7 @@ export function RegressionTab({
                 value={olsYCol}
                 onChange={(e) => {
                   setOlsYCol(e.target.value);
-                  setOlsResult(null);
+                  setOlsRun(null);
                 }}
                 className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
               >
@@ -263,7 +299,7 @@ export function RegressionTab({
                         checked={olsXSelected.includes(c)}
                         onChange={() => {
                           toggleX(c);
-                          setOlsResult(null);
+                          setOlsRun(null);
                         }}
                         className="rounded"
                       />
@@ -542,6 +578,15 @@ export function RegressionTab({
                       </span>
                     ))}
                   </div>
+                </div>
+              )}
+              {olsRun && (
+                <div className="p-2 border-t border-neutral-100">
+                  <RegressionDiagnosticsPanel
+                    run={olsRun}
+                    selectedDatasetId={selectedDataset.id}
+                    submittedRows={rows.length > 0 ? rows.length - 1 : 0}
+                  />
                 </div>
               )}
             </div>
