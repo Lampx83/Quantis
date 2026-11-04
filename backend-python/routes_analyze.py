@@ -62,6 +62,7 @@ from analysis_impl import (
 )
 
 from panel_impl import run_panel
+from regression_diagnostics import build_regression_diagnostics, diagnostics_failure
 
 router = APIRouter()
 
@@ -137,6 +138,8 @@ class OLSBody(BaseModel):
     xCols: list[str]
     imputed_datasets: list[list[list[Any]]] | None = None
     imputedDatasets: list[list[list[Any]]] | None = None
+    # 0 = dữ liệu gốc (gửi kèm `rows`), 1..m = bộ điền thứ k của bundle; None = hành vi cũ.
+    activeImputationIndex: int | None = None
 
 
 class PanelBody(BaseModel):
@@ -549,6 +552,61 @@ async def analyze_kruskal(body: AnovaBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _diagnostics_table(body: "OLSBody", imputed_data: list | None):
+    """(rows, active_imputation, method, error_code) for the table diagnostics judge.
+
+    `None` rows + an error code means the request named a table that does not exist
+    (R7.2 `not_available`); coefficients are unaffected.
+    """
+    active = body.activeImputationIndex
+    if active is None:
+        return body.rows, None, "listwise", None
+    if active == 0:
+        return body.rows, 0, "listwise", None
+    if active < 1 or not imputed_data or active > len(imputed_data):
+        return None, active, "listwise", "not_available"
+    return imputed_data[active - 1], active, "mice-active", None
+
+
+def _n_input_for_result(body: "OLSBody", imputed_data: list | None, judged_rows: list | None) -> int:
+    """Rows submitted for the model whose coefficients are returned (header excluded)."""
+    if judged_rows is not None:
+        return max(0, len(judged_rows) - 1)
+    if body.rows:
+        return max(0, len(body.rows) - 1)
+    if imputed_data:
+        return max(0, len(imputed_data[0]) - 1)
+    return 0
+
+
+def _result_with_diagnostics(result: dict, body: "OLSBody", imputed_data: list | None) -> dict:
+    """Merge the additive sample keys and the diagnostics payload into an OLS result (R1.1–R1.2)."""
+    judged_rows, active_imputation, sample_method, error_code = _diagnostics_table(body, imputed_data)
+
+    n_input = _n_input_for_result(body, imputed_data, judged_rows)
+    n_used = int(result.get("n", 0))
+    result["nInput"] = int(n_input)
+    result["nDropped"] = int(max(0, n_input - n_used))
+    result["missingMethod"] = "mice-active" if result.get("rubinPooled") else "listwise"
+
+    if error_code is not None:
+        result["diagnostics"] = diagnostics_failure(error_code)
+        return result
+
+    try:
+        result["diagnostics"] = build_regression_diagnostics(
+            judged_rows or [],
+            body.yCol,
+            body.xCols,
+            method=sample_method,
+            m=len(imputed_data) if imputed_data else None,
+            active_imputation=active_imputation,
+        )
+    except Exception as exc:  # R7.1: never let diagnostics take the model down
+        result["diagnostics"] = diagnostics_failure("internal", str(exc))
+    return result
+
+
 @router.post("/ols")
 def analyze_ols(body: OLSBody):
     try:
@@ -558,7 +616,7 @@ def analyze_ols(body: OLSBody):
         result = run_ols(body.rows, body.yCol, body.xCols, imputed_datasets=imputed_data)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
-        return {"result": result}
+        return {"result": _result_with_diagnostics(result, body, imputed_data)}
     except HTTPException:
         raise
     except ValueError as e:
