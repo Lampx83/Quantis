@@ -12,12 +12,19 @@ Bất biến:
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy import stats as scipy_stats
 
 from analysis_impl import _rows_to_df
+
+# Plot sampling and caps (R5.4–R5.6). Verdicts always use the full Model sample.
+PLOT_SAMPLE_LIMIT = 5000
+QQ_MAX_POINTS = 2000
+INFLUENTIAL_MAX = 20
 
 
 class _DiagError(Exception):
@@ -110,6 +117,116 @@ def _sample_block(
 
 
 # ---------------------------------------------------------------------------
+# Statistic blocks — always on the model's own objects (AD-6)
+# ---------------------------------------------------------------------------
+
+
+def _stride_indices(n: int) -> list[int]:
+    """Deterministic plot sample: start at 0, step ceil(n / 5000) (R5.4)."""
+    if n <= PLOT_SAMPLE_LIMIT:
+        return list(range(n))
+    step = max(1, math.ceil(n / PLOT_SAMPLE_LIMIT))
+    return list(range(0, n, step))
+
+
+def _obs_block(model: Any, used: list[int], influence: Any) -> dict:
+    n = len(used)
+    idx = np.asarray(_stride_indices(n), dtype=int)
+    cooks = np.asarray(influence.cooks_distance[0], dtype=float)
+    fitted = np.asarray(model.fittedvalues, dtype=float)
+    resid = np.asarray(model.resid, dtype=float)
+    return {
+        "rowIndex": [used[i] for i in idx],
+        "fitted": _finite_list(fitted[idx]),
+        "resid": _finite_list(resid[idx]),
+        "stdResid": _finite_list(np.asarray(influence.resid_studentized_internal, dtype=float)[idx]),
+        "studentized": _finite_list(np.asarray(influence.resid_studentized_external, dtype=float)[idx]),
+        "leverage": _finite_list(np.asarray(influence.hat_matrix_diag, dtype=float)[idx]),
+        "cookD": _finite_list(cooks[idx]),
+    }
+
+
+def _qq_block(resid: Any) -> dict:
+    """Normal Q-Q using Blom plotting positions (statsmodels ProbPlot convention)."""
+    osm, osr = scipy_stats.probplot(np.asarray(resid, dtype=float), dist="norm", fit=False)
+    theoretical = np.asarray(osm, dtype=float)
+    sample = np.asarray(osr, dtype=float)
+    n = len(theoretical)
+    if n > QQ_MAX_POINTS:
+        keep = np.unique(np.round(np.linspace(0, n - 1, QQ_MAX_POINTS)).astype(int))
+        theoretical = theoretical[keep]
+        sample = sample[keep]
+    return {"theoretical": _finite_list(theoretical), "sample": _finite_list(sample)}
+
+
+def _vif_block(model: Any, x_cols: list[str]) -> dict:
+    """VIF and tolerance from the model's own design matrix — never a re-fit per predictor."""
+    if len(x_cols) < 2:
+        return {}
+    from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+    exog = np.asarray(model.model.exog, dtype=float)
+    names = list(model.model.exog_names)
+    out: dict[str, dict] = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with np.errstate(divide="ignore", invalid="ignore"):
+            for column in x_cols:
+                if column not in names:
+                    continue
+                vif = _finite(variance_inflation_factor(exog, names.index(column)))
+                out[column] = {
+                    "vif": vif,
+                    "tolerance": None if vif in (None, 0.0) else _finite(1.0 / vif),
+                }
+    return out
+
+
+def _hc3_block(model: Any, x_cols: list[str]) -> dict:
+    robust = model.get_robustcov_results(cov_type="HC3")
+    ci = np.asarray(robust.conf_int(), dtype=float)
+    source_names = list(model.model.exog_names)
+
+    def at(container: Any, position: int) -> float:
+        return float(container.iloc[position] if hasattr(container, "iloc") else container[position])
+
+    block: dict[str, dict] = {"se": {}, "tStat": {}, "pValue": {}, "ciLower": {}, "ciUpper": {}}
+    for display, source in [("(Intercept)", "const")] + [(c, c) for c in x_cols]:
+        position = source_names.index(source) if source in source_names else 0
+        block["se"][display] = _finite(at(robust.bse, position))
+        block["tStat"][display] = _finite(at(robust.tvalues, position))
+        block["pValue"][display] = _finite(at(robust.pvalues, position))
+        block["ciLower"][display] = _finite(ci[position, 0])
+        block["ciUpper"][display] = _finite(ci[position, 1])
+    return block
+
+
+def _influential_block(
+    used: list[int], cooks: np.ndarray, leverage: np.ndarray, studentized: np.ndarray
+) -> list[dict]:
+    """The flagged observations: Cook's D above 4/n, largest first, capped at 20 (R5.6)."""
+    n = len(used)
+    if n == 0:
+        return []
+    cut = 4.0 / n
+    out: list[dict] = []
+    for i in np.argsort(-cooks, kind="stable"):
+        if not np.isfinite(cooks[i]) or cooks[i] <= cut:
+            break
+        out.append(
+            {
+                "rowIndex": int(used[i]),
+                "cookD": _finite(cooks[i]),
+                "leverage": _finite(leverage[i]),
+                "studentized": _finite(studentized[i]),
+            }
+        )
+        if len(out) >= INFLUENTIAL_MAX:
+            break
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Payload builder
 # ---------------------------------------------------------------------------
 
@@ -126,15 +243,28 @@ def build_regression_diagnostics(
     """Diagnostics payload for one fitted OLS model; never raises."""
     try:
         model, used = _fit_judged_table(rows, y_col, x_cols)
+        influence = model.get_influence()
+        cooks = np.asarray(influence.cooks_distance[0], dtype=float)
+        n_used = len(used)
+        return {
+            "ok": True,
+            "errorCode": None,
+            "errorDetail": None,
+            "sample": _sample_block(max(0, len(rows) - 1), n_used, method, m, active_imputation),
+            "obs": _obs_block(model, used, influence),
+            "qq": _qq_block(model.resid),
+            "vif": _vif_block(model, x_cols),
+            "influential": _influential_block(
+                used,
+                cooks,
+                np.asarray(influence.hat_matrix_diag, dtype=float),
+                np.asarray(influence.resid_studentized_external, dtype=float),
+            ),
+            "robustHC3": _hc3_block(model, x_cols),
+            "sampled": n_used > PLOT_SAMPLE_LIMIT,
+        }
     except _DiagError as exc:
         return diagnostics_failure(exc.code)
     except Exception as exc:  # fault isolation: a working regression outranks diagnostics
         return diagnostics_failure("internal", str(exc))
 
-    n_input = max(0, len(rows) - 1)
-    return {
-        "ok": True,
-        "errorCode": None,
-        "errorDetail": None,
-        "sample": _sample_block(n_input, len(used), method, m, active_imputation),
-    }
