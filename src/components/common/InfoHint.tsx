@@ -12,7 +12,9 @@ export type GlossaryTerm =
   | "pValue" | "coefficient" | "r2" | "vif" | "ttest" | "anova" | "cohensD" | "correlationMatrix"
   | "panelData" | "pooledOls" | "fixedEffects" | "randomEffects" | "hausman" | "withinBetween"
   | "zScore" | "iqr" | "nonNumeric"
-  | "mice" | "miceM" | "miceMaxIter";
+  | "mice" | "miceM" | "miceMaxIter"
+  | "bpTest" | "resetTest" | "cooksDistance" | "leverage" | "studentizedResidual"
+  | "hc3" | "qqPlot" | "assumptionCheck";
 
 /** Dải thuật ngữ: «Giải thích thuật ngữ: p-value (i) · t-test (i) …» — đặt ngay dưới tiêu đề của một chức năng. */
 export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {
