@@ -152,6 +152,36 @@ def test_payload_survives_strict_json_round_trip():
     assert json.loads(dumped)["diagnostics"]["ok"] is True
 
 
+def test_payload_thresholds_are_the_verdict_constants():
+    """The UI prints these numbers, so the payload must carry the constants, not copies (R3.6)."""
+    from regression_diagnostics import (
+        ALPHA_PASS,
+        COOK_ABSOLUTE_LIMIT,
+        COOK_RELATIVE_MULTIPLIER,
+        NORMALITY_ALPHA,
+        NORMALITY_EXCESS_KURTOSIS_GUARD,
+        NORMALITY_SKEW_GUARD,
+        NORMALITY_VIOLATION_ALPHA,
+        STUDENTIZED_LIMIT,
+        VIF_CAUTION,
+        VIF_VIOLATION,
+    )
+
+    thresholds = post_ols(make_rows()).json()["result"]["diagnostics"]["thresholds"]
+    assert thresholds == {
+        "linearityAlpha": ALPHA_PASS,
+        "normalityAlpha": NORMALITY_ALPHA,
+        "normalityViolationAlpha": NORMALITY_VIOLATION_ALPHA,
+        "normalitySkewGuard": NORMALITY_SKEW_GUARD,
+        "normalityExcessKurtosisGuard": NORMALITY_EXCESS_KURTOSIS_GUARD,
+        "vifCaution": VIF_CAUTION,
+        "vifViolation": VIF_VIOLATION,
+        "cookAbsolute": COOK_ABSOLUTE_LIMIT,
+        "cookRelativeMultiplier": COOK_RELATIVE_MULTIPLIER,
+        "studentized": STUDENTIZED_LIMIT,
+    }
+
+
 # ---------------------------------------------------------------------------
 # T02 — residual blocks, VIF, HC3, sampling
 # ---------------------------------------------------------------------------

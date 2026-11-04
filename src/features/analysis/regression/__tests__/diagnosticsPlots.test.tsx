@@ -103,6 +103,18 @@ function makeDiagnostics(overrides: Partial<DiagnosticsPayloadOk> = {}): Diagnos
     vif: { X1: { vif: 1.2, tolerance: 0.83 } },
     influential: [],
     robustHC3: { se: {}, tStat: {}, pValue: {}, ciLower: {}, ciUpper: {} },
+    thresholds: {
+      linearityAlpha: 0.05,
+      normalityAlpha: 0.05,
+      normalityViolationAlpha: 0.001,
+      normalitySkewGuard: 1,
+      normalityExcessKurtosisGuard: 2,
+      vifCaution: 5,
+      vifViolation: 10,
+      cookAbsolute: 1,
+      cookRelativeMultiplier: 4,
+      studentized: 3,
+    },
     sampled: false,
     ...overrides,
   };

@@ -155,6 +155,18 @@ function makeDiagnostics(
       ciLower: { "(Intercept)": 0.1, X1: 1.2, X2: 0.1 },
       ciUpper: { "(Intercept)": 2.0, X1: 3.9, X2: 1.0 },
     },
+    thresholds: {
+      linearityAlpha: 0.05,
+      normalityAlpha: 0.05,
+      normalityViolationAlpha: 0.001,
+      normalitySkewGuard: 1,
+      normalityExcessKurtosisGuard: 2,
+      vifCaution: 5,
+      vifViolation: 10,
+      cookAbsolute: 1,
+      cookRelativeMultiplier: 4,
+      studentized: 3,
+    },
     sampled: false,
     ...overrides,
   };

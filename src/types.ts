@@ -196,6 +196,20 @@ export interface RobustHC3Block {
   ciUpper: Record<string, number | null>;
 }
 
+/** The numbers behind each threshold sentence, shipped from the backend constants (R3.6). */
+export interface DiagnosticsThresholds {
+  linearityAlpha: number;
+  normalityAlpha: number;
+  normalityViolationAlpha: number;
+  normalitySkewGuard: number;
+  normalityExcessKurtosisGuard: number;
+  vifCaution: number;
+  vifViolation: number;
+  cookAbsolute: number;
+  cookRelativeMultiplier: number;
+  studentized: number;
+}
+
 export interface DiagnosticsPayloadOk {
   ok: true;
   errorCode: null;
@@ -207,6 +221,7 @@ export interface DiagnosticsPayloadOk {
   vif: Record<string, VifEntry>;
   influential: InfluentialObservation[];
   robustHC3: RobustHC3Block;
+  thresholds: DiagnosticsThresholds;
   sampled: boolean;
 }
 

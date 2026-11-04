@@ -358,6 +358,22 @@ def _assumptions(
 # ---------------------------------------------------------------------------
 
 
+def thresholds_block() -> dict:
+    """The numbers the UI prints in its threshold sentences, from the constants above (R3.6)."""
+    return {
+        "linearityAlpha": ALPHA_PASS,
+        "normalityAlpha": NORMALITY_ALPHA,
+        "normalityViolationAlpha": NORMALITY_VIOLATION_ALPHA,
+        "normalitySkewGuard": NORMALITY_SKEW_GUARD,
+        "normalityExcessKurtosisGuard": NORMALITY_EXCESS_KURTOSIS_GUARD,
+        "vifCaution": VIF_CAUTION,
+        "vifViolation": VIF_VIOLATION,
+        "cookAbsolute": COOK_ABSOLUTE_LIMIT,
+        "cookRelativeMultiplier": COOK_RELATIVE_MULTIPLIER,
+        "studentized": STUDENTIZED_LIMIT,
+    }
+
+
 def _stride_indices(n: int) -> list[int]:
     """Deterministic plot sample: start at 0, step ceil(n / 5000) (R5.4)."""
     if n <= PLOT_SAMPLE_LIMIT:
@@ -518,6 +534,7 @@ def build_regression_diagnostics(
             "vif": vif,
             "influential": _influential_block(used, cooks, leverage, studentized),
             "robustHC3": _hc3_block(model, x_cols),
+            "thresholds": thresholds_block(),
             "sampled": n_used > PLOT_SAMPLE_LIMIT,
         }
     except _DiagError as exc:

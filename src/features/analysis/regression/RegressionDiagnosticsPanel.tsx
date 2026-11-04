@@ -6,6 +6,7 @@ import type {
   Dataset,
   DiagnosticsPayload,
   DiagnosticsPayloadOk,
+  DiagnosticsThresholds,
   RegressionVerdict,
 } from "@/types";
 import { t } from "@/i18n";
@@ -14,22 +15,6 @@ import { useUIStore } from "@/stores/useUIStore";
 import { DiagnosticsPlots } from "./DiagnosticsPlots";
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
-
-/**
- * Thresholds mirrored from backend-python/regression_diagnostics.py (spec R3.2).
- * The Verdict is decided server-side; these numbers only format its sentence (R3.6).
- */
-const DIAGNOSTIC_THRESHOLDS = {
-  pass: 0.05,
-  caution: 5,
-  violation: 10,
-  violationP: 0.001,
-  skew: 1,
-  kurtosis: 2,
-  relative: 4,
-  studentized: 3,
-  absolute: 1,
-} as const;
 
 const VERDICT_CLASS: Record<RegressionVerdict, string> = {
   pass: "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800",
@@ -104,29 +89,33 @@ function statLines(
   }
 }
 
-function thresholdText(id: string, translate: Translate): string {
+function thresholdText(
+  id: string,
+  thresholds: DiagnosticsThresholds,
+  translate: Translate
+): string {
   switch (id) {
     case "linearity":
       return translate("regDiag.threshold.linearity", {
-        pass: DIAGNOSTIC_THRESHOLDS.pass,
+        pass: thresholds.linearityAlpha,
       });
     case "normality":
       return translate("regDiag.threshold.normality", {
-        pass: DIAGNOSTIC_THRESHOLDS.pass,
-        violationP: DIAGNOSTIC_THRESHOLDS.violationP,
-        skew: DIAGNOSTIC_THRESHOLDS.skew,
-        kurtosis: DIAGNOSTIC_THRESHOLDS.kurtosis,
+        pass: thresholds.normalityAlpha,
+        violationP: thresholds.normalityViolationAlpha,
+        skew: thresholds.normalitySkewGuard,
+        kurtosis: thresholds.normalityExcessKurtosisGuard,
       });
     case "influence":
       return translate("regDiag.threshold.influence", {
-        relative: DIAGNOSTIC_THRESHOLDS.relative,
-        studentized: DIAGNOSTIC_THRESHOLDS.studentized,
-        absolute: DIAGNOSTIC_THRESHOLDS.absolute,
+        relative: thresholds.cookRelativeMultiplier,
+        studentized: thresholds.studentized,
+        absolute: thresholds.cookAbsolute,
       });
     default:
       return translate("regDiag.threshold.collinearity", {
-        caution: DIAGNOSTIC_THRESHOLDS.caution,
-        violation: DIAGNOSTIC_THRESHOLDS.violation,
+        caution: thresholds.vifCaution,
+        violation: thresholds.vifViolation,
       });
   }
 }
@@ -179,7 +168,7 @@ export function buildDiagnosticsTsv(
     [
       translate(`regDiag.row.${row.id}`),
       row.applicable ? statLines(row, translate).join("; ") : "",
-      row.applicable ? thresholdText(row.id, translate) : "",
+      row.applicable ? thresholdText(row.id, diagnostics.thresholds, translate) : "",
       verdictLabel(row, translate),
     ].join("\t")
   );
@@ -479,7 +468,7 @@ function AssumptionTableRow({
       )}
 
       <td className="p-2 text-xs">
-        {row.applicable ? thresholdText(row.id, t) : null}
+        {row.applicable ? thresholdText(row.id, diagnostics.thresholds, t) : null}
       </td>
 
       <td className="p-2">
