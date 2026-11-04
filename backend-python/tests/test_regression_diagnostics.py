@@ -24,6 +24,13 @@ from statsmodels.tools import add_constant  # noqa: E402
 import routes_analyze  # noqa: E402
 from analysis_impl import run_ols  # noqa: E402
 from main import app  # noqa: E402
+from regression_diagnostics import (  # noqa: E402
+    collinearity_verdict,
+    influence_verdict,
+    linearity_verdict,
+    normality_verdict,
+    verdict_for_p,
+)
 
 client = TestClient(app)
 OLS_URL = "/api/quantis/analyze/ols"
@@ -261,4 +268,186 @@ def test_large_sample_is_strided_deterministic_and_full_sample_numbers_survive()
     model, _ = fitted_reference(rows)
     full_max = float(np.max(model.get_influence().cooks_distance[0]))
     assert abs(first["influential"][0]["cookD"] - full_max) < TOL
+
+
+# ---------------------------------------------------------------------------
+# T03 — assumption rows, verdict rules, applicability
+# ---------------------------------------------------------------------------
+
+
+def test_assumptions_have_fixed_order_ids_and_stats():
+    diag = post_ols(make_rows()).json()["result"]["diagnostics"]
+    assumptions = diag["assumptions"]
+
+    assert [row["id"] for row in assumptions] == [
+        "linearity",
+        "normality",
+        "influence",
+        "collinearity",
+    ]
+    for row in assumptions:
+        assert row["applicable"] is True
+        assert row["verdict"] in {"pass", "caution", "violation"}
+
+    linearity, normality, influence, collinearity = assumptions
+    assert set(linearity["stats"]) == {"bp", "reset"}
+    assert set(linearity["stats"]["bp"]) == {"chi2", "df", "p"}
+    assert set(linearity["stats"]["reset"]) == {"f", "df1", "df2", "p"}
+    assert set(normality["stats"]) == {"test", "stat", "p", "skewness", "excessKurtosis"}
+    assert set(influence["stats"]) == {
+        "maxCookD", "nAbove4n", "maxLeverage", "leverageCut",
+        "maxStudentized", "nStudentizedAbove3",
+    }
+    assert set(collinearity["stats"]) == {"maxVif"}
+
+
+def test_linearity_stats_match_statsmodels():
+    from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
+
+    rows = make_rows()
+    diag = post_ols(rows).json()["result"]["diagnostics"]
+    model, _ = fitted_reference(rows)
+    lm, lm_p, _, _ = het_breuschpagan(model.resid, model.model.exog)
+    reset = linear_reset(model, power=2, use_f=True)
+
+    stats = diag["assumptions"][0]["stats"]
+    assert abs(stats["bp"]["chi2"] - float(lm)) < TOL
+    assert stats["bp"]["df"] == 3
+    assert abs(stats["bp"]["p"] - float(lm_p)) < TOL
+    assert abs(stats["reset"]["f"] - float(reset.statistic)) < TOL
+    assert stats["reset"]["df1"] == 1
+    assert stats["reset"]["df2"] == 80 - 3 - 2
+    assert abs(stats["reset"]["p"] - float(reset.pvalue)) < TOL
+
+
+def test_normality_stats_match_scipy():
+    rows = make_rows()
+    diag = post_ols(rows).json()["result"]["diagnostics"]
+    model, _ = fitted_reference(rows)
+    resid = np.asarray(model.resid, dtype=float)
+    stat, p = scipy_stats.shapiro(resid)
+
+    stats = diag["assumptions"][1]["stats"]
+    assert stats["test"] == "shapiro"
+    assert abs(stats["stat"] - float(stat)) < TOL
+    assert abs(stats["p"] - float(p)) < TOL
+    assert abs(stats["skewness"] - float(scipy_stats.skew(resid))) < TOL
+    assert abs(stats["excessKurtosis"] - float(scipy_stats.kurtosis(resid, fisher=True))) < TOL
+
+
+def test_normality_switches_to_jarque_bera_above_5000():
+    diag = post_ols(make_rows(n=5200, seed=3)).json()["result"]["diagnostics"]
+    stats = diag["assumptions"][1]["stats"]
+    assert stats["test"] == "jarqueBera"
+    model, _ = fitted_reference(make_rows(n=5200, seed=3))
+    expected_stat, expected_p = scipy_stats.jarque_bera(np.asarray(model.resid, dtype=float))
+    assert abs(stats["stat"] - float(expected_stat)) < TOL
+    assert abs(stats["p"] - float(expected_p)) < TOL
+
+
+def test_influence_stats_match_statsmodels():
+    rows = make_rows()
+    diag = post_ols(rows).json()["result"]["diagnostics"]
+    model, _ = fitted_reference(rows)
+    influence = model.get_influence()
+    cooks = np.asarray(influence.cooks_distance[0], dtype=float)
+    hat = np.asarray(influence.hat_matrix_diag, dtype=float)
+    studentized = np.asarray(influence.resid_studentized_external, dtype=float)
+    n, k = 80, 3
+
+    stats = diag["assumptions"][2]["stats"]
+    assert abs(stats["maxCookD"] - float(np.max(cooks))) < TOL
+    assert stats["nAbove4n"] == int(np.sum(cooks > 4.0 / n))
+    assert abs(stats["maxLeverage"] - float(np.max(hat))) < TOL
+    assert abs(stats["leverageCut"] - 2.0 * (k + 1) / n) < TOL
+    assert abs(stats["maxStudentized"] - float(np.max(np.abs(studentized)))) < TOL
+    assert stats["nStudentizedAbove3"] == int(np.sum(np.abs(studentized) > 3.0))
+
+
+def test_collinearity_max_vif_is_largest_vif():
+    diag = post_ols(make_rows()).json()["result"]["diagnostics"]
+    assert abs(
+        diag["assumptions"][3]["stats"]["maxVif"]
+        - max(entry["vif"] for entry in diag["vif"].values())
+    ) < TOL
+
+
+@pytest.mark.parametrize(
+    "p,expected",
+    [(0.0499, "caution"), (0.05, "pass"), (0.0501, "pass"), (0.0099, "violation"), (0.01, "caution")],
+)
+def test_verdict_for_p_boundaries(p, expected):
+    assert verdict_for_p(p) == expected
+
+
+def test_linearity_verdict_is_the_worse_of_both_tests():
+    assert linearity_verdict(0.06, 0.06) == "pass"
+    assert linearity_verdict(0.06, 0.03) == "caution"
+    assert linearity_verdict(0.03, 0.06) == "caution"
+    assert linearity_verdict(0.03, 0.005) == "violation"
+    assert linearity_verdict(0.005, 0.03) == "violation"
+
+
+def test_normality_verdict_requires_a_meaningful_deviation():
+    assert normality_verdict(0.06, 5.0, 9.0) == "pass"
+    assert normality_verdict(0.03, 5.0, 9.0) == "caution"
+    # p below .001 but the magnitude guard fails -> caution, never violation
+    assert normality_verdict(0.0005, 0.2, 0.0) == "caution"
+    assert normality_verdict(0.0005, -0.2, 1.0) == "caution"
+    assert normality_verdict(0.0005, 1.0, 0.0) == "violation"
+    assert normality_verdict(0.0005, -1.0, 0.0) == "violation"
+    assert normality_verdict(0.0005, 0.0, 2.0) == "violation"
+
+
+def test_influence_verdict_boundaries():
+    n = 100
+    zeros = np.zeros(n)
+    assert influence_verdict(np.full(n, 0.04), zeros) == "pass"
+    assert influence_verdict(np.concatenate([[0.0401], np.zeros(n - 1)]), zeros) == "caution"
+    assert influence_verdict(np.concatenate([[1.0], np.zeros(n - 1)]), zeros) == "caution"
+    assert influence_verdict(np.concatenate([[1.0001], np.zeros(n - 1)]), zeros) == "violation"
+    assert influence_verdict(zeros, np.concatenate([[3.0], np.zeros(n - 1)])) == "pass"
+    assert influence_verdict(zeros, np.concatenate([[3.1], np.zeros(n - 1)])) == "caution"
+
+
+@pytest.mark.parametrize(
+    "max_vif,expected",
+    [(4.99, "pass"), (5.0, "caution"), (9.99, "caution"), (10.0, "violation")],
+)
+def test_collinearity_verdict_boundaries(max_vif, expected):
+    assert collinearity_verdict(max_vif) == expected
+
+
+def test_single_predictor_marks_collinearity_inapplicable():
+    diag = post_ols(make_rows(), x_cols=("X1",)).json()["result"]["diagnostics"]
+    row = diag["assumptions"][3]
+
+    assert row["applicable"] is False
+    assert row["notApplicableReason"] == "singlePredictor"
+    assert "stats" not in row
+    assert "verdict" not in row
+    assert diag["vif"] == {}
+    assert diag["assumptions"][0]["applicable"] is True
+
+
+def test_minimum_residual_df_marks_only_linearity_inapplicable():
+    rows = [
+        ["Y", "X1", "X2"],
+        ["1", "1", "0"],
+        ["2", "0", "1"],
+        ["3", "1", "1"],
+        ["4", "2", "0"],
+    ]
+    result = post_ols(rows, x_cols=("X1", "X2")).json()["result"]
+    diag = result["diagnostics"]
+
+    assert diag["ok"] is True
+    linearity = diag["assumptions"][0]
+    assert linearity["applicable"] is False
+    assert linearity["notApplicableReason"] == "insufficientDf"
+    assert "stats" not in linearity
+    for row in diag["assumptions"][1:]:
+        assert row["applicable"] is True
+        assert row["verdict"] in {"pass", "caution", "violation"}
+
 

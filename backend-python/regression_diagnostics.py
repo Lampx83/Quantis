@@ -26,6 +26,28 @@ PLOT_SAMPLE_LIMIT = 5000
 QQ_MAX_POINTS = 2000
 INFLUENTIAL_MAX = 20
 
+# Assumption thresholds (R3.2). Verdicts and the on-screen threshold sentences
+# must both come from these numbers — a literal elsewhere is a defect (R3.6).
+ALPHA_PASS = 0.05
+ALPHA_VIOLATION = 0.01
+NORMALITY_ALPHA = 0.05
+NORMALITY_VIOLATION_ALPHA = 0.001
+NORMALITY_SKEW_GUARD = 1.0
+NORMALITY_EXCESS_KURTOSIS_GUARD = 2.0
+VIF_CAUTION = 5.0
+VIF_VIOLATION = 10.0
+COOK_ABSOLUTE_LIMIT = 1.0
+COOK_RELATIVE_MULTIPLIER = 4.0
+STUDENTIZED_LIMIT = 3.0
+LEVERAGE_MULTIPLIER = 2.0
+SHAPIRO_MAX_N = 5000
+
+PASS = "pass"
+CAUTION = "caution"
+VIOLATION = "violation"
+_SEVERITY = {PASS: 0, CAUTION: 1, VIOLATION: 2}
+
+
 
 class _DiagError(Exception):
     """A known diagnostics condition, mapped to a payload errorCode."""
@@ -114,6 +136,213 @@ def _sample_block(
         "m": m,
         "activeImputation": active_imputation,
     }
+
+
+# ---------------------------------------------------------------------------
+# Verdict rules — the single place a Verdict is decided (R3.1, AD-4)
+# ---------------------------------------------------------------------------
+
+
+def verdict_for_p(p: float) -> str:
+    """One p-value: pass at ≥ .05, caution in [.01, .05), violation below .01."""
+    if p < ALPHA_VIOLATION:
+        return VIOLATION
+    if p < ALPHA_PASS:
+        return CAUTION
+    return PASS
+
+
+def _worse(first: str, second: str) -> str:
+    return first if _SEVERITY[first] >= _SEVERITY[second] else second
+
+
+def linearity_verdict(bp_p: float, reset_p: float) -> str:
+    """The worse of the two linearity tests (R3.4)."""
+    return _worse(verdict_for_p(bp_p), verdict_for_p(reset_p))
+
+
+def normality_verdict(p: float, skewness: float, excess_kurtosis: float) -> str:
+    """A p-value alone never produces a Violation: the magnitude guard must also trip (R3.3)."""
+    if p >= NORMALITY_ALPHA:
+        return PASS
+    if p < NORMALITY_VIOLATION_ALPHA and (
+        abs(skewness) >= NORMALITY_SKEW_GUARD
+        or excess_kurtosis >= NORMALITY_EXCESS_KURTOSIS_GUARD
+    ):
+        return VIOLATION
+    return CAUTION
+
+
+def influence_verdict(cook_d: np.ndarray, studentized: np.ndarray) -> str:
+    """Cook's D decides; the studentized residual can only raise Caution (R3.4).
+
+    Non-finite studentized residuals (undefined when df_resid is 1) are ignored:
+    an undefined statistic must not manufacture a Verdict (R1.3).
+    """
+    cooks = np.asarray(cook_d, dtype=float)
+    stud = np.asarray(studentized, dtype=float)
+    finite_cooks = cooks[np.isfinite(cooks)]
+    finite_stud = stud[np.isfinite(stud)]
+    n = len(finite_cooks)
+    if n and float(np.max(finite_cooks)) > COOK_ABSOLUTE_LIMIT:
+        return VIOLATION
+    cut = COOK_RELATIVE_MULTIPLIER / n if n else 0.0
+    if np.any(finite_cooks > cut) or np.any(np.abs(finite_stud) > STUDENTIZED_LIMIT):
+        return CAUTION
+    return PASS
+
+
+def collinearity_verdict(max_vif: float | None) -> str:
+    """None means a non-finite (infinite) VIF — perfect collinearity, a Violation (R2.5)."""
+    if max_vif is None:
+        return VIOLATION
+    if max_vif >= VIF_VIOLATION:
+        return VIOLATION
+    if max_vif >= VIF_CAUTION:
+        return CAUTION
+    return PASS
+
+
+# ---------------------------------------------------------------------------
+# Assumption rows
+# ---------------------------------------------------------------------------
+
+
+def _inapplicable(row_id: str, reason: str) -> dict:
+    return {"id": row_id, "applicable": False, "notApplicableReason": reason}
+
+
+def _linearity_row(model: Any, n: int, k: int) -> dict:
+    # RESET's denominator df is n - k - 2; at n = k + 2 it is 0 (R7.3).
+    if n - k - 2 < 1:
+        return _inapplicable("linearity", "insufficientDf")
+    from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
+
+    try:
+        lm, lm_p, _, _ = het_breuschpagan(model.resid, model.model.exog)
+        reset = linear_reset(model, power=2, use_f=True)
+        stats = {
+            "bp": {"chi2": _finite(lm), "df": int(k), "p": _finite(lm_p)},
+            "reset": {
+                "f": _finite(reset.statistic),
+                "df1": int(reset.df_num),
+                "df2": int(reset.df_denom),
+                "p": _finite(reset.pvalue),
+            },
+        }
+        if any(
+            value is None
+            for value in (
+                stats["bp"]["chi2"], stats["bp"]["p"],
+                stats["reset"]["f"], stats["reset"]["p"],
+            )
+        ):
+            return _inapplicable("linearity", "notComputable")
+    except Exception:
+        return _inapplicable("linearity", "notComputable")
+    return {
+        "id": "linearity",
+        "applicable": True,
+        "verdict": linearity_verdict(lm_p, reset.pvalue),
+        "stats": stats,
+    }
+
+
+def _normality_row(model: Any, n: int) -> dict:
+    if n < 3:
+        return _inapplicable("normality", "notComputable")
+    resid = np.asarray(model.resid, dtype=float)
+    try:
+        if n <= SHAPIRO_MAX_N:
+            test_name = "shapiro"
+            stat, p = scipy_stats.shapiro(resid)
+        else:
+            test_name = "jarqueBera"
+            stat, p = scipy_stats.jarque_bera(resid)
+        skewness = float(scipy_stats.skew(resid))
+        excess_kurtosis = float(scipy_stats.kurtosis(resid, fisher=True))
+        stats = {
+            "test": test_name,
+            "stat": _finite(stat),
+            "p": _finite(p),
+            "skewness": _finite(skewness),
+            "excessKurtosis": _finite(excess_kurtosis),
+        }
+        if any(stats[key] is None for key in ("stat", "p", "skewness", "excessKurtosis")):
+            return _inapplicable("normality", "notComputable")
+    except Exception:
+        return _inapplicable("normality", "notComputable")
+    return {
+        "id": "normality",
+        "applicable": True,
+        "verdict": normality_verdict(p, skewness, excess_kurtosis),
+        "stats": stats,
+    }
+
+
+def _influence_row(
+    n: int, k: int, cooks: np.ndarray, leverage: np.ndarray, studentized: np.ndarray
+) -> dict:
+    try:
+        finite_cooks = cooks[np.isfinite(cooks)]
+        finite_stud = studentized[np.isfinite(studentized)]
+        stats = {
+            "maxCookD": _finite(np.max(finite_cooks)) if finite_cooks.size else None,
+            "nAbove4n": int(np.sum(finite_cooks > COOK_RELATIVE_MULTIPLIER / n)),
+            "maxLeverage": _finite(np.max(leverage)),
+            "leverageCut": _finite(LEVERAGE_MULTIPLIER * (k + 1) / n),
+            # None when df_resid is 1: the externally studentized residual is undefined.
+            "maxStudentized": (
+                _finite(np.max(np.abs(finite_stud))) if finite_stud.size else None
+            ),
+            "nStudentizedAbove3": int(np.sum(np.abs(finite_stud) > STUDENTIZED_LIMIT)),
+        }
+        if any(stats[key] is None for key in ("maxCookD", "maxLeverage", "leverageCut")):
+            return _inapplicable("influence", "notComputable")
+    except Exception:
+        return _inapplicable("influence", "notComputable")
+    return {
+        "id": "influence",
+        "applicable": True,
+        "verdict": influence_verdict(cooks, studentized),
+        "stats": stats,
+    }
+
+
+def _collinearity_row(x_cols: list[str], vif: dict) -> dict:
+    if len(x_cols) < 2:
+        return _inapplicable("collinearity", "singlePredictor")
+    try:
+        values = [entry.get("vif") for entry in vif.values()]
+        if not values:
+            return _inapplicable("collinearity", "notComputable")
+        max_vif = None if any(value is None for value in values) else float(max(values))
+    except Exception:
+        return _inapplicable("collinearity", "notComputable")
+    return {
+        "id": "collinearity",
+        "applicable": True,
+        "verdict": collinearity_verdict(max_vif),
+        "stats": {"maxVif": max_vif},
+    }
+
+
+def _assumptions(
+    model: Any,
+    n: int,
+    k: int,
+    x_cols: list[str],
+    vif: dict,
+    cooks: np.ndarray,
+    leverage: np.ndarray,
+    studentized: np.ndarray,
+) -> list[dict]:
+    return [
+        _linearity_row(model, n, k),
+        _normality_row(model, n),
+        _influence_row(n, k, cooks, leverage, studentized),
+        _collinearity_row(x_cols, vif),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -243,9 +472,17 @@ def build_regression_diagnostics(
     """Diagnostics payload for one fitted OLS model; never raises."""
     try:
         model, used = _fit_judged_table(rows, y_col, x_cols)
-        influence = model.get_influence()
+        with warnings.catch_warnings():
+            # df_resid = 1 leaves the externally studentized residual undefined; that is a
+            # non-finite statistic, handled at the boundary, not a warning worth surfacing.
+            warnings.simplefilter("ignore", RuntimeWarning)
+            influence = model.get_influence()
         cooks = np.asarray(influence.cooks_distance[0], dtype=float)
+        leverage = np.asarray(influence.hat_matrix_diag, dtype=float)
+        studentized = np.asarray(influence.resid_studentized_external, dtype=float)
         n_used = len(used)
+        n_predictors = len(x_cols)
+        vif = _vif_block(model, x_cols)
         return {
             "ok": True,
             "errorCode": None,
@@ -253,13 +490,11 @@ def build_regression_diagnostics(
             "sample": _sample_block(max(0, len(rows) - 1), n_used, method, m, active_imputation),
             "obs": _obs_block(model, used, influence),
             "qq": _qq_block(model.resid),
-            "vif": _vif_block(model, x_cols),
-            "influential": _influential_block(
-                used,
-                cooks,
-                np.asarray(influence.hat_matrix_diag, dtype=float),
-                np.asarray(influence.resid_studentized_external, dtype=float),
+            "assumptions": _assumptions(
+                model, n_used, n_predictors, x_cols, vif, cooks, leverage, studentized
             ),
+            "vif": vif,
+            "influential": _influential_block(used, cooks, leverage, studentized),
             "robustHC3": _hc3_block(model, x_cols),
             "sampled": n_used > PLOT_SAMPLE_LIMIT,
         }
