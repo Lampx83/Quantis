@@ -205,6 +205,8 @@ export interface RegressionDiagnosticsPanelProps {
  */
 export function requestDiagnosticsRowFocus(datasetId: string, rowIndex: number): void {
   useUIStore.getState().setMainSection("data");
+  // The grid is mounted by the Preview tab only; another tab would leave the request unconsumed.
+  useUIStore.getState().setDataTab("preview");
   useUIStore.getState().setDataEditorView("data");
   useUIStore.getState().requestRowFocus(datasetId, rowIndex);
 }

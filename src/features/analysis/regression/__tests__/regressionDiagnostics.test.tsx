@@ -407,6 +407,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     useUIStore.setState({
       rowFocus: null,
       mainSection: "analysis",
+      dataTab: "transform",
       dataEditorView: "variable",
     });
 
@@ -423,6 +424,8 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
 
     const state = useUIStore.getState();
     expect(state.mainSection).toBe("data");
+    // Only the Preview tab mounts the grid that consumes the request.
+    expect(state.dataTab).toBe("preview");
     expect(state.dataEditorView).toBe("data");
     expect(state.rowFocus).toEqual({ datasetId: "ds_reg", rowIndex: 87, nonce: 1 });
   });
