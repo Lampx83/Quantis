@@ -177,7 +177,7 @@ export function DiagnosticsPlots({
                 />
                 <Tooltip />
                 <ReferenceLine y={RESIDUAL_ZERO} stroke="#6b7280" />
-                <Scatter data={residualPoints} fill="#0ea5e9" />
+                <Scatter data={residualPoints} fill="#0ea5e9" isAnimationActive={false} />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -219,7 +219,7 @@ export function DiagnosticsPlots({
                     strokeDasharray="4 4"
                   />
                 )}
-                <Scatter data={qqPoints} fill="#0ea5e9" />
+                <Scatter data={qqPoints} fill="#0ea5e9" isAnimationActive={false} />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -260,7 +260,7 @@ export function DiagnosticsPlots({
                   strokeDasharray="4 4"
                   label={{ value: t("regDiag.plot.cooksCut"), fontSize: 10, position: "insideTopRight" }}
                 />
-                <Scatter data={cookPoints} fill="#0ea5e9" />
+                <Scatter data={cookPoints} fill="#0ea5e9" isAnimationActive={false} />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
