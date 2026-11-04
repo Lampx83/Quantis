@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactElement } from "react";
 import {
   RegressionDiagnosticsPanel,
+  InfluenceAction,
   buildDiagnosticsTsv,
+  requestDiagnosticsRowFocus,
   type RegressionDiagnosticsPanelProps,
 } from "../RegressionDiagnosticsPanel";
 import { RegressionTab } from "../../tabs/RegressionTab";
 import * as quantisApi from "@/api";
+import { useUIStore } from "@/stores/useUIStore";
 import { setLocale, t } from "@/i18n";
 import type { RegressionRun, RegressionRunResult } from "@/stores/useAnalysisStore";
 import type {
@@ -192,6 +196,16 @@ function capturePanel(props: RegressionDiagnosticsPanelProps): any {
   let captured: any = null;
   function Harness() {
     captured = RegressionDiagnosticsPanel(props);
+    return captured;
+  }
+  renderToStaticMarkup(<Harness />);
+  return captured;
+}
+
+function captureElement(element: ReactElement): any {
+  let captured: any = null;
+  function Harness() {
+    captured = (element.type as (props: unknown) => unknown)(element.props);
     return captured;
   }
   renderToStaticMarkup(<Harness />);
@@ -385,6 +399,47 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
   it("renders no section when the run belongs to another dataset", () => {
     const html = renderPanel(panelProps({ selectedDatasetId: "ds_other" }));
     expect(html).toBe("");
+  });
+
+  it("switches to the data view and posts the run's dataset with the observation row", () => {
+    useUIStore.setState({
+      rowFocus: null,
+      mainSection: "analysis",
+      dataEditorView: "variable",
+    });
+
+    const tree = captureElement(
+      <InfluenceAction
+        diagnostics={makeDiagnostics()}
+        stale={false}
+        onJumpToRow={(rowIndex) => requestDiagnosticsRowFocus("ds_reg", rowIndex)}
+      />
+    );
+    const jump = findByTestId(tree, "regdiag-jump-influence");
+    expect(jump).not.toBeNull();
+    jump.props.onClick();
+
+    const state = useUIStore.getState();
+    expect(state.mainSection).toBe("data");
+    expect(state.dataEditorView).toBe("data");
+    expect(state.rowFocus).toEqual({ datasetId: "ds_reg", rowIndex: 87, nonce: 1 });
+  });
+
+  it("increments the request nonce on a repeat jump to the same row", () => {
+    useUIStore.setState({ rowFocus: null });
+    requestDiagnosticsRowFocus("ds_reg", 87);
+    requestDiagnosticsRowFocus("ds_reg", 87);
+
+    expect(useUIStore.getState().rowFocus?.nonce).toBe(2);
+  });
+
+  it("disables the jump on a stale run", () => {
+    const html = renderPanel(panelProps({ stale: true }));
+    const buttonTag =
+      html.match(/<button[^>]*data-testid="regdiag-jump-influence"[^>]*>/)?.[0] ?? "";
+
+    expect(buttonTag).toContain("disabled");
+    expect(html).toContain('data-testid="regdiag-stale"');
   });
 
   describe("degraded states through the Regression tab", () => {

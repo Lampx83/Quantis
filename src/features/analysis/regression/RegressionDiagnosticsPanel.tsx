@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import { t } from "@/i18n";
 import { InfoHint, type GlossaryTerm } from "@/components/common/InfoHint";
+import { useUIStore } from "@/stores/useUIStore";
 import { DiagnosticsPlots } from "./DiagnosticsPlots";
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -196,7 +197,16 @@ export interface RegressionDiagnosticsPanelProps {
   stale?: boolean;
   /** Test seam for the collapsed state; a run starts expanded (R2.6). */
   initialExpanded?: boolean;
-  onJumpToRow?: (rowIndex: number) => void;
+}
+
+/**
+ * Ask the grid to show one Analysis row (R6.2): switch to the data view first,
+ * then post the request the grid consumes. Nothing here mutates the model (R6.4).
+ */
+export function requestDiagnosticsRowFocus(datasetId: string, rowIndex: number): void {
+  useUIStore.getState().setMainSection("data");
+  useUIStore.getState().setDataEditorView("data");
+  useUIStore.getState().requestRowFocus(datasetId, rowIndex);
 }
 
 export function RegressionDiagnosticsPanel({
@@ -206,10 +216,14 @@ export function RegressionDiagnosticsPanel({
   variables,
   stale = false,
   initialExpanded = true,
-  onJumpToRow,
 }: RegressionDiagnosticsPanelProps) {
   const [expanded, setExpanded] = useState(initialExpanded);
   if (run.datasetId !== selectedDatasetId) return null;
+
+  const jumpToRow = (rowIndex: number) => {
+    if (stale) return;
+    requestDiagnosticsRowFocus(run.datasetId, rowIndex);
+  };
 
   const diagnostics = run.result.diagnostics;
   const ok: DiagnosticsPayloadOk | null = diagnostics?.ok ? diagnostics : null;
@@ -380,7 +394,7 @@ export function RegressionDiagnosticsPanel({
                           row={row}
                           diagnostics={ok}
                           stale={stale}
-                          onJumpToRow={onJumpToRow}
+                          onJumpToRow={jumpToRow}
                         />
                       ) : null;
                     })}
@@ -500,7 +514,7 @@ function AssumptionTableRow({
   );
 }
 
-function InfluenceAction({
+export function InfluenceAction({
   diagnostics,
   stale,
   onJumpToRow,

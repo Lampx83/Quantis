@@ -7,8 +7,7 @@ export type DataTab = "import" | "profiling" | "transform" | "preview" | "descri
 export type AnalysisTab = "descriptive" | "hypothesis" | "regression" | "sem" | "correlation" | "reliability" | "factor" | "ml" | "bayesian" | "panel";
 export type ReproducibilityTab = "workflows" | "versioning" | "openscience";
 export type PresentationTab = "visualization";
-export type PresentationChartType =
-  | "scatter"
+export type PresentationChartType =  | "scatter"
   | "bar"
   | "line"
   | "pie"
@@ -25,6 +24,14 @@ export type PresentationChartType =
   | "multiLine"
   | "crosstab"
   | "density";
+
+export interface RowFocusRequest {
+  datasetId: string;
+  /** Analysis row coordinate: 0-based position among the data rows, header excluded (R1.5). */
+  rowIndex: number;
+  /** Bumped on every request so a repeat jump to the same row still fires. */
+  nonce: number;
+}
 
 export interface UIState {
   // Navigation
@@ -62,6 +69,9 @@ export interface UIState {
   dataEditorView: "data" | "variable";
   showValueLabels: boolean;
 
+  // Row focus: the diagnostics panel asks the grid to show one Analysis row
+  rowFocus: RowFocusRequest | null;
+
   // Actions
   setMainSection: (section: MainSection) => void;
   setDataTab: (tab: DataTab) => void;
@@ -97,6 +107,9 @@ export interface UIState {
   toggleDataEditorView: () => void;
   setShowValueLabels: (show: boolean) => void;
   toggleShowValueLabels: () => void;
+
+  requestRowFocus: (datasetId: string, rowIndex: number) => void;
+  clearRowFocus: (nonce: number) => void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -133,6 +146,8 @@ export const useUIStore = create<UIState>()(
 
       dataEditorView: "data",
       showValueLabels: false,
+
+      rowFocus: null,
 
       setMainSection: (mainSection) => set({ mainSection }),
       setDataTab: (dataTab) => set({ dataTab }),
@@ -192,6 +207,13 @@ export const useUIStore = create<UIState>()(
       setShowValueLabels: (showValueLabels) => set({ showValueLabels }),
       toggleShowValueLabels: () =>
         set((s) => ({ showValueLabels: !s.showValueLabels })),
+
+      requestRowFocus: (datasetId, rowIndex) =>
+        set((s) => ({
+          rowFocus: { datasetId, rowIndex, nonce: (s.rowFocus?.nonce ?? 0) + 1 },
+        })),
+      clearRowFocus: (nonce) =>
+        set((s) => (s.rowFocus?.nonce === nonce ? { rowFocus: null } : {})),
     }),
     {
       name: "quantis_ui",

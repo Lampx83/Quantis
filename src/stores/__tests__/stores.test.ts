@@ -242,6 +242,48 @@ describe("DataStore & UIStore Expansion", () => {
   });
 });
 
+describe("useUIStore row focus requests", () => {
+  beforeEach(() => {
+    useUIStore.setState({ rowFocus: null });
+  });
+
+  it("stores the request with an incremented nonce", () => {
+    useUIStore.getState().requestRowFocus("ds_a", 12);
+    expect(useUIStore.getState().rowFocus).toEqual({
+      datasetId: "ds_a",
+      rowIndex: 12,
+      nonce: 1,
+    });
+
+    useUIStore.getState().requestRowFocus("ds_a", 99);
+    expect(useUIStore.getState().rowFocus).toEqual({
+      datasetId: "ds_a",
+      rowIndex: 99,
+      nonce: 2,
+    });
+  });
+
+  it("gives a repeat request to the same row a new nonce", () => {
+    useUIStore.getState().requestRowFocus("ds_a", 7);
+    const first = useUIStore.getState().rowFocus!.nonce;
+    useUIStore.getState().requestRowFocus("ds_a", 7);
+    const second = useUIStore.getState().rowFocus!.nonce;
+
+    expect(second).toBe(first + 1);
+  });
+
+  it("clears only the request whose nonce matches", () => {
+    useUIStore.getState().requestRowFocus("ds_a", 5);
+    const nonce = useUIStore.getState().rowFocus!.nonce;
+
+    useUIStore.getState().clearRowFocus(nonce + 1);
+    expect(useUIStore.getState().rowFocus).not.toBeNull();
+
+    useUIStore.getState().clearRowFocus(nonce);
+    expect(useUIStore.getState().rowFocus).toBeNull();
+  });
+});
+
 describe("useAnalysisStore regression run slice", () => {
   const resultA = {
     n: 80,
