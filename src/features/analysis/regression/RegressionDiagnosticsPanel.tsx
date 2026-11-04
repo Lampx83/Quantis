@@ -3,12 +3,14 @@ import { Copy } from "lucide-react";
 import type { RegressionRun } from "@/stores/useAnalysisStore";
 import type {
   AssumptionRow,
+  Dataset,
   DiagnosticsPayload,
   DiagnosticsPayloadOk,
   RegressionVerdict,
 } from "@/types";
 import { t } from "@/i18n";
 import { InfoHint, type GlossaryTerm } from "@/components/common/InfoHint";
+import { DiagnosticsPlots } from "./DiagnosticsPlots";
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -188,6 +190,8 @@ export interface RegressionDiagnosticsPanelProps {
   selectedDatasetId: string;
   /** Rows submitted to the fit, header excluded — the fallback when the payload has no nInput. */
   submittedRows: number;
+  /** Variable metadata for the plot axis titles (R5.2). */
+  variables?: Dataset["variables"];
   /** R9.2: the dataset changed since the fit; numbers stay, navigation is disabled. */
   stale?: boolean;
   /** Test seam for the collapsed state; a run starts expanded (R2.6). */
@@ -199,6 +203,7 @@ export function RegressionDiagnosticsPanel({
   run,
   selectedDatasetId,
   submittedRows,
+  variables,
   stale = false,
   initialExpanded = true,
   onJumpToRow,
@@ -382,6 +387,13 @@ export function RegressionDiagnosticsPanel({
                   </tbody>
                 </table>
               </div>
+
+              <DiagnosticsPlots
+                diagnostics={ok}
+                yCol={run.yCol}
+                xCols={run.xCols}
+                variables={variables}
+              />
             </>
           )}
         </div>

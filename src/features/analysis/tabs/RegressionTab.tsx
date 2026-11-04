@@ -586,6 +586,7 @@ export function RegressionTab({
                     run={olsRun}
                     selectedDatasetId={selectedDataset.id}
                     submittedRows={rows.length > 0 ? rows.length - 1 : 0}
+                    variables={selectedDataset.variables}
                   />
                 </div>
               )}

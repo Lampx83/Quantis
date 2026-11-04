@@ -15,6 +15,11 @@ import type {
   DiagnosticsPayloadOk,
 } from "@/types";
 
+// The panel owns judgment and actions; the charts are asserted in diagnosticsPlots.test.tsx.
+vi.mock("../DiagnosticsPlots", () => ({
+  DiagnosticsPlots: () => <div data-testid="regdiag-plots-stub" />,
+}));
+
 const copyButtonLabel = () => t("regDiag.copy");
 
 function makeDataset(overrides: Partial<Dataset> = {}): Dataset {
