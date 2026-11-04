@@ -16,6 +16,7 @@ import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { RegressionDiagnosticsPanel } from "@/features/analysis/regression/RegressionDiagnosticsPanel";
 import type { RegressionRun, RegressionRunResult } from "@/stores/useAnalysisStore";
+import { useAnalysisStore } from "@/stores/useAnalysisStore";
 
 /**
  * Tái tạo m bảng dữ liệu từ Sparse Delta của ImputationMeta.
@@ -81,19 +82,32 @@ export function RegressionTab({
     return uniq.length === 2 && uniq.every((v) => v === 0 || v === 1);
   });
 
-  const [olsYCol, setOlsYCol] = useState(initialOlsYCol ?? "");
-  const [olsXSelected, setOlsXSelected] = useState<string[]>(initialOlsXSelected ?? []);
+  // Hydrate the last run only when it belongs to the dataset on screen (AD-8).
+  // Read once through the initialiser: a store subscription would re-seed the tab
+  // on every store change, and hydration is a mount-time concern.
+  const [hydratedRun] = useState<RegressionRun | null>(() => {
+    const stored = useAnalysisStore.getState().regressionRun;
+    if (!stored || !selectedDataset || stored.datasetId !== selectedDataset.id) return null;
+    return stored;
+  });
+
+  const [olsYCol, setOlsYCol] = useState(initialOlsYCol ?? hydratedRun?.yCol ?? "");
+  const [olsXSelected, setOlsXSelected] = useState<string[]>(
+    initialOlsXSelected ?? hydratedRun?.xCols ?? []
+  );
   const [olsRun, setOlsRun] = useState<RegressionRun | null>(() => {
-    if (!initialOlsResult || !selectedDataset) return null;
-    return {
-      datasetId: selectedDataset.id,
-      datasetUpdatedAt: selectedDataset.updatedAt,
-      datasetRowCount: selectedDataset.rows,
-      yCol: initialOlsYCol ?? "",
-      xCols: initialOlsXSelected ?? [],
-      activeImputationIndex: selectedDataset.imputationMeta?.activeImputationIndex ?? null,
-      result: initialOlsResult,
-    };
+    if (initialOlsResult && selectedDataset) {
+      return {
+        datasetId: selectedDataset.id,
+        datasetUpdatedAt: selectedDataset.updatedAt,
+        datasetRowCount: selectedDataset.rows,
+        yCol: initialOlsYCol ?? "",
+        xCols: initialOlsXSelected ?? [],
+        activeImputationIndex: selectedDataset.imputationMeta?.activeImputationIndex ?? null,
+        result: initialOlsResult,
+      };
+    }
+    return hydratedRun;
   });
   const olsResult = olsRun?.result ?? null;
   const [hc3Enabled, setHc3Enabled] = useState(initialHc3Enabled ?? false);
@@ -151,7 +165,7 @@ export function RegressionTab({
   const captureOlsRun = (result: RegressionRunResult) => {
     if (!selectedDataset) return;
     setHc3Enabled(false);
-    setOlsRun({
+    const run: RegressionRun = {
       datasetId: selectedDataset.id,
       datasetUpdatedAt: selectedDataset.updatedAt,
       datasetRowCount: selectedDataset.rows,
@@ -159,8 +173,19 @@ export function RegressionTab({
       xCols: olsXSelected,
       activeImputationIndex,
       result,
-    });
+    };
+    setOlsRun(run);
+    useAnalysisStore.getState().setRegressionRun(run);
   };
+
+  // R9.2: the run is stale when the data it describes changed; a label, never a refit.
+  const stale = Boolean(
+    olsRun &&
+      selectedDataset &&
+      olsRun.datasetId === selectedDataset.id &&
+      (olsRun.datasetUpdatedAt !== selectedDataset.updatedAt ||
+        olsRun.datasetRowCount !== selectedDataset.rows)
+  );
 
   const runOLS = async () => {
     if (!olsYCol || olsXSelected.length === 0 || !rows.length) return;
@@ -683,6 +708,7 @@ export function RegressionTab({
                     selectedDatasetId={selectedDataset.id}
                     submittedRows={rows.length > 0 ? rows.length - 1 : 0}
                     variables={selectedDataset.variables}
+                    stale={stale}
                   />
                 </div>
               )}

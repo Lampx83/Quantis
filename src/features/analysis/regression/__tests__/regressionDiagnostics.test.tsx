@@ -11,6 +11,7 @@ import {
 import { RegressionTab } from "../../tabs/RegressionTab";
 import * as quantisApi from "@/api";
 import { useUIStore } from "@/stores/useUIStore";
+import { useAnalysisStore } from "@/stores/useAnalysisStore";
 import { setLocale, t } from "@/i18n";
 import type { RegressionRun, RegressionRunResult } from "@/stores/useAnalysisStore";
 import type {
@@ -228,6 +229,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
   beforeEach(() => {
     setLocale("en");
     vi.restoreAllMocks();
+    useAnalysisStore.setState({ regressionRun: null });
   });
 
   it("renders the four rows in fixed order with verdict, statistic, threshold, explanation and one action", () => {
@@ -490,6 +492,82 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
         expect(html).toContain("R² = 0.8850");
       });
     }
+  });
+
+  describe("staleness and hydration", () => {
+    function storedRun(overrides: Partial<RegressionRun> = {}): RegressionRun {
+      return {
+        datasetId: "ds_reg",
+        datasetUpdatedAt: "2026-11-04T00:00:00Z",
+        datasetRowCount: 4,
+        yCol: "Y",
+        xCols: ["X1", "X2"],
+        activeImputationIndex: null,
+        result: {
+          ...baseResult,
+          n: 4,
+          nInput: 4,
+          nDropped: 0,
+          df: 1,
+          diagnostics: makeDiagnostics(),
+        },
+        ...overrides,
+      };
+    }
+
+    function renderHydrated(dataset = makeDataset()): string {
+      return renderToStaticMarkup(
+        <RegressionTab
+          selectedDataset={dataset}
+          analysisBackendAvailable={true}
+          showToast={vi.fn()}
+        />
+      );
+    }
+
+    it("hydrates the last run when the tab remounts on the same dataset", () => {
+      useAnalysisStore.setState({ regressionRun: storedRun() });
+
+      const html = renderHydrated();
+
+      expect(html).toContain('data-testid="regdiag-section"');
+      expect(html).toContain('data-testid="regdiag-verdict-influence"');
+      expect(html).toContain("Model: Y ~ X1, X2");
+      expect(html).toContain("R² = 0.8850");
+    });
+
+    it("never hydrates a run that belongs to another dataset", () => {
+      useAnalysisStore.setState({ regressionRun: storedRun({ datasetId: "ds_other" }) });
+
+      const html = renderHydrated();
+
+      expect(html).not.toContain('data-testid="regdiag-section"');
+    });
+
+    it("labels a run stale when the data changed, keeping its numbers and the HC3 toggle", () => {
+      useAnalysisStore.setState({ regressionRun: storedRun() });
+
+      const html = renderHydrated(makeDataset({ updatedAt: "2026-11-05T00:00:00Z" }));
+
+      expect(html).toContain('data-testid="regdiag-stale"');
+      expect(html).toContain('data-testid="regdiag-table"');
+      // The run's own numbers and plots are unchanged.
+      expect(html).toContain("Breusch-Pagan χ²(3) = 12.4100, p = 0.0061");
+      expect(html).toContain('data-testid="regdiag-plots-stub"');
+      // HC3 stays available; only navigation into the changed data is blocked.
+      expect(html).toContain('data-testid="regdiag-hc3-toggle"');
+      const buttonTag =
+        html.match(/<button[^>]*data-testid="regdiag-jump-influence"[^>]*>/)?.[0] ?? "";
+      expect(buttonTag).toContain("disabled");
+    });
+
+    it("labels a run stale when the row count changed", () => {
+      useAnalysisStore.setState({ regressionRun: storedRun({ datasetRowCount: 3 }) });
+
+      const html = renderHydrated();
+
+      expect(html).toContain('data-testid="regdiag-stale"');
+    });
   });
 
   describe("HC3 robust standard errors", () => {
