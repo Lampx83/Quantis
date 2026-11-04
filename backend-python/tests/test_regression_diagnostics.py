@@ -451,3 +451,168 @@ def test_minimum_residual_df_marks_only_linearity_inapplicable():
         assert row["verdict"] in {"pass", "caution", "violation"}
 
 
+# ---------------------------------------------------------------------------
+# T04 — imputation selection, numeric safety, defensive guards
+# ---------------------------------------------------------------------------
+
+
+def make_imputation_bundle(n=60, seed=11):
+    """An original table with missing cells plus three complete imputed tables."""
+    original = make_rows(n=n, seed=seed, missing_every=10)
+    tables = []
+    for k in (1, 2, 3):
+        table = make_rows(n=n, seed=seed)
+        for i in range(1, len(table)):
+            table[i][2] = f"{float(table[i][2]) + 0.7 * k * ((i % 5) - 2):.10f}"
+        tables.append(table)
+    return original, tables
+
+
+def test_active_index_zero_judges_the_posted_rows():
+    original, tables = make_imputation_bundle()
+    result = post_ols(original, imputedDatasets=tables, activeImputationIndex=0).json()["result"]
+
+    assert result["rubinPooled"] is True
+    assert result["missingMethod"] == "mice-active"
+    diag = result["diagnostics"]
+    assert diag["ok"] is True
+    assert diag["sample"]["nInput"] == len(original) - 1
+    assert diag["sample"]["activeImputation"] == 0
+    assert diag["sample"]["m"] == 3
+    # R4.5: the two sample sizes stay separate — coefficient model is pooled,
+    # the judged original table listwise-drops its incomplete rows.
+    assert result["n"] == 60
+    assert diag["sample"]["nUsed"] == 54
+    assert diag["sample"]["method"] == "listwise"
+    assert result["nDropped"] == result["nInput"] - result["n"]
+
+
+def test_active_index_selects_the_imputed_table():
+    original, tables = make_imputation_bundle()
+    baseline = post_ols([], imputedDatasets=tables, activeImputationIndex=1).json()["result"]
+    second = post_ols([], imputedDatasets=tables, activeImputationIndex=2).json()["result"]
+
+    # Coefficients never depend on which table diagnostics judge.
+    assert baseline["coefficients"] == second["coefficients"]
+    assert baseline["rubinPooled"] is True
+
+    first_diag = baseline["diagnostics"]
+    second_diag = second["diagnostics"]
+    assert first_diag["sample"]["activeImputation"] == 1
+    assert second_diag["sample"]["activeImputation"] == 2
+    assert first_diag["sample"]["nInput"] == 60
+    assert second_diag["sample"]["nUsed"] == 60
+    assert first_diag["sample"]["method"] == "mice-active"
+    # Distinguishable residuals prove the judged table really changed.
+    assert first_diag["obs"]["resid"] != second_diag["obs"]["resid"]
+
+
+def test_out_of_range_or_missing_bundle_is_not_available():
+    rows = make_rows()
+    no_bundle = post_ols(rows, activeImputationIndex=2).json()["result"]
+    assert no_bundle["diagnostics"]["ok"] is False
+    assert no_bundle["diagnostics"]["errorCode"] == "not_available"
+    assert "(Intercept)" in no_bundle["coefficients"]
+    assert no_bundle["n"] == 80
+
+    _, tables = make_imputation_bundle()
+    out_of_range = post_ols([], imputedDatasets=tables, activeImputationIndex=9).json()["result"]
+    assert out_of_range["diagnostics"]["ok"] is False
+    assert out_of_range["diagnostics"]["errorCode"] == "not_available"
+    assert out_of_range["n"] == 60
+
+
+def test_perfect_collinearity_is_a_violation_with_null_statistics():
+    rows = [["Y", "X1", "X2"]]
+    rng = np.random.default_rng(5)
+    for _ in range(50):
+        x1 = rng.normal()
+        y = 1.0 + 2.0 * x1 + rng.normal(0, 0.5)
+        rows.append([f"{y:.10f}", f"{x1:.10f}", f"{2.0 * x1:.10f}"])
+
+    result = post_ols(rows, x_cols=("X1", "X2")).json()["result"]
+    diag = result["diagnostics"]
+    assert diag["ok"] is True
+
+    collinearity = diag["assumptions"][3]
+    assert collinearity["applicable"] is True
+    assert collinearity["verdict"] == "violation"
+    assert collinearity["stats"]["maxVif"] is None
+    assert diag["vif"]["X1"] == {"vif": None, "tolerance": None}
+    assert diag["vif"]["X2"] == {"vif": None, "tolerance": None}
+
+    # The other rows still judge.
+    assert diag["assumptions"][0]["applicable"] is True
+    assert diag["assumptions"][1]["applicable"] is True
+    assert diag["assumptions"][2]["applicable"] is True
+
+    json.dumps(result, allow_nan=False)
+    assert not _has_non_finite(result)
+
+
+def _has_non_finite(value):
+    if isinstance(value, float):
+        return not np.isfinite(value)
+    if isinstance(value, dict):
+        return any(_has_non_finite(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_has_non_finite(v) for v in value)
+    return False
+
+
+def test_judged_table_too_small_is_insufficient_n():
+    _, tables = make_imputation_bundle(n=30)
+    original = [["Y", "X1", "X2", "X3"], ["1", "1", "1", "1"], ["2", "", "", ""]]
+    for i in range(3, 30 + 1):
+        original.append(["3", "", "", ""])
+
+    result = post_ols(original, imputedDatasets=tables, activeImputationIndex=0).json()["result"]
+    assert result["diagnostics"]["ok"] is False
+    assert result["diagnostics"]["errorCode"] == "insufficient_n"
+    assert "(Intercept)" in result["coefficients"]
+    assert result["rubinPooled"] is True
+
+
+def test_diagnostics_fit_that_raises_is_singular_x(monkeypatch):
+    import statsmodels.regression.linear_model as linear_model
+
+    real_ols = linear_model.OLS
+    calls = {"fit": 0}
+
+    class RaisesOnSecondFit(real_ols):
+        def fit(self, *args, **kwargs):
+            calls["fit"] += 1
+            if calls["fit"] >= 2:
+                raise np.linalg.LinAlgError("synthetic singular design")
+            return super().fit(*args, **kwargs)
+
+    monkeypatch.setattr(linear_model, "OLS", RaisesOnSecondFit)
+    result = post_ols(make_rows()).json()["result"]
+
+    assert result["diagnostics"]["ok"] is False
+    assert result["diagnostics"]["errorCode"] == "singular_x"
+    assert "(Intercept)" in result["coefficients"]
+    assert result["n"] == 80
+
+
+def test_one_failed_statistic_marks_only_its_row(monkeypatch):
+    import regression_diagnostics
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("synthetic statistic failure")
+
+    monkeypatch.setattr(regression_diagnostics, "_linearity_row", boom)
+    diag = post_ols(make_rows()).json()["result"]["diagnostics"]
+
+    assert diag["ok"] is True
+    assert diag["assumptions"][0] == {
+        "id": "linearity",
+        "applicable": False,
+        "notApplicableReason": "notComputable",
+    }
+    for row in diag["assumptions"][1:]:
+        assert row["applicable"] is True
+        assert row["verdict"] in {"pass", "caution", "violation"}
+
+
+

@@ -327,6 +327,14 @@ def _collinearity_row(x_cols: list[str], vif: dict) -> dict:
     }
 
 
+def _safe_row(builder: Any, row_id: str, *args: Any) -> dict:
+    """Per-row fault isolation: one failed statistic keeps the other three rows (AD-5)."""
+    try:
+        return builder(*args)
+    except Exception:
+        return _inapplicable(row_id, "notComputable")
+
+
 def _assumptions(
     model: Any,
     n: int,
@@ -338,10 +346,10 @@ def _assumptions(
     studentized: np.ndarray,
 ) -> list[dict]:
     return [
-        _linearity_row(model, n, k),
-        _normality_row(model, n),
-        _influence_row(n, k, cooks, leverage, studentized),
-        _collinearity_row(x_cols, vif),
+        _safe_row(_linearity_row, "linearity", model, n, k),
+        _safe_row(_normality_row, "normality", model, n),
+        _safe_row(_influence_row, "influence", n, k, cooks, leverage, studentized),
+        _safe_row(_collinearity_row, "collinearity", x_cols, vif),
     ]
 
 
@@ -411,6 +419,14 @@ def _vif_block(model: Any, x_cols: list[str]) -> dict:
     return out
 
 
+def _safe_vif(model: Any, x_cols: list[str]) -> dict:
+    """VIF failure degrades only the collinearity row, never the payload."""
+    try:
+        return _vif_block(model, x_cols)
+    except Exception:
+        return {}
+
+
 def _hc3_block(model: Any, x_cols: list[str]) -> dict:
     robust = model.get_robustcov_results(cov_type="HC3")
     ci = np.asarray(robust.conf_int(), dtype=float)
@@ -475,14 +491,16 @@ def build_regression_diagnostics(
         with warnings.catch_warnings():
             # df_resid = 1 leaves the externally studentized residual undefined; that is a
             # non-finite statistic, handled at the boundary, not a warning worth surfacing.
+            # The OLSInfluence properties are lazy, so force them inside this block.
             warnings.simplefilter("ignore", RuntimeWarning)
             influence = model.get_influence()
-        cooks = np.asarray(influence.cooks_distance[0], dtype=float)
-        leverage = np.asarray(influence.hat_matrix_diag, dtype=float)
-        studentized = np.asarray(influence.resid_studentized_external, dtype=float)
+            cooks = np.asarray(influence.cooks_distance[0], dtype=float)
+            leverage = np.asarray(influence.hat_matrix_diag, dtype=float)
+            studentized = np.asarray(influence.resid_studentized_external, dtype=float)
+            np.asarray(influence.resid_studentized_internal, dtype=float)
         n_used = len(used)
         n_predictors = len(x_cols)
-        vif = _vif_block(model, x_cols)
+        vif = _safe_vif(model, x_cols)
         return {
             "ok": True,
             "errorCode": None,
