@@ -6,6 +6,7 @@ import {
   type RegressionDiagnosticsPanelProps,
 } from "../RegressionDiagnosticsPanel";
 import { RegressionTab } from "../../tabs/RegressionTab";
+import * as quantisApi from "@/api";
 import { setLocale, t } from "@/i18n";
 import type { RegressionRun, RegressionRunResult } from "@/stores/useAnalysisStore";
 import type {
@@ -142,7 +143,13 @@ function makeDiagnostics(
       X2: { vif: 2.31, tolerance: 0.43 },
     },
     influential: [{ rowIndex: 87, cookD: 1.42, leverage: 0.11, studentized: 3.9 }],
-    robustHC3: { se: {}, tStat: {}, pValue: {}, ciLower: {}, ciUpper: {} },
+    robustHC3: {
+      se: { "(Intercept)": 0.5, X1: 0.25, X2: 0.15 },
+      tStat: { "(Intercept)": 2.1, X1: 3.2, X2: 1.4 },
+      pValue: { "(Intercept)": 0.04, X1: 0.002, X2: 0.16 },
+      ciLower: { "(Intercept)": 0.1, X1: 1.2, X2: 0.1 },
+      ciUpper: { "(Intercept)": 2.0, X1: 3.9, X2: 1.0 },
+    },
     sampled: false,
     ...overrides,
   };
@@ -428,6 +435,121 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
         expect(html).toContain("R² = 0.8850");
       });
     }
+  });
+
+  describe("HC3 robust standard errors", () => {
+    function renderTab(
+      resultOverrides: Partial<RegressionRunResult> = {},
+      options: { backendAvailable?: boolean; hc3Enabled?: boolean } = {}
+    ) {
+      return renderToStaticMarkup(
+        <RegressionTab
+          selectedDataset={makeDataset()}
+          analysisBackendAvailable={options.backendAvailable ?? true}
+          showToast={vi.fn()}
+          initialOlsYCol="Y"
+          initialOlsXSelected={["X1", "X2"]}
+          initialOlsResult={{
+            ...baseResult,
+            n: 4,
+            nInput: 4,
+            nDropped: 0,
+            df: 1,
+            diagnostics: makeDiagnostics(),
+            ...resultOverrides,
+          }}
+          initialHc3Enabled={options.hc3Enabled}
+        />
+      );
+    }
+
+    it("offers the toggle on a single-table fit and shows the robust columns side by side when on", () => {
+      const off = renderTab();
+      expect(off).toContain('data-testid="regdiag-hc3-toggle"');
+      expect(off).not.toContain("HC3 SE");
+
+      const on = renderTab({}, { hc3Enabled: true });
+      expect(on).toContain("HC3 SE");
+      expect(on).toContain("HC3 t");
+      expect(on).toContain("HC3 p");
+      // Classical columns are still beside them.
+      expect(on).toContain("SE");
+      expect(on).toContain("HC3 SE");
+      // Robust values for the intercept and every predictor.
+      expect(on).toContain(">0.5000<"); // intercept HC3 SE
+      expect(on).toContain(">0.2500<"); // X1 HC3 SE
+      expect(on).toContain(">3.200<"); // X1 HC3 t
+      expect(on).toContain(">0.002<"); // X1 HC3 p
+    });
+
+    it("is absent when diagnostics are missing or failed", () => {
+      const missing = renderTab({ diagnostics: undefined });
+      expect(missing).not.toContain('data-testid="regdiag-hc3-toggle"');
+      expect(missing).not.toContain("HC3 SE");
+
+      const failed = renderTab({
+        diagnostics: { ok: false, errorCode: "internal", errorDetail: null },
+      });
+      expect(failed).not.toContain('data-testid="regdiag-hc3-toggle"');
+      expect(failed).not.toContain("HC3 SE");
+    });
+
+    it("is absent on a Rubin-pooled run, which says in one line why", () => {
+      const html = renderTab({ rubinPooled: true });
+
+      expect(html).not.toContain('data-testid="regdiag-hc3-toggle"');
+      expect(html).not.toContain("HC3 SE");
+      expect(html).toContain('data-testid="regdiag-hc3-pooled-note"');
+      expect(html).toContain("HC3 robust standard errors describe a single table");
+    });
+
+    it("does not refit when the toggle is switched", async () => {
+      const olsSpy = vi.spyOn(quantisApi, "analyzeOLS");
+      const vifSpy = vi.spyOn(quantisApi, "analyzeVIF");
+
+      let tree: any = null;
+      function Harness() {
+        tree = RegressionTab({
+          selectedDataset: makeDataset(),
+          analysisBackendAvailable: true,
+          showToast: vi.fn(),
+          initialOlsYCol: "Y",
+          initialOlsXSelected: ["X1", "X2"],
+          initialOlsResult: {
+            ...baseResult,
+            n: 4,
+            nInput: 4,
+            nDropped: 0,
+            df: 1,
+            diagnostics: makeDiagnostics(),
+          },
+          initialHc3Enabled: true,
+        });
+        return tree;
+      }
+      renderToStaticMarkup(<Harness />);
+
+      const toggle = findByTestId(tree, "regdiag-hc3-toggle");
+      expect(toggle).not.toBeNull();
+      toggle.props.onChange({ target: { checked: false } });
+      toggle.props.onChange({ target: { checked: true } });
+
+      expect(olsSpy).not.toHaveBeenCalled();
+      expect(vifSpy).not.toHaveBeenCalled();
+    });
+
+    it("uses the VIF from the diagnostics payload instead of a second request", () => {
+      const diagnostics = makeDiagnostics({
+        vif: {
+          X1: { vif: 9.99, tolerance: 0.1 },
+          X2: { vif: 1.5, tolerance: 0.66 },
+        },
+      });
+      const html = renderTab({ diagnostics });
+
+      expect(html).toContain("X1: 9.99");
+      expect(html).toContain("X2: 1.50");
+    });
   });
 });
 

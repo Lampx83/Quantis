@@ -46,6 +46,8 @@ export interface RegressionTabProps {
   initialOlsYCol?: string;
   initialOlsXSelected?: string[];
   initialOlsResult?: RegressionRunResult | null;
+  /** Test seam: show the robust columns on first render (T09). */
+  initialHc3Enabled?: boolean;
 }
 
 export function RegressionTab({
@@ -55,6 +57,7 @@ export function RegressionTab({
   initialOlsYCol,
   initialOlsXSelected,
   initialOlsResult,
+  initialHc3Enabled,
 }: RegressionTabProps) {
   const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
   const rows = selectedDataset ? getAnalysisRows(selectedDataset) : [];
@@ -93,6 +96,7 @@ export function RegressionTab({
     };
   });
   const olsResult = olsRun?.result ?? null;
+  const [hc3Enabled, setHc3Enabled] = useState(initialHc3Enabled ?? false);
   const [logYCol, setLogYCol] = useState("");
   const [logXSelected, setLogXSelected] = useState<string[]>([]);
   const [logResult, setLogResult] = useState<LogisticResult | null>(null);
@@ -146,6 +150,7 @@ export function RegressionTab({
 
   const captureOlsRun = (result: RegressionRunResult) => {
     if (!selectedDataset) return;
+    setHc3Enabled(false);
     setOlsRun({
       datasetId: selectedDataset.id,
       datasetUpdatedAt: selectedDataset.updatedAt,
@@ -201,17 +206,55 @@ export function RegressionTab({
     setLogResult(res ?? null);
   };
 
+  // R8.3: the payload's own VIF comes from the model's sample, so the extra /vif
+  // round-trip is skipped whenever diagnostics carry it.
+  const payloadVif =
+    olsResult?.diagnostics?.ok && olsResult.diagnostics.vif
+      ? olsResult.diagnostics.vif
+      : null;
+
   const [vifBackendResult, setVifBackendResult] = useState<Record<string, number> | null>(null);
   useEffect(() => {
-    if (!analysisBackendAvailable || !olsResult || olsXSelected.length < 2) {
+    if (
+      !analysisBackendAvailable ||
+      !olsResult ||
+      olsXSelected.length < 2 ||
+      payloadVif !== null
+    ) {
       setVifBackendResult(null);
       return;
     }
     quantisApi.analyzeVIF(rows, olsXSelected).then(setVifBackendResult);
-  }, [analysisBackendAvailable, olsResult, olsXSelected.join(","), rows.length]);
-  const vifResult =
-    (analysisBackendAvailable ? vifBackendResult : null) ??
-    (olsResult && olsXSelected.length >= 2 ? computeVIF(rows, olsXSelected) : null);
+  }, [analysisBackendAvailable, olsResult, olsXSelected.join(","), rows.length, payloadVif]);
+
+  const vifResult: Record<string, number> | null = payloadVif
+    ? Object.fromEntries(
+        Object.entries(payloadVif)
+          .filter(([, entry]) => entry.vif != null)
+          .map(([name, entry]) => [name, entry.vif as number])
+      )
+    : (analysisBackendAvailable ? vifBackendResult : null) ??
+      (olsResult && olsXSelected.length >= 2 ? computeVIF(rows, olsXSelected) : null);
+
+  // R6.1: robust columns are offered on single-table fits only; a Rubin-pooled run
+  // compares pooled classical columns, which robustHC3 cannot match.
+  const robustBlock = olsResult?.diagnostics?.ok ? olsResult.diagnostics.robustHC3 : null;
+  const canToggleHc3 = Boolean(robustBlock) && !olsResult?.rubinPooled;
+  const showHc3Columns = canToggleHc3 && hc3Enabled;
+
+  const robustValue = (
+    map: Record<string, number | null>,
+    key: string,
+    digits: number
+  ): string => {
+    const value = map[key];
+    return value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits);
+  };
+  const robustPValue = (key: string): string => {
+    const value = robustBlock?.pValue[key];
+    if (value == null || !Number.isFinite(value)) return "—";
+    return value < 0.001 ? "< .001" : value.toFixed(3);
+  };
 
   return (
     <div className="w-full max-w-full">
@@ -326,7 +369,19 @@ export function RegressionTab({
           </div>
           {olsResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
-              <div className="flex items-center justify-end gap-2 p-2 border-b border-neutral-100">
+              <div className="flex flex-wrap items-center justify-end gap-3 p-2 border-b border-neutral-100">
+                {canToggleHc3 && (
+                  <label className="flex items-center gap-1.5 text-xs text-neutral-700 dark:text-neutral-300">
+                    <input
+                      type="checkbox"
+                      data-testid="regdiag-hc3-toggle"
+                      checked={hc3Enabled}
+                      onChange={(event) => setHc3Enabled(event.target.checked)}
+                      className="rounded"
+                    />
+                    {t("regDiag.hc3.toggle")}
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -408,6 +463,14 @@ export function RegressionTab({
                   <Copy className="w-3.5 h-3.5" /> {t("regressionExplainer.copyTableButton")}
                 </button>
               </div>
+              {olsResult.rubinPooled && olsResult.diagnostics?.ok && (
+                <p
+                  data-testid="regdiag-hc3-pooled-note"
+                  className="px-2 pt-2 text-xs text-neutral-500 dark:text-neutral-400"
+                >
+                  {t("regDiag.hc3.pooledNote")}
+                </p>
+              )}
               <AIAssistPanel
                 metadata={
                   selectedDataset
@@ -460,6 +523,13 @@ export function RegressionTab({
                     <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}<InfoHint term="coefficient" /></th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">t</th>
+                    {showHc3Columns && (
+                      <>
+                        <th className="text-right p-2">{t("regDiag.hc3.columnSe")}<InfoHint term="hc3" /></th>
+                        <th className="text-right p-2">{t("regDiag.hc3.columnT")}</th>
+                        <th className="text-right p-2">{t("regDiag.hc3.columnP")}</th>
+                      </>
+                    )}
                     {olsResult.rubinPooled && (
                       <>
                         <th className="text-right p-2">{t("regressionExplainer.tableRubinDf")}</th>
@@ -480,6 +550,19 @@ export function RegressionTab({
                     <td className="p-2 text-right">
                       {olsResult.tStat["(Intercept)"]?.toFixed(3) ?? "—"}
                     </td>
+                    {showHc3Columns && robustBlock && (
+                      <>
+                        <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                          {robustValue(robustBlock.se, "(Intercept)", 4)}
+                        </td>
+                        <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                          {robustValue(robustBlock.tStat, "(Intercept)", 3)}
+                        </td>
+                        <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                          {robustPValue("(Intercept)")}
+                        </td>
+                      </>
+                    )}
                     {olsResult.rubinPooled && (
                       <>
                         <td className="p-2 text-right">
@@ -521,6 +604,19 @@ export function RegressionTab({
                       <td className="p-2 text-right">
                         {olsResult.tStat[name]?.toFixed(3) ?? "—"}
                       </td>
+                      {showHc3Columns && robustBlock && (
+                        <>
+                          <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                            {robustValue(robustBlock.se, name, 4)}
+                          </td>
+                          <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                            {robustValue(robustBlock.tStat, name, 3)}
+                          </td>
+                          <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                            {robustPValue(name)}
+                          </td>
+                        </>
+                      )}
                       {olsResult.rubinPooled && (
                         <>
                           <td className="p-2 text-right">
