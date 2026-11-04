@@ -17,16 +17,16 @@ import type {
 import { t } from "@/i18n";
 
 /** Plot caps mirror the backend's payload caps (R5.4–R5.6). */
-export const QQ_PLOT_CAP = 2000;
-export const COOK_PLOT_CAP = 5000;
+const QQ_PLOT_CAP = 2000;
+const COOK_PLOT_CAP = 5000;
 export const RESIDUAL_ZERO = 0;
 
-export interface NumericPoint {
+interface NumericPoint {
   x: number;
   y: number;
 }
 
-export interface PlotSegment {
+interface PlotSegment {
   from: NumericPoint;
   to: NumericPoint;
 }

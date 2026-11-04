@@ -19,7 +19,7 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
  * Thresholds mirrored from backend-python/regression_diagnostics.py (spec R3.2).
  * The Verdict is decided server-side; these numbers only format its sentence (R3.6).
  */
-export const DIAGNOSTIC_THRESHOLDS = {
+const DIAGNOSTIC_THRESHOLDS = {
   pass: 0.05,
   caution: 5,
   violation: 10,
