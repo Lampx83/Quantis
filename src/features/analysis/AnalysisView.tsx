@@ -515,22 +515,7 @@ export function AnalysisView({
 
   if (effectiveTab === "reliability" && selectedDataset) {
     const rows = getAnalysisRows(selectedDataset);
-    const cols = selectedDataset.columnNames || [];
-    const numericCols =
-      rows.length >= 2
-        ? cols.filter((c) => {
-            const ci = rows[0].indexOf(c);
-            const vals = rows.slice(1).map((r) => r[ci]);
-            return vals.every((v) => v === "" || !Number.isNaN(Number(v)));
-          })
-        : [];
-    return (
-      <ReliabilityTab
-        selectedDataset={selectedDataset}
-        rows={rows}
-        numericCols={numericCols}
-      />
-    );
+    return <ReliabilityTab selectedDataset={selectedDataset} rows={rows} />;
   }
 
   if (effectiveTab === "regression") {
