@@ -236,6 +236,67 @@ export interface DiagnosticsPayloadFailure {
 /** The immutable diagnostics result bound to one OLS run (spec R1.4). */
 export type DiagnosticsPayload = DiagnosticsPayloadOk | DiagnosticsPayloadFailure;
 
+// ---------------------------------------------------------------------------
+// Reliability (Phase 4.2) — the data contract of spec §5
+// ---------------------------------------------------------------------------
+
+/** Cùng bộ từ vựng Verdict với Phase 4.1, thêm `notApplicable` cho thống kê không tính được. */
+export type ReliabilityVerdict = "pass" | "caution" | "violation" | "notApplicable";
+
+export interface ReliabilityItemSpec {
+  name: string;
+  /** Đảo điểm chỉ áp dụng cho lần tính hiện tại — không ghi vào dataset. */
+  reverse: boolean;
+}
+
+export interface ReliabilityStatistics {
+  alpha: number | null;
+  /** α trên item đã chuẩn hóa (z-score) — dùng khi các item khác thang điểm. */
+  alphaStandardized: number | null;
+  /** Feldt 95% CI, kẹp về [0, 1]. */
+  ci: { lower: number; upper: number } | null;
+  k: number;
+  nScaleSample: number;
+  nInput: number;
+  meanInterItemR: number | null;
+}
+
+export interface ReliabilityItemDiagnostic {
+  name: string;
+  reverse: boolean;
+  /** Hằng số (min + max) đã dùng để phản chiếu; null khi không bật reverse. */
+  reflectionConstant: number | null;
+  mean: number;
+  sd: number;
+  /** Số ô thiếu của item này trên input sample. */
+  missingInInput: number;
+  correctedItemTotal: number | null;
+  alphaIfDeleted: number | null;
+  verdict: ReliabilityVerdict;
+  /** i18n key + tham số, để lý do luôn đi kèm Verdict. */
+  reasonKey: string;
+  reasonParams: Record<string, string | number>;
+}
+
+export interface ExcludedItem {
+  item: string;
+  code: "lowCitc" | "raisesAlpha" | "negativeCitc" | "manual";
+  /** Ảnh chụp thống kê tại thời điểm loại — để giải trình sau này. */
+  citcAtExclusion: number | null;
+  alphaIfDeletedAtExclusion: number | null;
+}
+
+export interface ReliabilityRun {
+  datasetId: string;
+  datasetUpdatedAt: string;
+  datasetRowCount: number;
+  /** Tập item lúc chốt, đã trừ Excluded item; giữ thứ tự người dùng chọn. */
+  items: ReliabilityItemSpec[];
+  excluded: ExcludedItem[];
+  statistics: ReliabilityStatistics;
+  createdAt: string;
+}
+
 /** Bước trong workflow phân tích (reproducible) */export interface WorkflowStep {
   id: string;
   type: "import" | "clean" | "transform" | "describe" | "test" | "model" | "visualize" | "report";
