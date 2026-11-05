@@ -10,6 +10,7 @@ import { ItemCorrelationMatrix } from "../reliability/ItemCorrelationMatrix";
 import { ScaleVerdictCard } from "../reliability/ScaleVerdictCard";
 import { CurrentResultApa, apaSentence } from "../reliability/CurrentResultApa";
 import { formatStat } from "../reliability/format";
+import { buildMissingMatcher } from "@/utils/metadata";
 
 export interface ReliabilityTabProps {
   selectedDataset: Dataset;
@@ -35,7 +36,8 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
     const out: Record<string, number> = {};
     for (const name of selectedItems) {
       // Chỉ truyền thang khai báo. Nếu thiếu, computeReliability tự suy từ Scale sample.
-      const constant = reflectionConstant([], selectedDataset.variables?.[name]?.valueLabels);
+      const variable = selectedDataset.variables?.[name];
+      const constant = reflectionConstant([], variable?.valueLabels, buildMissingMatcher(variable));
       if (Number.isFinite(constant)) out[name] = constant;
     }
     return out;

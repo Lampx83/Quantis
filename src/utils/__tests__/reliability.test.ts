@@ -23,7 +23,7 @@ import {
  *   alpha               = 0.793043907252
  *   alphaStandardized   = 0.841717477370
  *   meanInterItemR      = 0.515401364689
- *   feldtCI             = [0.523685594649, 0.910078671054]   (T2)
+ *   feldtCI             = [0.523685594649, 0.932050258775]   (T2)
  *   item Q1: mean=3.916666666667 sd=0.996204919896 citc=0.937279131140 alphaIfDeleted=0.634593356243
  *   item Q2: mean=3.833333333333 sd=0.937436866561 citc=0.594804690767 alphaIfDeleted=0.749357626723
  *   item Q3: mean=3.750000000000 sd=1.055289706022 citc=0.657801750231 alphaIfDeleted=0.725971370143
@@ -214,6 +214,24 @@ describe("computeItemDiagnostics", () => {
     expect(diagnostics[1].sd).toBe(0);
     expect(diagnostics[1].correctedItemTotal).toBeNull();
   });
+
+  it.each([
+    [[1, 2, 3], [2, 4, 5]], // Two complete cases cannot define alpha.
+    [[1, 4, 2], [2, 4, 3], [3, 4, 5], [4, 4, 4]], // Deleting the only constant makes alpha valid.
+    [[1, 4, 2], [2, 4, 2], [3, 4, 2], [4, 4, 2]], // A constant remains after every deletion.
+    [[1, 2, 5], [2, 3, 4], [3, 4, 3], [4, 5, 2]], // Some remaining totals are constant.
+    [[1, 20, 5], [2, 10, 4], [3, 40, 2], [4, 30, 1]], // Mixed scales and negative correlations.
+  ])("matches a full recalculation after deletion for %j", (...data: number[][]) => {
+    const names = ["A", "B", "C"];
+    const rows = [names, ...data.map((row) => row.map(String)), ["", "2", "3"]];
+    const sample = buildScaleSample(rows, names, { C: true }, { C: 6 });
+    const diagnostics = computeItemDiagnostics(rows, names, sample);
+    for (let j = 0; j < names.length; j++) {
+      const expected = computeAlpha(sample.data.map((row) => row.filter((_, col) => col !== j)));
+      if (expected === null) expect(diagnostics[j].alphaIfDeleted).toBeNull();
+      else expect(diagnostics[j].alphaIfDeleted).toBeCloseTo(expected, 12);
+    }
+  });
 });
 
 describe("computeInterItemMatrix", () => {
@@ -247,6 +265,21 @@ describe("computeMeanInterItemR", () => {
     // The constant middle item makes every pair with it undefined; the
     // remaining pair (1,3) is still averaged.
     expect(computeMeanInterItemR(data)).toBeCloseTo(0.8, 9);
+  });
+
+  it("matches pairwise correlations for unequal scales, negative pairs and constants", () => {
+    const data = Array.from({ length: 101 }, (_, i) => [
+      (i * 7) % 11, 100 + ((i * 3) % 17) * 200, -((i * 7) % 11), 4,
+    ]);
+    const matrix = computeInterItemMatrix(data);
+    const pairs = matrix.flatMap((row, i) => row.slice(i + 1)).filter(Number.isFinite);
+    expect(computeMeanInterItemR(data)).toBeCloseTo(pairs.reduce((sum, r) => sum + r, 0) / pairs.length, 12);
+  });
+
+  it("returns null when fewer than two items have variance", () => {
+    for (const data of [[], [[1, 2]], [[1, 4], [2, 4], [3, 4]], [[4, 4], [4, 4], [4, 4]]]) {
+      expect(computeMeanInterItemR(data)).toBeNull();
+    }
   });
 });
 
@@ -431,11 +464,11 @@ describe("itemVerdict", () => {
 
 describe("computeFeldtCi", () => {
   it("matches scipy.stats.f.ppf on the golden sample", () => {
-    // scipy.stats.f.ppf(.975, 11, 44) and .ppf(.025, 44, 11) on n = 12, k = 5.
+    // scipy.stats.f.ppf(.975, 11, 44) and .ppf(.025, 11, 44) on n = 12, k = 5.
     const ci = computeFeldtCi(0.793043907252, 5, 12);
     expect(ci).not.toBeNull();
     expect(ci!.lower).toBeCloseTo(0.523685594649, 9);
-    expect(ci!.upper).toBeCloseTo(0.910078671054, 9);
+    expect(ci!.upper).toBeCloseTo(0.932050258775, 9);
   });
 
   it("matches scipy on a two-item scale", () => {
@@ -464,7 +497,7 @@ describe("computeReliability", () => {
     expect(result.statistics.alpha).toBeCloseTo(0.793043907252, 9);
     expect(result.statistics.alphaStandardized).toBeCloseTo(0.84171747737, 9);
     expect(result.statistics.ci!.lower).toBeCloseTo(0.523685594649, 9);
-    expect(result.statistics.ci!.upper).toBeCloseTo(0.910078671054, 9);
+    expect(result.statistics.ci!.upper).toBeCloseTo(0.932050258775, 9);
     expect(result.statistics.k).toBe(5);
     expect(result.statistics.nScaleSample).toBe(12);
     expect(result.statistics.nInput).toBe(12);

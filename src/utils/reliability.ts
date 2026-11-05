@@ -164,12 +164,17 @@ function deriveObservedReflection(data: number[][], j: number): number {
  * lệch đúng những item hiếm khi được chọn ở hai đầu. Không suy được từ nhãn thì lấy
  * (min + max) quan sát trong Scale sample.
  */
-export function reflectionConstant(values: number[], valueLabels?: Record<string, string>): number {
+export function reflectionConstant(
+  values: number[],
+  valueLabels?: Record<string, string>,
+  isMissing?: ((value: string) => boolean) | null
+): number {
   const declared = Object.keys(valueLabels ?? {})
+    .filter((key) => key.trim() !== "" && !isMissing?.(key.trim()))
     .map((key) => Number(key.trim()))
     .filter((n) => Number.isFinite(n));
   if (declared.length >= 2) return Math.min(...declared) + Math.max(...declared);
-  const numeric = values.filter((v) => Number.isFinite(v));
+  const numeric = values.filter((v) => Number.isFinite(v) && !isMissing?.(String(v)));
   if (numeric.length === 0) return NaN;
   return Math.min(...numeric) + Math.max(...numeric);
 }
@@ -253,7 +258,10 @@ export function computeStandardizedAlpha(data: number[][]): number | null {
   const k = data[0]?.length ?? 0;
   const n = data.length;
   if (k < 2 || n < 2) return null;
-  const rbar = computeMeanInterItemR(data);
+  return standardizedAlphaFromMean(computeMeanInterItemR(data), k);
+}
+
+function standardizedAlphaFromMean(rbar: number | null, k: number): number | null {
   if (rbar === null) return null;
   const denominator = 1 + (k - 1) * rbar;
   if (Math.abs(denominator) < 1e-12) return null;
@@ -279,9 +287,12 @@ export function computeItemDiagnostics(
   const header = rows[0] ?? [];
   const inputRows = rows.slice(1);
   const totals = data.map((row) => row.reduce((a, b) => a + b, 0));
+  const columns = items.map((_, j) => columnOf(data, j));
+  const itemVariances = columns.map(varOf);
+  const constantCount = itemVariances.filter((variance) => !(variance > 0)).length;
 
   return items.map((name, j) => {
-    const column = columnOf(data, j);
+    const column = columns[j];
     const ci = header.indexOf(name);
     const missingInInput =
       ci < 0
@@ -289,13 +300,17 @@ export function computeItemDiagnostics(
         : inputRows.reduce((count, row) => (Number.isNaN(parseNumber(row[ci])) ? count + 1 : count), 0);
 
     const rest = totals.map((total, i) => total - data[i][j]);
-    const sd = sdOf(column);
+    const sd = Math.sqrt(itemVariances[j]);
     const correctedItemTotal = sd > 0 ? correlation(column, rest) : null;
 
     let alphaIfDeleted: number | null = null;
-    if (k >= 3) {
-      const remaining = data.map((row) => row.filter((_, col) => col !== j));
-      alphaIfDeleted = computeAlpha(remaining);
+    if (k >= 3 && n >= 3 && constantCount === (itemVariances[j] > 0 ? 0 : 1)) {
+      const restVariance = varOf(rest);
+      if (restVariance > 0) {
+        // Reuse item variances instead of building and rescanning n × (k − 1) for each item.
+        const remainingVariance = itemVariances.reduce((sum, variance, col) => col === j ? sum : sum + variance, 0);
+        alphaIfDeleted = ((k - 1) / (k - 2)) * (1 - remainingVariance / restVariance);
+      }
     }
 
     return { name, mean: meanOf(column), sd, missingInInput, correctedItemTotal, alphaIfDeleted };
@@ -326,19 +341,23 @@ export function computeInterItemMatrix(data: number[][]): number[][] {
  * không có cặp nào xác định — ví dụ mọi item đều hằng số.
  */
 export function computeMeanInterItemR(data: number[][]): number | null {
-  const matrix = computeInterItemMatrix(data);
-  const k = matrix.length;
-  let sum = 0;
-  let count = 0;
-  for (let i = 0; i < k; i++) {
-    for (let j = i + 1; j < k; j++) {
-      const r = matrix[i][j];
-      if (Number.isNaN(r)) continue;
-      sum += r;
-      count++;
-    }
+  const n = data.length;
+  const k = data[0]?.length ?? 0;
+  if (n < 2 || k < 2) return null;
+  const totals = new Array<number>(n).fill(0);
+  let validColumns = 0;
+  for (let j = 0; j < k; j++) {
+    const column = columnOf(data, j);
+    const mean = meanOf(column);
+    const norm = Math.sqrt(column.reduce((sum, value) => sum + (value - mean) ** 2, 0));
+    if (!(norm > 0)) continue;
+    validColumns++;
+    for (let i = 0; i < n; i++) totals[i] += (column[i] - mean) / norm;
   }
-  return count === 0 ? null : sum / count;
+  if (validColumns < 2) return null;
+  // Squared norm of the summed unit columns = k + 2Σr. O(nk), no pairwise matrix.
+  const squaredNorm = totals.reduce((sum, total) => sum + total * total, 0);
+  return (squaredNorm - validColumns) / (validColumns * (validColumns - 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -536,7 +555,7 @@ export function itemVerdict(item: ItemVerdictInput, scaleAlpha: number | null): 
  * Khoảng tin cậy Feldt 95% cho α (spec §6), kẹp về [0, 1] như SPSS.
  *
  *   lower = 1 − (1 − α) · F.975(n − 1, (k − 1)(n − 1))
- *   upper = 1 − (1 − α) · F.025((k − 1)(n − 1), n − 1)
+ *   upper = 1 − (1 − α) · F.025(n − 1, (k − 1)(n − 1))
  *
  * Khoảng rất rộng khi n nhỏ — đây là lý do ngưỡng n < 30 chỉ cảnh báo chứ không chặn.
  */
@@ -549,7 +568,7 @@ export function computeFeldtCi(
   const df1 = n - 1;
   const df2 = (k - 1) * (n - 1);
   const upperF = fQuantile(0.975, df1, df2);
-  const lowerF = fQuantile(0.025, df2, df1);
+  const lowerF = fQuantile(0.025, df1, df2);
   if (!Number.isFinite(upperF) || !Number.isFinite(lowerF)) return null;
   const lower = 1 - (1 - alpha) * upperF;
   const upper = 1 - (1 - alpha) * lowerF;
@@ -578,14 +597,15 @@ export function computeReliability(
   const sample = buildScaleSample(rows, items, reverse, reflection);
   const k = items.length;
   const alpha = computeAlpha(sample.data);
+  const meanInterItemR = computeMeanInterItemR(sample.data);
   const statistics: ReliabilityStatistics = {
     alpha,
-    alphaStandardized: computeStandardizedAlpha(sample.data),
+    alphaStandardized: standardizedAlphaFromMean(meanInterItemR, k),
     ci: computeFeldtCi(alpha, k, sample.data.length),
     k,
     nScaleSample: sample.data.length,
     nInput: sample.nInput,
-    meanInterItemR: computeMeanInterItemR(sample.data),
+    meanInterItemR,
   };
   const itemStatistics = computeItemDiagnostics(rows, items, sample);
   const constantItems = itemStatistics.filter((it) => it.sd === 0).map((it) => it.name);

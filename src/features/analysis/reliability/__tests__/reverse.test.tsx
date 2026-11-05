@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReliabilityItemDiagnostic } from "@/types";
+import type { ReliabilityItemDiagnostic, VariableMetadata } from "@/types";
 import { setLocale, t } from "@/i18n";
+import { buildMissingMatcher } from "@/utils/metadata";
+import { getAnalysisRows } from "@/utils/stats";
 import {
   computeReliability,
   reflectionConstant,
@@ -54,6 +56,31 @@ describe("reflectionConstant", () => {
 
   it("returns NaN for an empty column", () => {
     expect(Number.isNaN(reflectionConstant([]))).toBe(true);
+  });
+
+  it.each<Partial<VariableMetadata>>([
+    { missingValues: ["99"], valueLabels: { "99": "No answer" } },
+    { missingRange: { min: 98, max: 99 }, valueLabels: { "98": "Unknown", "99": "No answer" } },
+    { missingValues: ["-1"], missingRange: { min: 98, max: 99 }, valueLabels: { "-1": "Not applicable", "98": "Unknown", "99": "No answer" } },
+  ])("ignores declared missing labels when reversing a 1–5 item: %j", (missing) => {
+    const variable: VariableMetadata = {
+      name: "A", type: "numeric", label: "", measure: "ordinal", decimals: 0, align: "right",
+      ...missing,
+      valueLabels: { "1": "Disagree", "5": "Agree", ...missing.valueLabels },
+    };
+    const rows = [["A", "B"], ["1", "5"], ["2", "4"], ["3", "3"], ["4", "2"], ["5", "1"], ["99", "3"]];
+    const clean = getAnalysisRows({ data: rows, variables: { A: variable } });
+    const constant = reflectionConstant([], variable.valueLabels, buildMissingMatcher(variable));
+    expect(constant).toBe(6);
+    const result = computeReliability(clean, ["A", "B"], { A: true }, { A: constant });
+    expect(result.sample.data.map((row) => row[0])).toEqual([5, 4, 3, 2, 1]);
+    expect(result.items[0].mean).toBe(3);
+    expect(result.items[0].missingInInput).toBe(1);
+    expect(rows[1][0]).toBe("1");
+  });
+
+  it("falls back to valid observations when missing labels leave no declared scale", () => {
+    expect(reflectionConstant([2, 3, 4, 99], { "99": "Missing" }, (value) => value === "99")).toBe(6);
   });
 });
 
