@@ -66,8 +66,8 @@ export function QuantAuthGate({
   const labelClass = "flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 mb-1";
 
   return (
-    <div className="min-h-dvh bg-neutral-100 dark:bg-neutral-900 flex items-center justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-      <div className="w-full max-w-md min-w-0">
+    <div className="h-full min-h-0 overflow-y-auto overscroll-y-contain bg-neutral-100 dark:bg-neutral-900 flex flex-col items-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="w-full max-w-md min-w-0 shrink-0 my-auto">
         <div className="flex items-center justify-center gap-2.5 mb-8">
           <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-brand/15 text-brand">
             <Sigma className="h-7 w-7" />

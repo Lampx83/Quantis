@@ -24,7 +24,7 @@ export function AppStatusBar() {
       : null;
 
   return (
-    <footer className="sticky bottom-0 z-40 mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-neutral-200 bg-neutral-100 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/90 dark:text-neutral-300 sm:px-3 sm:text-xs pb-[max(0.375rem,env(safe-area-inset-bottom,0px))]">
+    <footer className="shrink-0 z-40 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-neutral-200 bg-neutral-100 px-2 py-1 text-[11px] text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/90 dark:text-neutral-300 sm:px-3 sm:text-xs pb-[max(0.375rem,env(safe-area-inset-bottom,0px))]">
       <button
         type="button"
         onClick={() => setSidebarOpen((o) => !o)}
