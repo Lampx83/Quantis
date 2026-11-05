@@ -161,12 +161,15 @@ describe("ItemTable reverse controls", () => {
       <ItemTable items={[item({ reverse: true, reflectionConstant: 6 })]} onToggleReverse={() => {}} />
     );
     expect(html).toContain(t("reliabilityTab.reverseToggle"));
-    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('checked=""');
+    expect(html).toContain('data-testid="item-reverse-Q3"');
+    expect(html).toContain('data-testid="item-name-Q3">Q3</th>');
     // The constant that produced the reversed numbers stays visible.
     expect(html).toContain("6");
   });
 
-  it("shows the suggestion with an action button, never an auto-enabled toggle", () => {
+  it("shows the suggestion on the reverse checkbox, never auto-enables it", () => {
     const html = renderToStaticMarkup(
       <ItemTable
         items={[item()]}
@@ -175,9 +178,9 @@ describe("ItemTable reverse controls", () => {
       />
     );
     expect(html).toContain(t("reliabilityTab.reverseSuggestion"));
-    expect(html).toContain(t("reliabilityTab.reverseSuggestionAction"));
     // The toggle itself is still off — the suggestion must not flip it.
-    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('type="checkbox"');
+    expect(html).not.toContain('checked=""');
   });
 
   it("renders no toggle when the table is read-only", () => {

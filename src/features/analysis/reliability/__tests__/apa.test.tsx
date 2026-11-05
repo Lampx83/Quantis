@@ -91,8 +91,6 @@ describe("current-result APA", () => {
       setLocale(locale);
       const html = renderToStaticMarkup(<ReliabilityTab selectedDataset={dataset} rows={[["A", "B"], ["1", "2"], ["2", "3"], ["3", "4"]]} />);
       expect(html).toContain(t("reliabilityTab.description"));
-      expect(html).toContain(t("reliabilityTab.transformGuidance"));
-      expect(html).toContain(t("reliabilityTab.removalGuidance"));
       expect(html).not.toMatch(/reliability-summary|current-result-apa|reliability-run|run-stale|revised-scale|item-excluded|Commit scale|Create scale score/);
     }
   });

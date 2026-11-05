@@ -116,8 +116,24 @@ describe("ItemTable verdicts", () => {
     expect(html).toContain('data-verdict="violation"');
     expect(html).toContain("CITC = 0.120 &lt; 0.300");
     expect(html).toContain("CITC = -0.200 &lt; 0");
-    expect(html).toContain("Caution");
-    expect(html).toContain("Violation");
+    expect(html).toContain("⚠ &lt; 0.30");
+    expect(html).toContain("⚠ &lt; 0");
+    expect(html).toContain("✓ Good");
+  });
+
+  it("explains a Good CITC separately from the alpha-if-deleted warning", () => {
+    for (const locale of ["en", "vi"] as const) {
+      setLocale(locale);
+      const html = renderToStaticMarkup(<ItemTable items={[diagnostic({
+        verdict: "caution", reasonKey: "reliabilityVerdict.item.raisesAlpha",
+        reasonParams: { alpha: 0.8, alphaIfDeleted: 0.9 }, alphaIfDeleted: 0.9,
+      })]} />);
+      const badge = html.match(/data-testid="item-verdict-Q1">([\s\S]*?)<\/button>/)![1];
+      expect(badge).toContain(t("reliabilityVerdict.item.pass", { citc: "0.500", threshold: "0.300" }));
+      expect(badge).not.toContain(t("reliabilityTab.citcRule"));
+      expect(badge).not.toContain(t("reliabilityTab.flagRaisesAlpha"));
+      expect(badge).toContain('data-testid="info-hint"');
+    }
   });
 
   it("renders a Not applicable row without a verdict colour", () => {

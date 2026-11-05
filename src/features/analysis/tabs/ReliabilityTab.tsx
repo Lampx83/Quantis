@@ -3,7 +3,7 @@ import type { Dataset } from "@/types";
 import { computeReliability, reflectionConstant, reverseSuggestions, selectItem, toggleReverse, type ReliabilitySelection } from "@/utils/reliability";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
-import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
+import { InfoHint } from "@/components/common/InfoHint";
 import { ItemPicker, numericItemColumns } from "../reliability/ItemPicker";
 import { ItemTable } from "../reliability/ItemTable";
 import { ItemCorrelationMatrix } from "../reliability/ItemCorrelationMatrix";
@@ -66,13 +66,11 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
   };
 
   const stats = result?.statistics;
-  const items = result?.items ?? [];
   const ci = stats?.ci;
 
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("reliabilityTab.title")}<InfoHint term="cronbachAlpha" /></h2>
-      <GlossaryBar terms={["cronbachAlpha", "standardizedAlpha", "correctedItemTotal", "alphaIfDeleted", "interItemCorrelation"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reliabilityTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
@@ -98,33 +96,36 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
         selected={selectedItems}
         onToggle={toggle}
       />
-      <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.transformGuidance")}</p>
-      <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.removalGuidance")}</p>
       {stats && (
         <div
           className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4"
           data-testid="reliability-summary"
         >
-          <AIAssistPanel
-            context={`Cronbach's alpha = ${formatStat(stats.alpha, 4)}. Số item: ${stats.k}. n(Scale sample) = ${stats.nScaleSample}/${stats.nInput}. α chuẩn hóa = ${formatStat(stats.alphaStandardized, 4)}. KTC 95% = ${ci ? `[${formatStat(ci.lower, 4)}, ${formatStat(ci.upper, 4)}]` : "—"}. Các item: ${selectedItems.join(", ")}.${items.length ? ` Bảng biến–tổng: ${items.map((it) => `${it.name} (corrected item-total=${formatStat(it.correctedItemTotal)}, α nếu loại=${formatStat(it.alphaIfDeleted)})`).join("; ")}.` : ""}`}
-            quickPrompts={[
-              {
-                label: t("reliabilityTab.interpretAlphaLabel"),
-                systemHint: `${t("reliabilityTab.interpretAlphaHint")} ${aiAnswerLangHint()}`,
-              },
-            ]}
-            title={t("reliabilityTab.askAiAlphaTitle")}
-          />
-          <CurrentResultApa statistics={stats} assessment={result!.verdict} onCopy={copyApa} />
-          <p className="font-medium">
-            {t("reliabilityTab.alphaLabel")} = {formatStat(stats.alpha)}
-          </p>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
-            {t("reliabilityTab.alphaStandardizedLabel")}: {formatStat(stats.alphaStandardized)}
-            <InfoHint term="standardizedAlpha" /> ·{" "}
-            {t("reliabilityTab.ciLabel")}{" "}
-            {ci ? `[${formatStat(ci.lower)}, ${formatStat(ci.upper)}]` : "—"}
-          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.alphaLabel")}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="text-2xl font-semibold tabular-nums">{formatStat(stats.alpha)}</span>
+                <ScaleVerdictCard assessment={result!.verdict} />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                {t("reliabilityTab.alphaStandardizedLabel")}<InfoHint term="standardizedAlpha" />
+              </p>
+              <p className="mt-1 text-xl font-medium tabular-nums">{formatStat(stats.alphaStandardized)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.ciLabel")}</p>
+              <p className="mt-1 text-xl font-medium tabular-nums">{ci ? `[${formatStat(ci.lower)}, ${formatStat(ci.upper)}]` : "—"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                {t("reliabilityTab.meanInterItemRLabel")}<InfoHint term="interItemCorrelation" />
+              </p>
+              <p className="mt-1 text-xl font-medium tabular-nums" data-testid="mean-inter-item-r">{formatStat(stats.meanInterItemR)}</p>
+            </div>
+          </div>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
             {t("reliabilityTab.kLabel")}: {stats.k} · {t("reliabilityTab.nCasesLabel")}:{" "}
             {stats.nScaleSample} · {t("reliabilityTab.nInputLabel")}: {stats.nInput}
@@ -133,7 +134,6 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
       )}
       {result && (
         <>
-          <ScaleVerdictCard assessment={result.verdict} />
           <ItemTable
             items={result.items}
             onToggleReverse={handleToggleReverse}
@@ -142,8 +142,8 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
           <ItemCorrelationMatrix
             data={result.sample.data}
             names={selectedItems}
-            meanInterItemR={result.statistics.meanInterItemR}
           />
+          <CurrentResultApa statistics={result.statistics} assessment={result.verdict} onCopy={copyApa} />
         </>
       )}
     </div>

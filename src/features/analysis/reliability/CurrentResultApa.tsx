@@ -44,14 +44,19 @@ export function CurrentResultApa({ statistics, assessment, onCopy }: {
 }) {
   const sentence = apaSentence(statistics, assessment);
   return (
-    <div className="mb-3 text-sm" data-testid="current-result-apa">
+    <div className="mt-4 border-t border-neutral-200 pt-4 text-sm dark:border-neutral-700" data-testid="current-result-apa">
+      {sentence ? (
+        <details className="mb-3 text-neutral-600 dark:text-neutral-400">
+          <summary className="w-fit cursor-pointer rounded focus-visible:outline-brand">{t("reliabilityTab.apaPreview")}</summary>
+          <p className="mt-2 max-w-3xl" data-testid="apa-sentence">{sentence}</p>
+        </details>
+      ) : (
+        <p className="mb-3 text-neutral-600 dark:text-neutral-400" data-testid="apa-sentence">{t("reliabilityTab.apaUnavailable")}</p>
+      )}
       <button type="button" onClick={onCopy} disabled={!sentence}
         className="rounded-md border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 disabled:opacity-50">
         {t("reliabilityTab.copyApa")}
       </button>
-      <p className="mt-2 text-neutral-600 dark:text-neutral-400" data-testid="apa-sentence">
-        {sentence ?? t("reliabilityTab.apaUnavailable")}
-      </p>
     </div>
   );
 }

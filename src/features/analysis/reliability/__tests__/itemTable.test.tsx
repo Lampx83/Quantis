@@ -89,22 +89,45 @@ describe("ItemCorrelationMatrix", () => {
 
   it("is collapsed by default", () => {
     const html = renderToStaticMarkup(
-      <ItemCorrelationMatrix data={data} names={names} meanInterItemR={0.3333} />
+      <ItemCorrelationMatrix data={data} names={names} />
     );
     expect(html).not.toContain("<table");
-    expect(html).toContain("Show inter-item correlations");
-    // The headline number is visible even while collapsed.
-    expect(html).toContain("0.333");
+    expect(html).toContain("Inter-item correlations");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Mean inter-item r");
   });
 
   it("renders a symmetric matrix with a unit diagonal when opened", () => {
     const html = renderToStaticMarkup(
-      <ItemCorrelationMatrix data={data} names={names} meanInterItemR={0.3333} initialOpen />
+      <ItemCorrelationMatrix data={data} names={names} initialOpen />
     );
     expect(html).toContain("<table");
     expect(html).toContain("1.000");
     expect(html).toContain("-1.000");
     // Q2 is a positive linear transform of Q1 → r = 1; Q3 is its mirror → r = -1.
     expect(html).toContain("Q3");
+  });
+
+  it("highlights negative and weak positive correlations, leaves undefined cells neutral", () => {
+    // A and B are orthogonal. Weak has a small positive correlation with A.
+    const fixture = [
+      [-1, -1, -1.05, 1, 7],
+      [-1, 1, 0.95, 1, 7],
+      [1, -1, -0.95, -1, 7],
+      [1, 1, 1.05, -1, 7],
+    ];
+    const html = renderToStaticMarkup(<ItemCorrelationMatrix data={fixture} names={["A", "B", "Weak", "Reverse", "Constant"]} initialOpen />);
+    const cell = (i: number, j: number) => html.match(new RegExp(`<td[^>]*data-testid="correlation-${i}-${j}"[^>]*>[\\s\\S]*?</td>`))![0];
+    for (const [i, j] of [[0, 1], [0, 2], [0, 3]]) {
+      expect(cell(i, j)).toContain('data-low="true"');
+      expect(cell(i, j)).toContain("bg-amber-100");
+      expect(cell(i, j)).toContain("⚠");
+    }
+    expect(cell(0, 0)).not.toContain("data-low");
+    expect(cell(0, 4)).toContain("bg-neutral-100");
+    expect(cell(0, 4)).toContain("—");
+    expect(cell(0, 4)).not.toContain("data-low");
+    expect(cell(1, 2)).toContain("bg-teal-");
+    expect(cell(1, 2)).not.toContain("data-low");
   });
 });
