@@ -756,23 +756,6 @@ export async function analyzeShapiro(values: number[]): Promise<{ w: number; pVa
   }
 }
 
-/** Phân tích: Cronbach's alpha. */
-export async function analyzeCronbach(rows: string[][], columnNames: string[]): Promise<number | null> {
-  try {
-    const res = await fetch(`${getANALYZE_BASE()}/cronbach`, {
-      method: "POST",
-      credentials: "include",
-      headers: getHeaders(),
-      body: JSON.stringify({ rows, columnNames }),
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return typeof json?.result === "number" ? json.result : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Phân tích: VIF (đa cộng tuyến). */
 export async function analyzeVIF(rows: string[][], xCols: string[]): Promise<Record<string, number> | null> {
   try {

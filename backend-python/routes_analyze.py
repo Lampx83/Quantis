@@ -22,7 +22,6 @@ from analysis_impl import (
     run_ridge,
     run_mann_whitney,
     run_shapiro_wilk,
-    run_cronbach_alpha,
     run_vif,
     run_mediation,
     run_moderation,
@@ -180,11 +179,6 @@ class MannWhitneyBody(BaseModel):
 
 class ShapiroWilkBody(BaseModel):
     values: list[float]
-
-
-class CronbachBody(BaseModel):
-    rows: list[list[str]]
-    columnNames: list[str]
 
 
 class VIFBody(BaseModel):
@@ -711,21 +705,6 @@ async def analyze_shapiro(body: ShapiroWilkBody):
         return {"result": result}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/cronbach")
-async def analyze_cronbach(body: CronbachBody):
-    try:
-        result = run_cronbach_alpha(body.rows, body.columnNames)
-        if result is None:
-            raise HTTPException(status_code=400, detail="Cần ít nhất 2 cột và đủ dữ liệu")
-        return {"result": result}
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -37,7 +37,6 @@ Docs: http://localhost:4000/docs
 | POST | `/logistic` | Hồi quy logistic nhị phân |
 | POST | `/mannwhitney` | Mann-Whitney U (non-parametric) |
 | POST | `/shapiro` | Shapiro-Wilk (kiểm định chuẩn) |
-| POST | `/cronbach` | Cronbach's alpha (độ tin cậy thang đo) |
 | POST | `/vif` | VIF – đa cộng tuyến |
 | POST | `/mediation` | Mediation (Baron-Kenny: X→M→Y) |
 | POST | `/moderation` | Moderation (tương tác X×M) |

@@ -852,24 +852,6 @@ def run_shapiro_wilk(values: list[float]):
     return {"w": float(stat), "pValue": float(p), "n": int(len(a))}
 
 
-# ---------- Cronbach's alpha ----------
-def run_cronbach_alpha(rows: list, column_names: list[str]):
-    df = _rows_to_df(rows)
-    cols = [c for c in column_names if c in df.columns]
-    if len(cols) < 2 or len(df) < 3:
-        return None
-    data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
-    if len(data) < 3:
-        return None
-    n_items = len(cols)
-    item_vars = data.var(axis=0, ddof=1)
-    total_var = data.sum(axis=1).var(ddof=1)
-    if total_var <= 0:
-        return None
-    alpha = (n_items / (n_items - 1)) * (1 - item_vars.sum() / total_var)
-    return float(alpha)
-
-
 # ---------- VIF (Variance Inflation Factor) ----------
 def run_vif(rows: list, x_cols: list[str]):
     if len(x_cols) < 2:
