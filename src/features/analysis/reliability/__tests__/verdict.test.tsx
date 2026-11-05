@@ -184,5 +184,15 @@ describe("verdict i18n", () => {
       }
     }
   });
+
+  it("documents the two new glossary terms in both locales", () => {
+    for (const term of ["standardizedAlpha", "interItemCorrelation"] as const) {
+      for (const locale of ["en", "vi"] as const) {
+        setLocale(locale);
+        expect(t(`glossary.${term}.title`), `${locale}:${term}`).not.toBe(`glossary.${term}.title`);
+        expect(t(`glossary.${term}.text`), `${locale}:${term}`).not.toBe(`glossary.${term}.text`);
+      }
+    }
+  });
 });
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { t } from "@/i18n";
+import { InfoHint } from "@/components/common/InfoHint";
 import { computeInterItemMatrix } from "@/utils/reliability";
 import { formatStat } from "./format";
 
@@ -42,6 +43,7 @@ export function ItemCorrelationMatrix({
         <span className="text-neutral-600 dark:text-neutral-400">
           {t("reliabilityTab.meanInterItemRLabel")}:{" "}
           <span className="font-medium">{formatStat(meanInterItemR)}</span>
+          <InfoHint term="interItemCorrelation" />
         </span>
       </div>
       {matrix && (

@@ -8,7 +8,8 @@ import { t } from "@/i18n";
  * Nội dung lấy từ khoá i18n `glossary.<term>.title` và `glossary.<term>.text` (xem src/i18n-extra.ts).
  */
 export type GlossaryTerm =
-  | "cronbachAlpha" | "correctedItemTotal" | "alphaIfDeleted" | "kmo" | "bartlett" | "efa"
+  | "cronbachAlpha" | "correctedItemTotal" | "alphaIfDeleted" | "standardizedAlpha" | "interItemCorrelation"
+  | "kmo" | "bartlett" | "efa"
   | "pValue" | "coefficient" | "r2" | "vif" | "ttest" | "anova" | "cohensD" | "correlationMatrix"
   | "panelData" | "pooledOls" | "fixedEffects" | "randomEffects" | "hausman" | "withinBetween"
   | "zScore" | "iqr" | "nonNumeric"

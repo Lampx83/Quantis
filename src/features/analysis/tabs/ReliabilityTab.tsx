@@ -70,7 +70,7 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("reliabilityTab.title")}<InfoHint term="cronbachAlpha" /></h2>
-      <GlossaryBar terms={["cronbachAlpha", "correctedItemTotal", "alphaIfDeleted"]} />
+      <GlossaryBar terms={["cronbachAlpha", "standardizedAlpha", "correctedItemTotal", "alphaIfDeleted", "interItemCorrelation"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reliabilityTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
@@ -119,7 +119,7 @@ function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabP
           </p>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
             {t("reliabilityTab.alphaStandardizedLabel")}: {formatStat(stats.alphaStandardized)}
-            ·{" "}
+            <InfoHint term="standardizedAlpha" /> ·{" "}
             {t("reliabilityTab.ciLabel")}{" "}
             {ci ? `[${formatStat(ci.lower)}, ${formatStat(ci.upper)}]` : "—"}
           </p>
