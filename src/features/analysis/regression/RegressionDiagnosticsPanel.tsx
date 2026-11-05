@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy } from "lucide-react";
+import { ChevronDown, Copy } from "lucide-react";
 import type { RegressionRun } from "@/stores/useAnalysisStore";
 import type {
   AssumptionRow,
@@ -26,6 +26,32 @@ const NOT_APPLICABLE_CLASS =
   "text-neutral-500 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700";
 
 const ROW_ORDER = ["linearity", "normality", "influence", "collinearity"] as const;
+
+const VERDICT_RANK: Record<RegressionVerdict, number> = {
+  pass: 0,
+  caution: 1,
+  violation: 2,
+};
+
+/**
+ * Left-edge accent for the collapsed card. A collapsed section hides the statistics,
+ * so the worst applicable verdict must stay visible from the summary line alone.
+ * Pass gets no accent: it needs no action.
+ */
+const COLLAPSED_ACCENT: Record<RegressionVerdict, string> = {
+  pass: "",
+  caution: "border-l-4 border-l-amber-500 dark:border-l-amber-400",
+  violation: "border-l-4 border-l-red-500 dark:border-l-red-400",
+};
+
+function worstApplicableVerdict(ok: DiagnosticsPayloadOk): RegressionVerdict | null {
+  let worst: RegressionVerdict | null = null;
+  for (const row of ok.assumptions) {
+    if (!row.applicable) continue;
+    if (!worst || VERDICT_RANK[row.verdict] > VERDICT_RANK[worst]) worst = row.verdict;
+  }
+  return worst;
+}
 
 function formatNumber(value: number | null | undefined, translate: Translate): string {
   if (value == null || !Number.isFinite(value)) return translate("regDiag.stat.unavailable");
@@ -218,6 +244,8 @@ export function RegressionDiagnosticsPanel({
 
   const diagnostics = run.result.diagnostics;
   const ok: DiagnosticsPayloadOk | null = diagnostics?.ok ? diagnostics : null;
+  const worst = ok ? worstApplicableVerdict(ok) : null;
+  const collapsedAccent = !expanded && worst ? COLLAPSED_ACCENT[worst] : "";
   const accounting = sampleAccounting(run, submittedRows);
 
   const sampleLine = t("regDiag.sampleLine", {
@@ -253,11 +281,11 @@ export function RegressionDiagnosticsPanel({
       data-testid="regdiag-section"
       open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
-      className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 mt-3"
+      className={`group rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 mt-3 ${collapsedAccent}`}
     >
       <summary
         data-testid="regdiag-summary"
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 cursor-pointer select-none"
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/40"
       >
         <span className="font-semibold text-neutral-800 dark:text-neutral-200">
           {t("regDiag.title")}
@@ -287,6 +315,20 @@ export function RegressionDiagnosticsPanel({
             })}
           </span>
         )}
+        {/* The summary is display:flex, which removes the native triangle marker — this is the
+            only visible cue that the section opens, so it must render in both states. */}
+        <span
+          data-testid="regdiag-toggle"
+          className="ml-auto inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-brand"
+        >
+          {expanded ? t("regDiag.collapse") : t("regDiag.expand")}
+          <ChevronDown
+            aria-hidden="true"
+            className={`w-4 h-4 transition-transform duration-200 ease-out ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
+        </span>
       </summary>
 
       {expanded && (

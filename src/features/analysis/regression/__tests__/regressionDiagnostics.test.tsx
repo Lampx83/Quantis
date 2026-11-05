@@ -325,6 +325,18 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     expect(collapsed).toContain('data-testid="regdiag-chips"');
   });
 
+  it("shows an explicit disclosure label and keeps the worst verdict visible when collapsed", () => {
+    const expanded = renderPanel(panelProps());
+    expect(expanded).toContain('data-testid="regdiag-toggle"');
+    expect(expanded).toContain(t("regDiag.collapse"));
+    expect(expanded).not.toContain("border-l-red-500");
+
+    // The fixture's worst applicable verdict is the influence violation.
+    const collapsed = renderPanel(panelProps({ initialExpanded: false }));
+    expect(collapsed).toContain(t("regDiag.expand"));
+    expect(collapsed).toContain("border-l-red-500");
+  });
+
   it("keeps the judged table's sample separate from the coefficients' sample under MICE index 0", () => {
     const diagnostics = makeDiagnostics({
       sample: {
