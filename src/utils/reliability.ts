@@ -6,6 +6,14 @@
  * trong môi trường `node` mà không cần jsdom.
  */
 
+import type {
+  ReliabilityAssessment,
+  ReliabilityItemDiagnostic,
+  ReliabilityScaleAssessment,
+  ReliabilityStatistics,
+} from "../types";
+import { fQuantile } from "./stats";
+
 /** Một Scale sample dạng listwise: mọi dòng đều có giá trị số ở MỌI item. */
 export interface ScaleSample {
   /** Ma trận m × k, đã áp dụng đảo điểm; cột theo đúng thứ tự `items`. */
@@ -255,4 +263,219 @@ export function computeMeanInterItemR(data: number[][]): number | null {
     }
   }
   return count === 0 ? null : sum / count;
+}
+
+// ---------------------------------------------------------------------------
+// Ngưỡng và Verdict (spec §4 R3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bảng ngưỡng DUY NHẤT của độ tin cậy (spec R3): component chỉ được đọc các số này,
+ * không được tự viết `.70` / `.30` / `.95` trong JSX.
+ */
+export const RELIABILITY_THRESHOLDS = {
+  alpha: {
+    /** Dưới mức này α bị coi là vi phạm. */
+    acceptable: 0.7,
+    /** Từ mức này α đạt. */
+    good: 0.8,
+    /** Từ mức này trở lên là dấu hiệu item trùng lặp, không phải "tốt hơn". */
+    redundancy: 0.95,
+  },
+  itemTotal: {
+    /** CITC dưới mức này là item yếu. */
+    low: 0.3,
+  },
+  /** Dưới mức n này CI rất rộng: chỉ cảnh báo, không chặn chốt. */
+  smallSampleN: 30,
+  /** Thang đo cần tối thiểu bấy nhiêu item mới đáng báo cáo như một thang. */
+  minItems: 3,
+} as const;
+
+/** Nhãn bậc chất lượng của α — tách khỏi Verdict để thẻ thang đo vẫn nêu được "đang ở bậc nào". */
+function bandKeyOf(alpha: number | null): string | null {
+  if (alpha === null) return null;
+  if (alpha >= RELIABILITY_THRESHOLDS.alpha.redundancy) return "reliabilityVerdict.band.redundancy";
+  if (alpha >= RELIABILITY_THRESHOLDS.alpha.good) return "reliabilityVerdict.band.good";
+  if (alpha >= RELIABILITY_THRESHOLDS.alpha.acceptable) return "reliabilityVerdict.band.acceptable";
+  return "reliabilityVerdict.band.poor";
+}
+
+/**
+ * Verdict cấp thang đo.
+ *
+ * Thứ tự ưu tiên có chủ đích: không tính được (Not applicable) → vi phạm (α < .70) → quá ít item
+ * → nghi trùng lặp → đạt. Mẫu nhỏ chỉ đẩy một kết quả "đạt" xuống "cần lưu ý" (CI rộng), chứ
+ * không che mất một vi phạm hay một thang hai item.
+ *
+ * @param stats Thống kê của thang đo; `alpha` null nghĩa là không tính được.
+ * @param constantItems Tên các item Kept có SD = 0 — cần để phân biệt "α không tính được" với
+ *   "có item hằng số" khi cả hai cùng cho `alpha === null`.
+ */
+export function scaleVerdict(
+  stats: ReliabilityStatistics,
+  constantItems: string[] = []
+): ReliabilityScaleAssessment {
+  const bandKey = constantItems.length > 0 ? null : bandKeyOf(stats.alpha);
+
+  if (constantItems.length > 0) {
+    return {
+      verdict: "notApplicable",
+      bandKey: null,
+      reasonKey: "reliabilityVerdict.scale.notApplicable.constantItem",
+      reasonParams: { items: constantItems.join(", ") },
+    };
+  }
+
+  const alpha = stats.alpha;
+  if (alpha === null) {
+    return {
+      verdict: "notApplicable",
+      bandKey: null,
+      reasonKey: "reliabilityVerdict.scale.notApplicable.alphaUndefined",
+      reasonParams: { n: stats.nScaleSample, k: stats.k },
+    };
+  }
+
+  if (alpha < RELIABILITY_THRESHOLDS.alpha.acceptable) {
+    return {
+      verdict: "violation",
+      bandKey,
+      reasonKey: "reliabilityVerdict.scale.violation.low",
+      reasonParams: { alpha, threshold: RELIABILITY_THRESHOLDS.alpha.acceptable },
+    };
+  }
+
+  if (stats.k < RELIABILITY_THRESHOLDS.minItems) {
+    return {
+      verdict: "caution",
+      bandKey,
+      reasonKey: "reliabilityVerdict.scale.caution.twoItems",
+      reasonParams: { k: stats.k, minItems: RELIABILITY_THRESHOLDS.minItems },
+    };
+  }
+
+  if (alpha >= RELIABILITY_THRESHOLDS.alpha.redundancy) {
+    return {
+      verdict: "caution",
+      bandKey,
+      reasonKey: "reliabilityVerdict.scale.caution.redundancy",
+      reasonParams: { alpha, threshold: RELIABILITY_THRESHOLDS.alpha.redundancy },
+    };
+  }
+
+  if (alpha >= RELIABILITY_THRESHOLDS.alpha.good) {
+    if (stats.nScaleSample < RELIABILITY_THRESHOLDS.smallSampleN) {
+      return {
+        verdict: "caution",
+        bandKey,
+        reasonKey: "reliabilityVerdict.scale.caution.smallSample",
+        reasonParams: {
+          alpha,
+          n: stats.nScaleSample,
+          threshold: RELIABILITY_THRESHOLDS.smallSampleN,
+        },
+      };
+    }
+    return {
+      verdict: "pass",
+      bandKey,
+      reasonKey: "reliabilityVerdict.scale.pass.good",
+      reasonParams: { alpha, threshold: RELIABILITY_THRESHOLDS.alpha.good },
+    };
+  }
+
+  return {
+    verdict: "caution",
+    bandKey,
+    reasonKey: "reliabilityVerdict.scale.caution.acceptable",
+    reasonParams: { alpha, threshold: RELIABILITY_THRESHOLDS.alpha.acceptable },
+  };
+}
+
+/** Phần của một item mà Verdict cần — nhận cả thống kê thô lẫn diagnostic đã gắn Verdict. */
+export type ItemVerdictInput = Pick<
+  ReliabilityItemDiagnostic,
+  "name" | "sd" | "correctedItemTotal" | "alphaIfDeleted"
+>;
+
+/**
+ * Verdict của một item.
+ *
+ * CITC âm là vi phạm nặng nhất (nghi item đảo điểm) nên được xét trước CITC thấp; α-if-deleted
+ * chỉ là cảnh báo "loại item này sẽ tăng α", không tự loại item (spec R5: gợi ý ≠ hành động).
+ *
+ * @param scaleAlpha α hiện tại của thang — chỉ dùng để so với α-if-deleted; null khi không tính được.
+ */
+export function itemVerdict(item: ItemVerdictInput, scaleAlpha: number | null): ReliabilityAssessment {
+  if (!(item.sd > 0)) {
+    return {
+      verdict: "notApplicable",
+      reasonKey: "reliabilityVerdict.item.constantItem",
+      reasonParams: { item: item.name },
+    };
+  }
+
+  const citc = item.correctedItemTotal;
+  if (citc === null) {
+    return {
+      verdict: "notApplicable",
+      reasonKey: "reliabilityVerdict.item.notComputable",
+      reasonParams: { item: item.name },
+    };
+  }
+
+  if (citc < 0) {
+    return {
+      verdict: "violation",
+      reasonKey: "reliabilityVerdict.item.negativeCitc",
+      reasonParams: { citc },
+    };
+  }
+
+  if (citc < RELIABILITY_THRESHOLDS.itemTotal.low) {
+    return {
+      verdict: "caution",
+      reasonKey: "reliabilityVerdict.item.lowCitc",
+      reasonParams: { citc, threshold: RELIABILITY_THRESHOLDS.itemTotal.low },
+    };
+  }
+
+  if (item.alphaIfDeleted !== null && scaleAlpha !== null && item.alphaIfDeleted > scaleAlpha) {
+    return {
+      verdict: "caution",
+      reasonKey: "reliabilityVerdict.item.raisesAlpha",
+      reasonParams: { alphaIfDeleted: item.alphaIfDeleted, alpha: scaleAlpha },
+    };
+  }
+
+  return {
+    verdict: "pass",
+    reasonKey: "reliabilityVerdict.item.pass",
+    reasonParams: { citc, threshold: RELIABILITY_THRESHOLDS.itemTotal.low },
+  };
+}
+
+/**
+ * Khoảng tin cậy Feldt 95% cho α (spec §6), kẹp về [0, 1] như SPSS.
+ *
+ *   lower = 1 − (1 − α) · F.975(n − 1, (k − 1)(n − 1))
+ *   upper = 1 − (1 − α) · F.025((k − 1)(n − 1), n − 1)
+ *
+ * Khoảng rất rộng khi n nhỏ — đây là lý do ngưỡng n < 30 chỉ cảnh báo chứ không chặn.
+ */
+export function computeFeldtCi(
+  alpha: number | null,
+  k: number,
+  n: number
+): { lower: number; upper: number } | null {
+  if (alpha === null || !Number.isFinite(alpha) || k < 2 || n < 2) return null;
+  const df1 = n - 1;
+  const df2 = (k - 1) * (n - 1);
+  const upperF = fQuantile(0.975, df1, df2);
+  const lowerF = fQuantile(0.025, df2, df1);
+  if (!Number.isFinite(upperF) || !Number.isFinite(lowerF)) return null;
+  const lower = 1 - (1 - alpha) * upperF;
+  const upper = 1 - (1 - alpha) * lowerF;
+  return { lower: Math.min(1, Math.max(0, lower)), upper: Math.min(1, Math.max(0, upper)) };
 }

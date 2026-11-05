@@ -1,11 +1,16 @@
 import { describe, it, expect } from "vitest";
+import type { ReliabilityItemDiagnostic, ReliabilityStatistics } from "@/types";
 import {
+  RELIABILITY_THRESHOLDS,
   buildScaleSample,
   computeAlpha,
-  computeStandardizedAlpha,
+  computeFeldtCi,
   computeItemDiagnostics,
   computeInterItemMatrix,
   computeMeanInterItemR,
+  computeStandardizedAlpha,
+  itemVerdict,
+  scaleVerdict,
 } from "../reliability";
 
 /*
@@ -239,5 +244,212 @@ describe("computeMeanInterItemR", () => {
     // The constant middle item makes every pair with it undefined; the
     // remaining pair (1,3) is still averaged.
     expect(computeMeanInterItemR(data)).toBeCloseTo(0.8, 9);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Thresholds, Verdicts and the Feldt interval (spec R3, §6)
+// ---------------------------------------------------------------------------
+
+const statsOf = (overrides: Partial<ReliabilityStatistics> = {}): ReliabilityStatistics => ({
+  alpha: 0.84,
+  alphaStandardized: 0.85,
+  ci: { lower: 0.7, upper: 0.9 },
+  k: 5,
+  nScaleSample: 100,
+  nInput: 100,
+  meanInterItemR: 0.5,
+  ...overrides,
+});
+
+const itemOf = (overrides: Partial<ReliabilityItemDiagnostic> = {}): ReliabilityItemDiagnostic => ({
+  name: "Q1",
+  reverse: false,
+  reflectionConstant: null,
+  mean: 3,
+  sd: 1,
+  missingInInput: 0,
+  correctedItemTotal: 0.5,
+  alphaIfDeleted: 0.8,
+  verdict: "pass",
+  reasonKey: "",
+  reasonParams: {},
+  ...overrides,
+});
+
+describe("RELIABILITY_THRESHOLDS", () => {
+  it("holds the spec's numbers in one place", () => {
+    expect(RELIABILITY_THRESHOLDS.alpha.acceptable).toBe(0.7);
+    expect(RELIABILITY_THRESHOLDS.alpha.good).toBe(0.8);
+    expect(RELIABILITY_THRESHOLDS.alpha.redundancy).toBe(0.95);
+    expect(RELIABILITY_THRESHOLDS.itemTotal.low).toBe(0.3);
+    expect(RELIABILITY_THRESHOLDS.smallSampleN).toBe(30);
+    expect(RELIABILITY_THRESHOLDS.minItems).toBe(3);
+  });
+});
+
+describe("scaleVerdict", () => {
+  it("flags α ≥ .95 as caution — suspected item redundancy", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.96 }));
+    expect(result.verdict).toBe("caution");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.caution.redundancy");
+    expect(result.reasonParams).toMatchObject({ alpha: 0.96, threshold: 0.95 });
+  });
+
+  it("treats the .95 boundary as redundancy", () => {
+    expect(scaleVerdict(statsOf({ alpha: 0.95 })).verdict).toBe("caution");
+  });
+
+  it("passes α in [.80, .95)", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.8 }));
+    expect(result.verdict).toBe("pass");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.pass.good");
+    expect(result.reasonParams).toMatchObject({ alpha: 0.8, threshold: 0.8 });
+    expect(scaleVerdict(statsOf({ alpha: 0.949 })).verdict).toBe("pass");
+  });
+
+  it("cautions α in [.70, .80)", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.7 }));
+    expect(result.verdict).toBe("caution");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.caution.acceptable");
+    expect(result.reasonParams).toMatchObject({ alpha: 0.7, threshold: 0.7 });
+    expect(scaleVerdict(statsOf({ alpha: 0.799 })).verdict).toBe("caution");
+  });
+
+  it("violates α below .70", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.699 }));
+    expect(result.verdict).toBe("violation");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.violation.low");
+    expect(result.reasonParams).toMatchObject({ alpha: 0.699, threshold: 0.7 });
+  });
+
+  it("cautions a two-item scale even when α looks fine", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.85, k: 2 }));
+    expect(result.verdict).toBe("caution");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.caution.twoItems");
+    expect(result.reasonParams).toMatchObject({ k: 2, minItems: 3 });
+  });
+
+  it("cautions a small sample even when α looks fine", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.85, nScaleSample: 29 }));
+    expect(result.verdict).toBe("caution");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.caution.smallSample");
+    expect(result.reasonParams).toMatchObject({ n: 29, threshold: 30 });
+    // 30 is enough: the rule is n < 30.
+    expect(scaleVerdict(statsOf({ alpha: 0.85, nScaleSample: 30 })).verdict).toBe("pass");
+  });
+
+  it("keeps a violation a violation when the sample is also small", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.6, nScaleSample: 10 }));
+    expect(result.verdict).toBe("violation");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.violation.low");
+  });
+
+  it("reports a constant kept item as Not applicable, not as a Verdict", () => {
+    const result = scaleVerdict(statsOf({ alpha: null }), ["Q4"]);
+    expect(result.verdict).toBe("notApplicable");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.notApplicable.constantItem");
+    expect(result.reasonParams).toMatchObject({ items: "Q4" });
+    expect(result.bandKey).toBeNull();
+  });
+
+  it("reports an undefined α as Not applicable with the sample size", () => {
+    const result = scaleVerdict(statsOf({ alpha: null, nScaleSample: 2 }));
+    expect(result.verdict).toBe("notApplicable");
+    expect(result.reasonKey).toBe("reliabilityVerdict.scale.notApplicable.alphaUndefined");
+    expect(result.reasonParams).toMatchObject({ n: 2, k: 5 });
+  });
+
+  it("carries the α band even when another rule decides the Verdict", () => {
+    const result = scaleVerdict(statsOf({ alpha: 0.85, nScaleSample: 20 }));
+    expect(result.verdict).toBe("caution");
+    expect(result.bandKey).toBe("reliabilityVerdict.band.good");
+  });
+});
+
+describe("itemVerdict", () => {
+  it("violates a negative corrected item-total correlation", () => {
+    const result = itemVerdict(itemOf({ correctedItemTotal: -0.2 }), 0.8);
+    expect(result.verdict).toBe("violation");
+    expect(result.reasonKey).toBe("reliabilityVerdict.item.negativeCitc");
+    expect(result.reasonParams).toMatchObject({ citc: -0.2 });
+  });
+
+  it("cautions a CITC in [0, .30)", () => {
+    for (const citc of [0, 0.29]) {
+      const result = itemVerdict(itemOf({ correctedItemTotal: citc }), 0.8);
+      expect(result.verdict).toBe("caution");
+      expect(result.reasonKey).toBe("reliabilityVerdict.item.lowCitc");
+      expect(result.reasonParams).toMatchObject({ citc, threshold: 0.3 });
+    }
+  });
+
+  it("passes a CITC of at least .30", () => {
+    const result = itemVerdict(itemOf({ correctedItemTotal: 0.3 }), 0.8);
+    expect(result.verdict).toBe("pass");
+    expect(result.reasonKey).toBe("reliabilityVerdict.item.pass");
+    expect(result.reasonParams).toMatchObject({ citc: 0.3, threshold: 0.3 });
+  });
+
+  it("cautions when deleting the item would raise α", () => {
+    const result = itemVerdict(itemOf({ correctedItemTotal: 0.5, alphaIfDeleted: 0.86 }), 0.84);
+    expect(result.verdict).toBe("caution");
+    expect(result.reasonKey).toBe("reliabilityVerdict.item.raisesAlpha");
+    expect(result.reasonParams).toMatchObject({ alphaIfDeleted: 0.86, alpha: 0.84 });
+  });
+
+  it("only cautions when α-if-deleted is strictly greater", () => {
+    expect(itemVerdict(itemOf({ correctedItemTotal: 0.5, alphaIfDeleted: 0.84 }), 0.84).verdict).toBe(
+      "pass"
+    );
+  });
+
+  it("reports a constant item as Not applicable", () => {
+    const result = itemVerdict(itemOf({ sd: 0, correctedItemTotal: null }), 0.8);
+    expect(result.verdict).toBe("notApplicable");
+    expect(result.reasonKey).toBe("reliabilityVerdict.item.constantItem");
+    expect(result.reasonParams).toMatchObject({ item: "Q1" });
+  });
+
+  it("reports an uncomputable CITC as Not applicable", () => {
+    const result = itemVerdict(itemOf({ correctedItemTotal: null, alphaIfDeleted: null }), null);
+    expect(result.verdict).toBe("notApplicable");
+    expect(result.reasonKey).toBe("reliabilityVerdict.item.notComputable");
+  });
+
+  it("judges a two-item scale by CITC only (α-if-deleted does not exist)", () => {
+    const result = itemVerdict(
+      itemOf({ correctedItemTotal: 0.5, alphaIfDeleted: null }),
+      0.6
+    );
+    expect(result.verdict).toBe("pass");
+  });
+});
+
+describe("computeFeldtCi", () => {
+  it("matches scipy.stats.f.ppf on the golden sample", () => {
+    // scipy.stats.f.ppf(.975, 11, 44) and .ppf(.025, 44, 11) on n = 12, k = 5.
+    const ci = computeFeldtCi(0.793043907252, 5, 12);
+    expect(ci).not.toBeNull();
+    expect(ci!.lower).toBeCloseTo(0.523685594649, 9);
+    expect(ci!.upper).toBeCloseTo(0.910078671054, 9);
+  });
+
+  it("matches scipy on a two-item scale", () => {
+    const ci = computeFeldtCi(0.798053527981, 2, 12);
+    expect(ci!.lower).toBeCloseTo(0.29849873177585906, 9);
+    expect(ci!.upper).toBeCloseTo(0.9418641427914315, 9);
+  });
+
+  it("clamps the lower bound to zero (SPSS behaviour)", () => {
+    const ci = computeFeldtCi(0.2, 5, 12);
+    expect(ci!.lower).toBe(0);
+    expect(ci!.upper).toBeGreaterThan(0);
+  });
+
+  it("returns null when the interval is undefined", () => {
+    expect(computeFeldtCi(null, 5, 12)).toBeNull();
+    expect(computeFeldtCi(0.8, 1, 12)).toBeNull();
+    expect(computeFeldtCi(0.8, 5, 1)).toBeNull();
   });
 });

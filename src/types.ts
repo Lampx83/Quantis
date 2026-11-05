@@ -243,6 +243,19 @@ export type DiagnosticsPayload = DiagnosticsPayloadOk | DiagnosticsPayloadFailur
 /** Cùng bộ từ vựng Verdict với Phase 4.1, thêm `notApplicable` cho thống kê không tính được. */
 export type ReliabilityVerdict = "pass" | "caution" | "violation" | "notApplicable";
 
+/** Verdict + câu lý do i18n (luôn kèm giá trị và ngưỡng đã dùng). */
+export interface ReliabilityAssessment {
+  verdict: ReliabilityVerdict;
+  reasonKey: string;
+  reasonParams: Record<string, string | number>;
+}
+
+/** Verdict cấp thang đo, kèm nhãn bậc chất lượng của α (null khi α không tính được). */
+export interface ReliabilityScaleAssessment extends ReliabilityAssessment {
+  bandKey: string | null;
+}
+
+
 export interface ReliabilityItemSpec {
   name: string;
   /** Đảo điểm chỉ áp dụng cho lần tính hiện tại — không ghi vào dataset. */
