@@ -256,12 +256,6 @@ export interface ReliabilityScaleAssessment extends ReliabilityAssessment {
 }
 
 
-export interface ReliabilityItemSpec {
-  name: string;
-  /** Đảo điểm chỉ áp dụng cho lần tính hiện tại — không ghi vào dataset. */
-  reverse: boolean;
-}
-
 export interface ReliabilityStatistics {
   alpha: number | null;
   /** α trên item đã chuẩn hóa (z-score) — dùng khi các item khác thang điểm. */
@@ -289,25 +283,6 @@ export interface ReliabilityItemDiagnostic {
   /** i18n key + tham số, để lý do luôn đi kèm Verdict. */
   reasonKey: string;
   reasonParams: Record<string, string | number>;
-}
-
-export interface ExcludedItem {
-  item: string;
-  code: "lowCitc" | "raisesAlpha" | "negativeCitc" | "manual";
-  /** Ảnh chụp thống kê tại thời điểm loại — để giải trình sau này. */
-  citcAtExclusion: number | null;
-  alphaIfDeletedAtExclusion: number | null;
-}
-
-export interface ReliabilityRun {
-  datasetId: string;
-  datasetUpdatedAt: string;
-  datasetRowCount: number;
-  /** Tập item lúc chốt, đã trừ Excluded item; giữ thứ tự người dùng chọn. */
-  items: ReliabilityItemSpec[];
-  excluded: ExcludedItem[];
-  statistics: ReliabilityStatistics;
-  createdAt: string;
 }
 
 /** Bước trong workflow phân tích (reproducible) */export interface WorkflowStep {

@@ -2,7 +2,7 @@
  * Thống kê độ tin cậy nội tại (Cronbach's alpha) — nguồn DUY NHẤT của công thức (ADR-0002).
  *
  * Hàm thuần: chỉ nhận mảng chuỗi/số và trả số. Không store, không localStorage, không fetch —
- * nhờ vậy mọi thao tác tương tác (đảo điểm, loại item, chốt thang đo) test được trực tiếp
+ * nhờ vậy mọi thao tác tương tác (chọn item, đảo điểm) test được trực tiếp
  * trong môi trường `node` mà không cần jsdom.
  */
 
@@ -159,6 +159,73 @@ function deriveObservedReflection(data: number[][], j: number): number {
 }
 
 /**
+ * Hằng số phản chiếu cho một item: ưu tiên thang điểm NGƯỜI DÙNG KHAI (khóa số của
+ * `valueLabels`), vì mẫu có thể chỉ quan sát 2–4 trên thang 1–5 — phản chiếu theo mẫu sẽ
+ * lệch đúng những item hiếm khi được chọn ở hai đầu. Không suy được từ nhãn thì lấy
+ * (min + max) quan sát trong Scale sample.
+ */
+export function reflectionConstant(values: number[], valueLabels?: Record<string, string>): number {
+  const declared = Object.keys(valueLabels ?? {})
+    .map((key) => Number(key.trim()))
+    .filter((n) => Number.isFinite(n));
+  if (declared.length >= 2) return Math.min(...declared) + Math.max(...declared);
+  const numeric = values.filter((v) => Number.isFinite(v));
+  if (numeric.length === 0) return NaN;
+  return Math.min(...numeric) + Math.max(...numeric);
+}
+
+/** Trạng thái chọn item của tab — đảo điểm thuộc về lựa chọn, không thuộc dataset. */
+export interface ReliabilitySelection {
+  items: string[];
+  reverse: Record<string, boolean>;
+}
+
+/** Thêm/bớt item, giữ cờ đảo điểm của item còn chọn; bỏ chọn rồi chọn lại không đảo. */
+export function selectItem(selection: ReliabilitySelection, item: string): ReliabilitySelection {
+  const items = selection.items.includes(item)
+    ? selection.items.filter((name) => name !== item)
+    : [...selection.items, item];
+  return {
+    items,
+    reverse: Object.fromEntries(
+      items.filter((name) => selection.reverse[name] === true).map((name) => [name, true])
+    ),
+  };
+}
+
+/** Bật/tắt đảo điểm cho đúng một item; không bao giờ tự bật (spec R4). */
+export function toggleReverse(
+  selection: ReliabilitySelection,
+  item: string
+): ReliabilitySelection {
+  return {
+    ...selection,
+    reverse: { ...selection.reverse, [item]: selection.reverse[item] !== true },
+  };
+}
+
+/**
+ * Item nên gợi ý đảo điểm: CITC âm VÀ loại nó sẽ làm α tăng — dấu hiệu kinh điển của item
+ * viết ngược. Chỉ là gợi ý: người dùng bấm mới bật, không có loại/bật tự động.
+ */
+export function reverseSuggestions(
+  items: ReliabilityItemDiagnostic[],
+  alpha: number | null
+): string[] {
+  if (alpha === null) return [];
+  return items
+    .filter(
+      (item) =>
+        !item.reverse &&
+        item.correctedItemTotal !== null &&
+        item.correctedItemTotal < 0 &&
+        item.alphaIfDeleted !== null &&
+        item.alphaIfDeleted > alpha
+    )
+    .map((item) => item.name);
+}
+
+/**
  * α = k/(k − 1) · (1 − Σσ²ᵢ / σ²total) trên phương sai mẫu.
  *
  * Trả null khi không tính được: dưới 3 dòng, dưới 2 item, hoặc có item phương sai 0
@@ -295,7 +362,7 @@ export const RELIABILITY_THRESHOLDS = {
     /** CITC dưới mức này là item yếu. */
     low: 0.3,
   },
-  /** Dưới mức n này CI rất rộng: chỉ cảnh báo, không chặn chốt. */
+  /** Dưới mức n này CI rất rộng: chỉ cảnh báo, không chặn phân tích. */
   smallSampleN: 30,
   /** Thang đo cần tối thiểu bấy nhiêu item mới đáng báo cáo như một thang. */
   minItems: 3,
@@ -318,7 +385,7 @@ function bandKeyOf(alpha: number | null): string | null {
  * không che mất một vi phạm hay một thang hai item.
  *
  * @param stats Thống kê của thang đo; `alpha` null nghĩa là không tính được.
- * @param constantItems Tên các item Kept có SD = 0 — cần để phân biệt "α không tính được" với
+ * @param constantItems Tên các item đang chọn có SD = 0 — cần để phân biệt "α không tính được" với
  *   "có item hằng số" khi cả hai cùng cho `alpha === null`.
  */
 export function scaleVerdict(
@@ -412,7 +479,7 @@ export type ItemVerdictInput = Pick<
  * Verdict của một item.
  *
  * CITC âm là vi phạm nặng nhất (nghi item đảo điểm) nên được xét trước CITC thấp; α-if-deleted
- * chỉ là cảnh báo "loại item này sẽ tăng α", không tự loại item (spec R5: gợi ý ≠ hành động).
+ * chỉ là cảnh báo "loại item này sẽ tăng α", không tự loại item (gợi ý ≠ hành động).
  *
  * @param scaleAlpha α hiện tại của thang — chỉ dùng để so với α-if-deleted; null khi không tính được.
  */

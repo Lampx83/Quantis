@@ -5,6 +5,10 @@ import { formatParams, formatStat } from "./format";
 
 export interface ItemTableProps {
   items: ReliabilityItemDiagnostic[];
+  /** Có mặt nghĩa là bảng cho phép bật/tắt đảo điểm tại chỗ. */
+  onToggleReverse?: (name: string) => void;
+  /** Item có CITC âm mà loại đi sẽ tăng α — hiện gợi ý, KHÔNG tự bật. */
+  reverseSuggestions?: string[];
 }
 
 /** Màu hàng theo Verdict; `pass` để trung tính vì không cần hành động. */
@@ -26,7 +30,7 @@ const BADGE_CLASS: Record<ReliabilityVerdict, string> = {
  * Bảng chẩn đoán từng item (spec R2). "Missing" đếm trên input sample nên luôn ≥ phần bị
  * Scale sample listwise loại — đó là cách người dùng thấy dữ liệu nào đã mất.
  */
-export function ItemTable({ items }: ItemTableProps) {
+export function ItemTable({ items, onToggleReverse, reverseSuggestions = [] }: ItemTableProps) {
   return (
     <div
       className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm"
@@ -72,6 +76,16 @@ export function ItemTable({ items }: ItemTableProps) {
                   >
                     {t(`reliabilityVerdict.verdict.${item.verdict}`)}
                   </span>
+                  {onToggleReverse && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleReverse(item.name)}
+                      aria-pressed={item.reverse}
+                      className="text-xs underline underline-offset-2"
+                    >
+                      {t("reliabilityTab.reverseToggle")}
+                    </button>
+                  )}
                 </div>
                 <div
                   className="mt-0.5 text-xs opacity-80"
@@ -79,6 +93,29 @@ export function ItemTable({ items }: ItemTableProps) {
                 >
                   {t(item.reasonKey, formatParams(item.reasonParams))}
                 </div>
+                {item.reverse && item.reflectionConstant !== null && (
+                  <div
+                    className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400"
+                    data-testid={`item-reflection-${item.name}`}
+                  >
+                    {t("reliabilityTab.reflectionConstant", {
+                      value: formatStat(item.reflectionConstant, 0),
+                    })}
+                  </div>
+                )}
+                {onToggleReverse && reverseSuggestions.includes(item.name) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
+                    <span>{t("reliabilityTab.reverseSuggestion")}</span>
+                    <button
+                      type="button"
+                      onClick={() => onToggleReverse(item.name)}
+                      className="underline font-medium"
+                      data-testid={`item-reverse-suggestion-${item.name}`}
+                    >
+                      {t("reliabilityTab.reverseSuggestionAction")}
+                    </button>
+                  </div>
+                )}
               </td>
               <td className="p-2 text-right">{formatStat(item.mean)}</td>
               <td className="p-2 text-right">{formatStat(item.sd)}</td>

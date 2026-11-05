@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Dataset } from "@/types";
-import { computeReliability } from "@/utils/reliability";
+import { computeReliability, reflectionConstant, reverseSuggestions, selectItem, toggleReverse, type ReliabilitySelection } from "@/utils/reliability";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
@@ -16,23 +16,42 @@ export interface ReliabilityTabProps {
 }
 
 export function ReliabilityTab({ selectedDataset, rows }: ReliabilityTabProps) {
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  return <ReliabilityEditor key={selectedDataset.id} selectedDataset={selectedDataset} rows={rows} />;
+}
+
+// Dataset khác remount editor: không có một frame kết quả/cờ đảo điểm của dataset cũ.
+function ReliabilityEditor({ selectedDataset, rows }: ReliabilityTabProps) {
+  const [selection, setSelection] = useState<ReliabilitySelection>({ items: [], reverse: {} });
+  const selectedItems = selection.items;
   const itemKey = selectedItems.join("\u0001");
   const columns = selectedDataset.columnNames ?? [];
   // Cùng một bộ lọc với picker: cột toàn ô trống không còn được coi là item.
   const itemColumns = useMemo(() => numericItemColumns(rows, columns), [rows, columns]);
 
+  // Hằng số phản chiếu suy từ thang người dùng khai (valueLabels) trước, mẫu sau (spec R4).
+  const reflections = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const name of selectedItems) {
+      // Chỉ truyền thang khai báo. Nếu thiếu, computeReliability tự suy từ Scale sample.
+      const constant = reflectionConstant([], selectedDataset.variables?.[name]?.valueLabels);
+      if (Number.isFinite(constant)) out[name] = constant;
+    }
+    return out;
+  }, [rows, columns, itemKey, selectedDataset.variables]);
+
   // Mọi số liệu đến từ MỘT Scale sample listwise (computeReliability): headline α và bảng item
   // không thể lệch mẫu nhau, và không còn đường tính thứ hai ở Python (ADR-0002).
   const result = useMemo(
-    () => (selectedItems.length >= 2 ? computeReliability(rows, selectedItems) : null),
-    [rows, itemKey]
+    () =>
+      selectedItems.length >= 2
+        ? computeReliability(rows, selectedItems, selection.reverse, reflections)
+        : null,
+    [rows, itemKey, selection.reverse, reflections]
   );
 
-  const toggle = (c: string) =>
-    setSelectedItems((prev) =>
-      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
-    );
+  const toggle = (c: string) => setSelection((prev) => selectItem(prev, c));
+  const handleToggleReverse = (name: string) =>
+    setSelection((prev) => toggleReverse(prev, name));
 
   const stats = result?.statistics;
   const items = result?.items ?? [];
@@ -86,7 +105,8 @@ export function ReliabilityTab({ selectedDataset, rows }: ReliabilityTabProps) {
             {t("reliabilityTab.alphaLabel")} = {formatStat(stats.alpha)}
           </p>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
-            {t("reliabilityTab.alphaStandardizedLabel")}: {formatStat(stats.alphaStandardized)} ·{" "}
+            {t("reliabilityTab.alphaStandardizedLabel")}: {formatStat(stats.alphaStandardized)}
+            ·{" "}
             {t("reliabilityTab.ciLabel")}{" "}
             {ci ? `[${formatStat(ci.lower)}, ${formatStat(ci.upper)}]` : "—"}
           </p>
@@ -99,7 +119,11 @@ export function ReliabilityTab({ selectedDataset, rows }: ReliabilityTabProps) {
       {result && (
         <>
           <ScaleVerdictCard assessment={result.verdict} />
-          <ItemTable items={result.items} />
+          <ItemTable
+            items={result.items}
+            onToggleReverse={handleToggleReverse}
+            reverseSuggestions={reverseSuggestions(result.items, result.statistics.alpha)}
+          />
           <ItemCorrelationMatrix
             data={result.sample.data}
             names={selectedItems}
