@@ -8,19 +8,21 @@ import { ItemPicker, numericItemColumns } from "../reliability/ItemPicker";
 import { ItemTable } from "../reliability/ItemTable";
 import { ItemCorrelationMatrix } from "../reliability/ItemCorrelationMatrix";
 import { ScaleVerdictCard } from "../reliability/ScaleVerdictCard";
+import { CurrentResultApa, apaSentence } from "../reliability/CurrentResultApa";
 import { formatStat } from "../reliability/format";
 
 export interface ReliabilityTabProps {
   selectedDataset: Dataset;
   rows: string[][];
+  showToast?: (message: string) => void;
 }
 
-export function ReliabilityTab({ selectedDataset, rows }: ReliabilityTabProps) {
-  return <ReliabilityEditor key={selectedDataset.id} selectedDataset={selectedDataset} rows={rows} />;
+export function ReliabilityTab({ selectedDataset, rows, showToast }: ReliabilityTabProps) {
+  return <ReliabilityEditor key={selectedDataset.id} selectedDataset={selectedDataset} rows={rows} showToast={showToast} />;
 }
 
 // Dataset khác remount editor: không có một frame kết quả/cờ đảo điểm của dataset cũ.
-function ReliabilityEditor({ selectedDataset, rows }: ReliabilityTabProps) {
+function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabProps) {
   const [selection, setSelection] = useState<ReliabilitySelection>({ items: [], reverse: {} });
   const selectedItems = selection.items;
   const itemKey = selectedItems.join("\u0001");
@@ -52,6 +54,14 @@ function ReliabilityEditor({ selectedDataset, rows }: ReliabilityTabProps) {
   const toggle = (c: string) => setSelection((prev) => selectItem(prev, c));
   const handleToggleReverse = (name: string) =>
     setSelection((prev) => toggleReverse(prev, name));
+  const copyApa = () => {
+    if (!result) return;
+    const sentence = apaSentence(result.statistics, result.verdict);
+    if (!sentence || typeof navigator === "undefined" || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(sentence)
+      .then(() => showToast?.(t("reliabilityTab.apaCopied")))
+      .catch(() => showToast?.(t("reliabilityTab.apaCopyFailed")));
+  };
 
   const stats = result?.statistics;
   const items = result?.items ?? [];
@@ -86,6 +96,8 @@ function ReliabilityEditor({ selectedDataset, rows }: ReliabilityTabProps) {
         selected={selectedItems}
         onToggle={toggle}
       />
+      <p className="mb-3 text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.transformGuidance")}</p>
+      <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.removalGuidance")}</p>
       {stats && (
         <div
           className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4"
@@ -101,6 +113,7 @@ function ReliabilityEditor({ selectedDataset, rows }: ReliabilityTabProps) {
             ]}
             title={t("reliabilityTab.askAiAlphaTitle")}
           />
+          <CurrentResultApa statistics={stats} assessment={result!.verdict} onCopy={copyApa} />
           <p className="font-medium">
             {t("reliabilityTab.alphaLabel")} = {formatStat(stats.alpha)}
           </p>

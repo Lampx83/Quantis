@@ -515,7 +515,7 @@ export function AnalysisView({
 
   if (effectiveTab === "reliability" && selectedDataset) {
     const rows = getAnalysisRows(selectedDataset);
-    return <ReliabilityTab selectedDataset={selectedDataset} rows={rows} />;
+    return <ReliabilityTab selectedDataset={selectedDataset} rows={rows} showToast={showToast} />;
   }
 
   if (effectiveTab === "regression") {
