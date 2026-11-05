@@ -171,7 +171,7 @@ export const EXTRA_VI: Record<string, string> = {
   "panelTab.askAiTitle": "Hỏi AI về kết quả dữ liệu bảng",
 
   // ---- Kiểm định giả định hồi quy (Phase 4.1) -------------------------------------------------------
-  "regDiag.title": "Kiểm định giả định hồi quy",
+  "regDiag.title": "Chẩn đoán & giả định hồi quy",
   "regDiag.expand": "Mở rộng",
   "regDiag.collapse": "Thu gọn",
   "regDiag.copy": "Sao chép bảng",
@@ -182,7 +182,7 @@ export const EXTRA_VI: Record<string, string> = {
   "regDiag.staleJump": "Không mở được dòng dữ liệu vì dữ liệu đã thay đổi kể từ khi mô hình được ước lượng.",
   "regDiag.failureConsequence": "Các hệ số bên trên vẫn hợp lệ; phần kiểm định giả định không khả dụng.",
   "regDiag.modelLine": "Mô hình: {y} ~ {x}",
-  "regDiag.sampleLine": "Mẫu của mô hình: dùng {used} / nộp {submitted} / loại {dropped} dòng ({method}).",
+  "regDiag.sampleLine": "{used}/{submitted} dòng được dùng, {dropped} dòng bị bỏ ({method})",
   "regDiag.method.listwise": "loại theo danh sách",
   "regDiag.method.miceActive": "đa nhập liệu",
   "regDiag.miceLine": "Kiểm định giả định mô tả bộ dữ liệu điền thứ {index}/{m}, không phải suy luận gộp.",
@@ -448,7 +448,7 @@ export const EXTRA_EN: Record<string, string> = {
   "panelTab.askAiTitle": "Ask AI about the panel results",
 
   // ---- Regression assumption checks (Phase 4.1) -----------------------------------------------------
-  "regDiag.title": "Regression assumption checks",
+  "regDiag.title": "Regression Diagnostics & Assumptions",
   "regDiag.expand": "Expand",
   "regDiag.collapse": "Collapse",
   "regDiag.copy": "Copy table",
@@ -459,7 +459,7 @@ export const EXTRA_EN: Record<string, string> = {
   "regDiag.staleJump": "Cannot open the row because the data changed since the model was fitted.",
   "regDiag.failureConsequence": "The coefficients above are still valid; the assumption checks are unavailable.",
   "regDiag.modelLine": "Model: {y} ~ {x}",
-  "regDiag.sampleLine": "Model sample: {used} used / {submitted} submitted / {dropped} dropped ({method}).",
+  "regDiag.sampleLine": "{used} of {submitted} rows used, {dropped} excluded ({method})",
   "regDiag.method.listwise": "listwise deletion",
   "regDiag.method.miceActive": "multiple imputation",
   "regDiag.miceLine": "The assumption checks describe imputed dataset {index} of {m}, not pooled inference.",

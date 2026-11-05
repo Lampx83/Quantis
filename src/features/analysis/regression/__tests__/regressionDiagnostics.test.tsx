@@ -282,12 +282,12 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     setLocale("vi");
     const html = renderPanel(panelProps());
 
-    expect(html).toContain("Kiểm định giả định hồi quy");
+    expect(html).toContain("Chẩn đoán &amp; giả định hồi quy");
     expect(html).toContain("Cần lưu ý");
     expect(html).toContain("Vi phạm");
     expect(html).toContain("Tuyến tính và phương sai đồng nhất");
     expect(html).toContain("Đa cộng tuyến");
-    expect(html).toContain("Mẫu của mô hình: dùng 350 / nộp 412 / loại 62 dòng (loại theo danh sách).");
+    expect(html).toContain("350/412 dòng được dùng, 62 dòng bị bỏ (loại theo danh sách)");
   });
 
   it("renders an inapplicable row with the reason and no statistic or action", () => {
@@ -312,7 +312,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
   it("shows the sample line in the collapsed state too", () => {
     const expanded = renderPanel(panelProps());
     expect(expanded).toContain(
-      "Model sample: 350 used / 412 submitted / 62 dropped (listwise deletion)."
+      "350 of 412 rows used, 62 excluded (listwise deletion)"
     );
     expect(expanded).toContain('data-testid="regdiag-table"');
 
@@ -320,7 +320,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     expect(collapsed).not.toContain('data-testid="regdiag-table"');
     expect(collapsed).toContain('data-testid="regdiag-sample"');
     expect(collapsed).toContain(
-      "Model sample: 350 used / 412 submitted / 62 dropped (listwise deletion)."
+      "350 of 412 rows used, 62 excluded (listwise deletion)"
     );
     expect(collapsed).toContain('data-testid="regdiag-chips"');
   });
@@ -355,7 +355,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     const html = renderPanel(panelProps({ run }));
 
     expect(html).toContain(
-      "Model sample: 360 used / 412 submitted / 52 dropped (multiple imputation)."
+      "360 of 412 rows used, 52 excluded (multiple imputation)"
     );
     expect(html).toContain('data-testid="regdiag-judged-sample"');
     expect(html).toContain(

@@ -701,18 +701,16 @@ export function RegressionTab({
                   </div>
                 </div>
               )}
-              {olsRun && (
-                <div className="p-2 border-t border-neutral-100">
-                  <RegressionDiagnosticsPanel
-                    run={olsRun}
-                    selectedDatasetId={selectedDataset.id}
-                    submittedRows={rows.length > 0 ? rows.length - 1 : 0}
-                    variables={selectedDataset.variables}
-                    stale={stale}
-                  />
-                </div>
-              )}
             </div>
+          )}
+          {olsRun && selectedDataset && (
+            <RegressionDiagnosticsPanel
+              run={olsRun}
+              selectedDatasetId={selectedDataset.id}
+              submittedRows={rows.length > 0 ? rows.length - 1 : 0}
+              variables={selectedDataset.variables}
+              stale={stale}
+            />
           )}
         </section>
       )}

@@ -27,6 +27,13 @@ const NOT_APPLICABLE_CLASS =
 
 const ROW_ORDER = ["linearity", "normality", "influence", "collinearity"] as const;
 
+const BADGE_CLASS: Record<string, string> = {
+  pass: "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300",
+  caution: "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300",
+  violation: "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300",
+  notApplicable: "bg-neutral-100 dark:bg-neutral-700/40 text-neutral-600 dark:text-neutral-400",
+};
+
 const VERDICT_RANK: Record<RegressionVerdict, number> = {
   pass: 0,
   caution: 1,
@@ -246,6 +253,30 @@ export function RegressionDiagnosticsPanel({
   const ok: DiagnosticsPayloadOk | null = diagnostics?.ok ? diagnostics : null;
   const worst = ok ? worstApplicableVerdict(ok) : null;
   const collapsedAccent = !expanded && worst ? COLLAPSED_ACCENT[worst] : "";
+  const counts = ok
+    ? {
+        pass: ok.assumptions.filter((row) => row.applicable && row.verdict === "pass").length,
+        caution: ok.assumptions.filter((row) => row.applicable && row.verdict === "caution").length,
+        violation: ok.assumptions.filter((row) => row.applicable && row.verdict === "violation").length,
+        notApplicable: ok.assumptions.filter((row) => !row.applicable).length,
+      }
+    : null;
+  // Every row stays represented: the inapplicable ones used to have their own chip, and a
+  // summary that silently drops them reads as if the check never ran.
+  const badges: { key: string; label: string; count: number }[] = counts
+    ? (["pass", "caution", "violation"] as const).map((verdict) => ({
+        key: verdict,
+        label: t(`regDiag.verdict.${verdict}`),
+        count: counts[verdict],
+      }))
+    : [];
+  if (counts && counts.notApplicable > 0) {
+    badges.push({
+      key: "notApplicable",
+      label: t("regDiag.notApplicable"),
+      count: counts.notApplicable,
+    });
+  }
   const accounting = sampleAccounting(run, submittedRows);
 
   const sampleLine = t("regDiag.sampleLine", {
@@ -281,54 +312,33 @@ export function RegressionDiagnosticsPanel({
       data-testid="regdiag-section"
       open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
-      className={`group rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 mt-3 ${collapsedAccent}`}
+      className={`group rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 mt-3 overflow-hidden ${collapsedAccent}`}
     >
       <summary
         data-testid="regdiag-summary"
-        className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/40"
+        className="flex items-center gap-3 p-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-700/40"
       >
-        <span className="font-semibold text-neutral-800 dark:text-neutral-200">
-          {t("regDiag.title")}
-          <InfoHint term="assumptionCheck" />
-        </span>
-        <span
-          data-testid="regdiag-sample"
-          className="text-xs text-neutral-600 dark:text-neutral-400"
-        >
-          {sampleLine}
-        </span>
-        {ok && (
-          <span data-testid="regdiag-chips" className="flex flex-wrap gap-1.5">
-            {ROW_ORDER.map((id) => {
-              const row = ok.assumptions.find((entry) => entry.id === id);
-              if (!row) return null;
-              return (
-                <span
-                  key={id}
-                  className={`text-[11px] px-2 py-0.5 rounded border ${
-                    row.applicable ? VERDICT_CLASS[row.verdict] : NOT_APPLICABLE_CLASS
-                  }`}
-                >
-                  {t(`regDiag.row.${id}`)}: {verdictLabel(row, t)}
-                </span>
-              );
-            })}
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200">{t("regDiag.title")}<InfoHint term="assumptionCheck" /></span>
+            {counts && (
+              <span data-testid="regdiag-chips" className="flex flex-wrap gap-1.5">
+                {badges.map((badge) => (
+                  <span
+                    key={badge.key}
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${BADGE_CLASS[badge.key]}`}
+                  >
+                    {badge.count} {badge.label}
+                  </span>
+                ))}
+              </span>
+            )}
           </span>
-        )}
+          <span data-testid="regdiag-sample" className="mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">{sampleLine}</span>
+        </span>
         {/* The summary is display:flex, which removes the native triangle marker — this is the
             only visible cue that the section opens, so it must render in both states. */}
-        <span
-          data-testid="regdiag-toggle"
-          className="ml-auto inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-brand"
-        >
-          {expanded ? t("regDiag.collapse") : t("regDiag.expand")}
-          <ChevronDown
-            aria-hidden="true"
-            className={`w-4 h-4 transition-transform duration-200 ease-out ${
-              expanded ? "rotate-180" : ""
-            }`}
-          />
-        </span>
+        <ChevronDown data-testid="regdiag-toggle" aria-label={expanded ? t("regDiag.collapse") : t("regDiag.expand")} className={`h-4 w-4 shrink-0 text-neutral-500 transition-transform duration-200 ease-out ${expanded ? "rotate-180" : ""}`} />
       </summary>
 
       {expanded && (
