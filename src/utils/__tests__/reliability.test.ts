@@ -8,6 +8,7 @@ import {
   computeItemDiagnostics,
   computeInterItemMatrix,
   computeMeanInterItemR,
+  computeReliability,
   computeStandardizedAlpha,
   itemVerdict,
   scaleVerdict,
@@ -451,5 +452,46 @@ describe("computeFeldtCi", () => {
     expect(computeFeldtCi(null, 5, 12)).toBeNull();
     expect(computeFeldtCi(0.8, 1, 12)).toBeNull();
     expect(computeFeldtCi(0.8, 5, 1)).toBeNull();
+  });
+});
+
+describe("computeReliability", () => {
+  it("assembles one scale sample, its statistics, the item table and the Verdict", () => {
+    const result = computeReliability(ROWS, ITEMS, REVERSE, REFLECTION);
+
+    expect(result.statistics.alpha).toBeCloseTo(0.793043907252, 9);
+    expect(result.statistics.alphaStandardized).toBeCloseTo(0.84171747737, 9);
+    expect(result.statistics.ci!.lower).toBeCloseTo(0.523685594649, 9);
+    expect(result.statistics.ci!.upper).toBeCloseTo(0.910078671054, 9);
+    expect(result.statistics.k).toBe(5);
+    expect(result.statistics.nScaleSample).toBe(12);
+    expect(result.statistics.nInput).toBe(12);
+    expect(result.statistics.meanInterItemR).toBeCloseTo(0.515401364689, 9);
+
+    expect(result.itemStatistics.map((it) => it.name)).toEqual(ITEMS);
+    expect(result.itemStatistics[4].correctedItemTotal).toBeCloseTo(0.102743928708, 9);
+
+    // α = .793 sits in the [.70, .80) band.
+    expect(result.verdict.verdict).toBe("caution");
+    expect(result.verdict.reasonKey).toBe("reliabilityVerdict.scale.caution.acceptable");
+  });
+
+  it("marks a scale with a constant kept item as Not applicable", () => {
+    const rows = ROWS.map((row, i) =>
+      i === 0 ? row : row.map((cell, j) => (j === 3 ? "4" : cell))
+    );
+    const result = computeReliability(rows, ITEMS, REVERSE, REFLECTION);
+
+    expect(result.statistics.alpha).toBeNull();
+    expect(result.verdict.verdict).toBe("notApplicable");
+    expect(result.verdict.reasonKey).toBe("reliabilityVerdict.scale.notApplicable.constantItem");
+    expect(result.verdict.reasonParams).toMatchObject({ items: "Q4" });
+  });
+
+  it("runs on a two-item scale", () => {
+    const result = computeReliability(ROWS, ["Q1", "Q2"]);
+    expect(result.statistics.alpha).toBeCloseTo(0.798053527981, 9);
+    expect(result.verdict.verdict).toBe("caution");
+    expect(result.verdict.reasonKey).toBe("reliabilityVerdict.scale.caution.twoItems");
   });
 });

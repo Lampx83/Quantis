@@ -529,7 +529,6 @@ export function AnalysisView({
         selectedDataset={selectedDataset}
         rows={rows}
         numericCols={numericCols}
-        analysisBackendAvailable={analysisBackendAvailable}
       />
     );
   }

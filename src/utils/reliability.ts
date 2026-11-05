@@ -479,3 +479,38 @@ export function computeFeldtCi(
   const upper = 1 - (1 - alpha) * lowerF;
   return { lower: Math.min(1, Math.max(0, lower)), upper: Math.min(1, Math.max(0, upper)) };
 }
+
+/** Toàn bộ kết quả của một lần tính thang đo — tab chỉ việc render. */
+export interface ReliabilityScaleResult {
+  sample: ScaleSample;
+  statistics: ReliabilityStatistics;
+  itemStatistics: ReliabilityItemStatistics[];
+  verdict: ReliabilityScaleAssessment;
+}
+
+/**
+ * Điểm vào DUY NHẤT của tab: dựng Scale sample, tính mọi thống kê và Verdict cấp thang đo
+ * từ cùng một mẫu listwise. Nhờ vậy headline α và bảng item không bao giờ lệch mẫu nhau.
+ */
+export function computeReliability(
+  rows: string[][],
+  items: string[],
+  reverse: Record<string, boolean> = {},
+  reflection: Record<string, number> = {}
+): ReliabilityScaleResult {
+  const sample = buildScaleSample(rows, items, reverse, reflection);
+  const k = items.length;
+  const alpha = computeAlpha(sample.data);
+  const statistics: ReliabilityStatistics = {
+    alpha,
+    alphaStandardized: computeStandardizedAlpha(sample.data),
+    ci: computeFeldtCi(alpha, k, sample.data.length),
+    k,
+    nScaleSample: sample.data.length,
+    nInput: sample.nInput,
+    meanInterItemR: computeMeanInterItemR(sample.data),
+  };
+  const itemStatistics = computeItemDiagnostics(rows, items, sample);
+  const constantItems = itemStatistics.filter((it) => it.sd === 0).map((it) => it.name);
+  return { sample, statistics, itemStatistics, verdict: scaleVerdict(statistics, constantItems) };
+}
