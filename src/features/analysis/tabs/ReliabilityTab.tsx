@@ -7,6 +7,7 @@ import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { ItemPicker, numericItemColumns } from "../reliability/ItemPicker";
 import { ItemTable } from "../reliability/ItemTable";
 import { ItemCorrelationMatrix } from "../reliability/ItemCorrelationMatrix";
+import { ScaleVerdictCard } from "../reliability/ScaleVerdictCard";
 import { formatStat } from "../reliability/format";
 
 export interface ReliabilityTabProps {
@@ -97,6 +98,7 @@ export function ReliabilityTab({ selectedDataset, rows }: ReliabilityTabProps) {
       )}
       {result && (
         <>
+          <ScaleVerdictCard assessment={result.verdict} />
           <ItemTable items={result.items} />
           <ItemCorrelationMatrix
             data={result.sample.data}
