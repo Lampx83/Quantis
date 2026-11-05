@@ -22,6 +22,8 @@ export interface ScaleSample {
   sourceRowIndexes: number[];
   /** Số dòng đầu vào trước khi loại listwise — để người dùng thấy phần dữ liệu bị mất. */
   nInput: number;
+  /** Hằng số phản chiếu đã dùng cho từng cột, cùng thứ tự `items`; null khi item không đảo. */
+  reflectionConstants: Array<number | null>;
 }
 
 /** Số liệu thô của một item; Verdict/lý do được gắn ở tầng ngưỡng (`assessItems`). */
@@ -124,6 +126,7 @@ export function buildScaleSample(
   // Hằng số phản chiếu mặc định phải tính trên Scale sample (sau listwise), không trên input:
   // dòng bị loại không được kéo min/max ra ngoài thang thật.
   const reflected = data.map((row) => row.slice());
+  const reflectionConstants: Array<number | null> = items.map(() => null);
   for (let j = 0; j < items.length; j++) {
     if (!reverse[items[j]]) continue;
     const declared = reflection[items[j]];
@@ -131,10 +134,16 @@ export function buildScaleSample(
       declared !== undefined && Number.isFinite(declared)
         ? declared
         : deriveObservedReflection(data, j);
+    reflectionConstants[j] = constant;
     for (let i = 0; i < reflected.length; i++) reflected[i][j] = constant - reflected[i][j];
   }
 
-  return { data: reflected, sourceRowIndexes, nInput: Math.max(0, rows.length - 1) };
+  return {
+    data: reflected,
+    sourceRowIndexes,
+    nInput: Math.max(0, rows.length - 1),
+    reflectionConstants,
+  };
 }
 
 /** (min + max) quan sát được của một cột; NaN khi cột rỗng. */
@@ -484,7 +493,8 @@ export function computeFeldtCi(
 export interface ReliabilityScaleResult {
   sample: ScaleSample;
   statistics: ReliabilityStatistics;
-  itemStatistics: ReliabilityItemStatistics[];
+  /** Từng item kèm Verdict và lý do (spec §5). */
+  items: ReliabilityItemDiagnostic[];
   verdict: ReliabilityScaleAssessment;
 }
 
@@ -512,5 +522,16 @@ export function computeReliability(
   };
   const itemStatistics = computeItemDiagnostics(rows, items, sample);
   const constantItems = itemStatistics.filter((it) => it.sd === 0).map((it) => it.name);
-  return { sample, statistics, itemStatistics, verdict: scaleVerdict(statistics, constantItems) };
+  const diagnostics: ReliabilityItemDiagnostic[] = itemStatistics.map((it, j) => ({
+    ...it,
+    reverse: reverse[it.name] === true,
+    reflectionConstant: sample.reflectionConstants[j] ?? null,
+    ...itemVerdict(it, alpha),
+  }));
+  return {
+    sample,
+    statistics,
+    items: diagnostics,
+    verdict: scaleVerdict(statistics, constantItems),
+  };
 }

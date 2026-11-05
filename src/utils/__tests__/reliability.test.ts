@@ -110,6 +110,8 @@ describe("buildScaleSample", () => {
     expect(sample.data[0]).toEqual([5, 4, 4, 5, 3]);
     // Q1 is untouched.
     expect(sample.data[0][0]).toBe(5);
+    // The constant that was actually used is reported for every item.
+    expect(sample.reflectionConstants).toEqual([null, null, 6, null, null]);
   });
 
   it("leaves the data untouched when no item is reversed", () => {
@@ -468,8 +470,15 @@ describe("computeReliability", () => {
     expect(result.statistics.nInput).toBe(12);
     expect(result.statistics.meanInterItemR).toBeCloseTo(0.515401364689, 9);
 
-    expect(result.itemStatistics.map((it) => it.name)).toEqual(ITEMS);
-    expect(result.itemStatistics[4].correctedItemTotal).toBeCloseTo(0.102743928708, 9);
+    expect(result.items.map((it) => it.name)).toEqual(ITEMS);
+    expect(result.items[4].correctedItemTotal).toBeCloseTo(0.102743928708, 9);
+    // The item table can show why an item was flagged, and what reflection it used.
+    expect(result.items[2].reverse).toBe(true);
+    expect(result.items[2].reflectionConstant).toBe(6);
+    expect(result.items[0].reverse).toBe(false);
+    expect(result.items[0].reflectionConstant).toBeNull();
+    expect(result.items[4].verdict).toBe("caution");
+    expect(result.items[4].reasonKey).toBe("reliabilityVerdict.item.lowCitc");
 
     // α = .793 sits in the [.70, .80) band.
     expect(result.verdict.verdict).toBe("caution");
