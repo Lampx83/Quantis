@@ -9,6 +9,7 @@ import { activeFactorRun, finishFactorRun, runFactorAnalysis, startFactorRun, ty
 import { ScreePlot } from "../factor/ScreePlot";
 import { FactorLoadingsTable } from "../factor/FactorLoadingsTable";
 import { FactorVarianceTable } from "../factor/FactorVarianceTable";
+import { FactorItemPicker } from "../factor/FactorItemPicker";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
@@ -103,6 +104,11 @@ export function FactorTab({
   const processing = activeRun != null && outcome == null;
   const paf = method === "paf";
   const issue = outcome?.issue;
+  const methodGuide = t(paf ? "factorTab.pafContext" : "factorTab.pcaContext");
+  const countUsedLabel = t(paf ? "factorTab.factorsUsed" : "factorTab.componentsUsed");
+  const methodLabel = t(paf ? "factorTab.pafMethod" : "factorTab.pcaMethod");
+  const rotationDescription = result?.rotation === "varimax" ? "Varimax." : t(paf ? "factorTab.pafNoRotation" : "factorTab.pcaNoRotation");
+  const askAiTitle = t("factorTab.askAiTitle", { method: method.toUpperCase() });
 
   const runAnalysis = async () => {
     const next = startFactorRun(input);
@@ -116,39 +122,36 @@ export function FactorTab({
       <h2 className="text-xl font-semibold mb-2">{t("factorTab.title")}<InfoHint term="efa" /></h2>
       <GlossaryBar terms={["efa", "kmo", "bartlett"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("factorTab.description")}</p>
+      <details className="mb-4 rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-700">
+        <summary className="cursor-pointer font-medium">{t("factorTab.guideTitle")}</summary>
+        <ol className="mt-2 list-decimal space-y-1 pl-5">
+          <li>{t("factorTab.guideAdequacy")}</li>
+          <li>{methodGuide} {t("factorTab.guideCount")}</li>
+          <li>{t(paf ? "factorTab.guideFactorLoadings" : "factorTab.guideComponentLoadings")}</li>
+        </ol>
+      </details>
       <div className="mb-4">
         <AIAssistPanel
-          metadata={
-            selectedDataset
-              ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}.`
-              : undefined
-          }
-          context={t(paf ? "factorTab.pafContext" : "factorTab.pcaContext")}
+          key={`${datasetId}-${method}`}
+          metadata={selectedDataset.name}
+          context={methodGuide}
+          includeStandardResultPrompts={false}
           quickPrompts={[
             {
               label: t("factorTab.aiPromptSuggestFactorsLabel"),
-              systemHint: `${t(paf ? "factorTab.pafContext" : "factorTab.pcaContext")} ${aiAnswerLangHint()}`,
+              systemHint: `${methodGuide} ${aiAnswerLangHint()}`,
             },
           ]}
-          title={t("factorTab.askAiTitle")}
+          title={askAiTitle}
         />
       </div>
       {numericCols.length >= 2 ? (
         <>
-          <div className="flex flex-wrap gap-2 mb-3">
-            <span className="text-sm font-medium">{t("factorTab.selectItemsLabel")}</span>
-            {numericCols.map((c) => (
-              <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={input.columns.includes(c)}
-                  onChange={() => setSelectedCols(input.columns.includes(c) ? input.columns.filter((name) => name !== c) : [...input.columns, c])}
-                  className="rounded"
-                />
-                <span className="text-sm">{c}</span>
-              </label>
-            ))}
-          </div>
+          <FactorItemPicker key={datasetId} columns={numericCols} variables={variables} selected={input.columns}
+            onToggle={(name) => setSelectedCols(input.columns.includes(name)
+              ? input.columns.filter((column) => column !== name)
+              : [...input.columns, name])}
+          />
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
               <label htmlFor="factor-method" className="block text-sm font-medium mb-1">{t("factorTab.methodLabel")}</label>
@@ -187,7 +190,7 @@ export function FactorTab({
                   {t("factorTab.processingLabel")}
                 </>
               ) : (
-                t("factorTab.runEfaButton")
+                t("factorTab.runAnalysisButton")
               )}
             </button>
           </div>
@@ -216,30 +219,30 @@ export function FactorTab({
           {result && outcome && (
             <div className="space-y-4">
               {!paf && count == null && outcome.suggestedCount === 0 && <p className="text-sm">{t("factorTab.pcaFallback")}</p>}
-              {result.rotation === "none" && <p className="text-sm">{t(paf ? "factorTab.pafNoRotation" : "factorTab.pcaNoRotation")}</p>}
+              {result.rotation === "none" && <p className="text-sm">{rotationDescription}</p>}
               <AIAssistPanel
-                context={`${method.toUpperCase()}, ${result.nFactors}, ${result.rotation}. Variance before rotation: ${
+                context={`${methodLabel}. ${countUsedLabel}: ${result.nFactors}. ${rotationDescription} ${t("factorTab.varianceTitle")} (${t("factorTab.varianceBeforeRotation")}): ${
                   result.varianceBefore.map((v) => v.toFixed(1) + "%").join(", ")
-                }. Loadings: ${input.columns.map((name, i) => `${name} ${result.loadings[i].map((v) => v.toFixed(3)).join(", ")}`).join(" | ")}.${
-                  kmoResult && kmoResult.kmo != null
-                    ? ` KMO = ${kmoResult.kmo.toFixed(3)}; Bartlett χ²(${kmoResult.bartlettDf}) = ${
+                }. ${t("factorTab.aiSignedLoadings")}: ${input.columns.map((name, i) => `${name} ${result.loadings[i].map((v) => v.toFixed(3)).join(", ")}`).join(" | ")}.${
+                  kmoResult
+                    ? ` ${t("factorTab.casesLabel")}: ${kmoResult.n}/${kmoResult.nInput}. KMO = ${kmoResult.kmo?.toFixed(3) ?? "—"}. Bartlett χ²(${kmoResult.bartlettDf}) = ${
                         kmoResult.bartlettChi2?.toFixed(2) ?? "—"
                       }, p ${
                         kmoResult.bartlettP != null && kmoResult.bartlettP < 0.001
                           ? "< 0.001"
                           : "= " + (kmoResult.bartlettP?.toFixed(3) ?? "—")
-                      }; MSA thấp (<0.5): ${
-                        kmoResult.columnNames.filter((_, i) => (kmoResult.msa[i] ?? 1) < 0.5).join(", ") || "không có"
+                      }. MSA < 0.50: ${
+                        kmoResult.columnNames.filter((_, i) => (kmoResult.msa[i] ?? 1) < 0.5).join(", ") || "—"
                       }.`
                     : ""
                 }`}
                 quickPrompts={[
                   {
                     label: t("factorTab.explainResultsLabel"),
-                    systemHint: `${t(paf ? "factorTab.pafContext" : "factorTab.pcaContext")} ${aiAnswerLangHint()}`,
+                    systemHint: `${methodGuide} ${aiAnswerLangHint()}`,
                   },
                 ]}
-                title={t("factorTab.askAiTitle")}
+                title={askAiTitle}
               />
               <FactorVarianceTable method={method} rotation={result.rotation}
                 varianceBefore={result.varianceBefore} varianceAfter={result.varianceAfter} />
