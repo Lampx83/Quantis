@@ -6,6 +6,7 @@ import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { activeFactorRun, finishFactorRun, runFactorAnalysis, startFactorRun, type FactorMethod, type FactorRunInput } from "../factor/runFactorAnalysis";
+import { ScreePlot } from "../factor/ScreePlot";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
@@ -168,6 +169,7 @@ export function FactorTab({
                 min={1}
                 max={Math.max(1, input.columns.length - (paf ? 1 : 0))}
                 value={count ?? ""}
+                placeholder={t("factorTab.automatic")}
                 onChange={(e) => setCount(e.target.value === "" ? undefined : e.target.valueAsNumber)}
                 className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
               />
@@ -194,8 +196,21 @@ export function FactorTab({
           )}
           {issue && issue.code !== kmoResult?.issue?.code && issue.code !== "pafBackendRequired" && (
             <p role="alert" className="my-3 text-amber-700 dark:text-amber-400">
-              {t(`factorTab.${issue.code}`, { max: issue.max ?? "—", items: issue.columns?.join(", ") ?? "—" })}
+              {t(issue.code === "pafSuggestionOutOfRange" && issue.max === 0 ? "factorTab.pafNoUsableRoots" : `factorTab.${issue.code}`, {
+                max: issue.max ?? "—", items: issue.columns?.join(", ") ?? "—",
+              })}
             </p>
+          )}
+          {outcome?.parallelIssue && (
+            <p role="status" className="my-3 text-amber-700 dark:text-amber-400">
+              {t(`factorTab.${outcome.parallelIssue.code}`, {
+                maxRows: outcome.parallelIssue.maxRows ?? "—", maxItems: outcome.parallelIssue.maxItems ?? "—",
+              })}
+            </p>
+          )}
+          {outcome && (
+            <ScreePlot method={method} eigenvalues={outcome.eigenvalues} parallelCutoff={outcome.parallelCutoff}
+              suggestedCount={outcome.suggestedCount} usedCount={result?.nFactors ?? null} />
           )}
           {result && outcome && (
             <div className="space-y-4">

@@ -22,7 +22,11 @@ const solution = {
 };
 
 function reply(overrides: Record<string, unknown> = {}) {
-  return Response.json({ result: { method: "paf", columnNames: columns, nUsed: 12, ...solution, ...overrides } });
+  return Response.json({ result: {
+    method: "paf", columnNames: columns, nUsed: 12, ...solution,
+    screeEigenvalues: [0.6, 0.1, -0.2], parallelCutoff: [0.5, 0.15, -0.3], suggestedCount: 1, parallelIssue: null, issue: null,
+    ...overrides,
+  } });
 }
 
 function deferredResponse() {
@@ -64,6 +68,41 @@ describe("factor analysis routing and response validation", () => {
     const run = startFactorRun({ ...input, method: "pca" });
     expect(await runFactorAnalysis(run.request)).toMatchObject({ issue: null, eigenvalues: [1.5, 1.1, 0.4], suggestedCount: 2 });
     expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:4001/api/quantis/analyze/efa");
+  });
+
+  it("requests automatic PAF when the count is blank", async () => {
+    fetchMock.mockResolvedValueOnce(reply());
+    const run = startFactorRun({ ...input, count: undefined });
+    expect(await runFactorAnalysis(run.request)).toMatchObject({
+      solution, suggestedCount: 1, eigenvalues: [0.6, 0.1, -0.2], parallelCutoff: [0.5, 0.15, -0.3],
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({ rows, columnNames: columns });
+  });
+
+  it.each([
+    { suggestedCount: 0, issue: { code: "pafNoSuggestion" } },
+    { suggestedCount: 3, issue: { code: "pafSuggestionOutOfRange", max: 1 } },
+  ])("keeps the Scree without a solution when the automatic suggestion is %j", async (fields) => {
+    fetchMock.mockResolvedValueOnce(reply({ nFactors: null, ...fields }));
+    const run = startFactorRun({ ...input, count: undefined });
+    expect(await runFactorAnalysis(run.request)).toMatchObject({
+      ...fields, solution: null, eigenvalues: [0.6, 0.1, -0.2], parallelCutoff: [0.5, 0.15, -0.3],
+    });
+  });
+
+  it("keeps a manual solution when the recommendation exceeds the computation limit", async () => {
+    const limit = { code: "pafParallelLimit", maxRows: 3000, maxItems: 30 };
+    fetchMock.mockResolvedValueOnce(reply({ suggestedCount: null, parallelCutoff: null, parallelIssue: limit }));
+    const run = startFactorRun(input);
+    expect(await runFactorAnalysis(run.request)).toMatchObject({ solution, suggestedCount: null, parallelCutoff: null, parallelIssue: limit });
+  });
+
+  it("preserves PAF Scree when extraction fails after computing the recommendation", async () => {
+    const { result } = await reply({ nFactors: null }).json();
+    fetchMock.mockResolvedValueOnce(Response.json({ detail: { code: "pafNonconvergence", result } }, { status: 422 }));
+    expect(await runFactorAnalysis(startFactorRun(input).request)).toMatchObject({
+      solution: null, issue: { code: "pafNonconvergence" }, suggestedCount: 1, eigenvalues: [0.6, 0.1, -0.2],
+    });
   });
 
   it.each([
