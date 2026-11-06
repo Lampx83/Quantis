@@ -20,14 +20,15 @@ describe("factor item picker", () => {
     expect(filterFactorItems(columns, variables, "unknown")).toEqual([]);
   });
 
-  it("renders native controls and labels, preserves checked items, and explains numeric Likert treatment", () => {
+  it("renders toggle buttons with selection state and explains numeric Likert treatment", () => {
     setLocale("en");
     const html = renderToStaticMarkup(
       <FactorItemPicker columns={columns} variables={variables} selected={["Q1"]} onToggle={() => {}} />,
     );
     expect(html).toMatch(/<legend[^>]*>Select variables \(items\)<\/legend>/);
     expect(html).toMatch(/<input[^>]*type="search"[^>]*aria-label="Search by name or label"/);
-    expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""[^>]*\/>.*?Q1.*?Campus satisfaction/);
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*aria-pressed="true"[^>]*><span[^>]*>Q1<\/span><span[^>]*>— Campus satisfaction<\/span><\/button>/);
+    expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*><span[^>]*>Q2<\/span><\/button>/);
     expect(html).toContain("1 selected");
     expect(html).toContain("Likert scores are treated as numbers");
     expect(html).not.toContain("Nominal items selected");
@@ -38,7 +39,7 @@ describe("factor item picker", () => {
     const html = renderToStaticMarkup(
       <FactorItemPicker columns={columns} variables={variables} selected={["student_id"]} onToggle={() => {}} />,
     );
-    expect(html).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""[^>]*\/>.*?student_id.*?Student number/);
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*><span[^>]*>student_id<\/span>.*?Student number/);
     expect(html).toContain("Đã chọn biến định danh");
     expect(html).toContain("student_id");
     expect(html).toContain("Điểm Likert được xử lý như số");

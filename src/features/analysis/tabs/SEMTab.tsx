@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ColumnSelectionButton } from "../ColumnSelectionButton";
+import { itemLabel } from "../reliability/ItemPicker";
 import { Loader2, Cpu } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
@@ -309,23 +311,18 @@ export function SEMTab({
                 numericCols
                   .filter((c) => c !== mediationX && c !== mediationY)
                   .map((c) => (
-                    <label
+                    <ColumnSelectionButton
                       key={c}
-                      className="inline-flex items-center gap-2 text-sm cursor-pointer select-none"
-                    >
-                      <input
-                        type="checkbox"
-                        className="rounded border-neutral-400"
-                        checked={mediationMs.includes(c)}
-                        onChange={() => {
-                          setMediationMs((prev) =>
-                            prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
-                          );
-                          setMediationResult(null);
-                        }}
-                      />
-                      <span>{c}</span>
-                    </label>
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={mediationMs.includes(c)}
+                      onToggle={(c) => {
+                        setMediationMs((prev) =>
+                          prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
+                        );
+                        setMediationResult(null);
+                      }}
+                    />
                   ))
               )}
             </div>
@@ -618,22 +615,21 @@ export function SEMTab({
                 {numericCols
                   .filter((c) => c !== eq.yCol)
                   .map((col) => (
-                    <label key={col} className="flex items-center gap-1 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={eq.xCols.includes(col)}
-                        onChange={() => {
-                          const next = [...pathEquations];
-                          const x = next[idx].xCols.includes(col)
-                            ? next[idx].xCols.filter((x) => x !== col)
-                            : [...next[idx].xCols, col];
-                          next[idx] = { ...next[idx], xCols: x };
-                          setPathEquations(next);
-                          setPathResult(null);
-                        }}
-                      />
-                      {col}
-                    </label>
+                    <ColumnSelectionButton
+                      key={col}
+                      name={col}
+                      label={itemLabel(col, selectedDataset?.variables)}
+                      selected={eq.xCols.includes(col)}
+                      onToggle={(col) => {
+                        const next = [...pathEquations];
+                        const x = next[idx].xCols.includes(col)
+                          ? next[idx].xCols.filter((x) => x !== col)
+                          : [...next[idx].xCols, col];
+                        next[idx] = { ...next[idx], xCols: x };
+                        setPathEquations(next);
+                        setPathResult(null);
+                      }}
+                    />
                   ))}
               </div>
               {pathEquations.length > 1 && (
@@ -737,22 +733,21 @@ export function SEMTab({
                 />
                 <span className="text-neutral-500">=~</span>
                 {numericCols.map((col) => (
-                  <label key={col} className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={f.indicators.includes(col)}
-                      onChange={() => {
-                        const next = [...cfaFactors];
-                        const ind = next[idx].indicators.includes(col)
-                          ? next[idx].indicators.filter((x) => x !== col)
-                          : [...next[idx].indicators, col];
-                        next[idx] = { ...next[idx], indicators: ind };
-                        setCfaFactors(next);
-                        setCfaResult(null);
-                      }}
-                    />
-                    {col}
-                  </label>
+                  <ColumnSelectionButton
+                    key={col}
+                    name={col}
+                    label={itemLabel(col, selectedDataset?.variables)}
+                    selected={f.indicators.includes(col)}
+                    onToggle={(col) => {
+                      const next = [...cfaFactors];
+                      const ind = next[idx].indicators.includes(col)
+                        ? next[idx].indicators.filter((x) => x !== col)
+                        : [...next[idx].indicators, col];
+                      next[idx] = { ...next[idx], indicators: ind };
+                      setCfaFactors(next);
+                      setCfaResult(null);
+                    }}
+                  />
                 ))}
                 {cfaFactors.length > 1 && (
                   <button
@@ -868,22 +863,21 @@ export function SEMTab({
               />
               <span className="text-neutral-500">←</span>
               {numericCols.map((col) => (
-                <label key={col} className="flex items-center gap-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={o.indicators.includes(col)}
-                    onChange={() => {
-                      const next = [...plsOuter];
-                      const ind = next[idx].indicators.includes(col)
-                        ? next[idx].indicators.filter((x) => x !== col)
-                        : [...next[idx].indicators, col];
-                      next[idx] = { ...next[idx], indicators: ind };
-                      setPlsOuter(next);
-                      setPlsResult(null);
-                    }}
-                  />
-                  {col}
-                </label>
+                <ColumnSelectionButton
+                  key={col}
+                  name={col}
+                  label={itemLabel(col, selectedDataset?.variables)}
+                  selected={o.indicators.includes(col)}
+                  onToggle={(col) => {
+                    const next = [...plsOuter];
+                    const ind = next[idx].indicators.includes(col)
+                      ? next[idx].indicators.filter((x) => x !== col)
+                      : [...next[idx].indicators, col];
+                    next[idx] = { ...next[idx], indicators: ind };
+                    setPlsOuter(next);
+                    setPlsResult(null);
+                  }}
+                />
               ))}
               {plsOuter.length > 1 && (
                 <button

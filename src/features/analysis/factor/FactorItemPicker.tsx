@@ -2,6 +2,7 @@ import { useState } from "react";
 import { t } from "@/i18n";
 import type { VariableMetadata } from "@/types";
 import { itemLabel } from "../reliability/ItemPicker";
+import { ColumnSelectionButton } from "../ColumnSelectionButton";
 
 interface FactorItemPickerProps {
   columns: string[];
@@ -36,13 +37,7 @@ export function FactorItemPicker({ columns, variables, selected, onToggle }: Fac
       </div>
       <div className="flex flex-wrap gap-2">
         {items.map(({ name, label }) => (
-          <label key={name} className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 focus-within:ring-2 focus-within:ring-brand">
-            <input type="checkbox" checked={selected.includes(name)} onChange={() => onToggle(name)} />
-            <span>
-              <span className="font-medium">{name}</span>
-              {label && <span className="ml-1 text-neutral-600 dark:text-neutral-400">— {label}</span>}
-            </span>
-          </label>
+          <ColumnSelectionButton key={name} name={name} label={label} selected={selected.includes(name)} onToggle={onToggle} />
         ))}
         {items.length === 0 && <p className="text-neutral-600 dark:text-neutral-400">{t("factorTab.noItemsMatch")}</p>}
       </div>

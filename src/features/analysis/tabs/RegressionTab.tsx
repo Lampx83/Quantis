@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { ColumnSelectionButton } from "../ColumnSelectionButton";
+import { itemLabel } from "../reliability/ItemPicker";
 import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
@@ -363,18 +365,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== olsYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={olsXSelected.includes(c)}
-                        onChange={() => {
-                          toggleX(c);
-                          setOlsRun(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={olsXSelected.includes(c)}
+                      onToggle={(c) => {
+                        toggleX(c);
+                        setOlsRun(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -764,18 +764,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== logYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={logXSelected.includes(c)}
-                        onChange={() => {
-                          toggleLogX(c);
-                          setLogResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={logXSelected.includes(c)}
+                      onToggle={(c) => {
+                        toggleLogX(c);
+                        setLogResult(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -961,18 +959,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== poissonYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={poissonXSelected.includes(c)}
-                        onChange={() => {
-                          togglePoissonX(c);
-                          setPoissonResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={poissonXSelected.includes(c)}
+                      onToggle={(c) => {
+                        togglePoissonX(c);
+                        setPoissonResult(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -1125,18 +1121,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== ridgeYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={ridgeXSelected.includes(c)}
-                        onChange={() => {
-                          toggleRidgeX(c);
-                          setRidgeResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={ridgeXSelected.includes(c)}
+                      onToggle={(c) => {
+                        toggleRidgeX(c);
+                        setRidgeResult(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>

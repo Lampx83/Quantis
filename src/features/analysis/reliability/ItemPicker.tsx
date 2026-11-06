@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { VariableMetadata } from "@/types";
 import { numCell } from "@/utils/stats";
 import { t } from "@/i18n";
+import { ColumnSelectionButton } from "../ColumnSelectionButton";
 
 /** Một item khả dĩ của thang đo: cột số, kèm nhãn người dùng khai và tiền tố nhóm suy ra. */
 export interface ItemCandidate {
@@ -194,25 +195,9 @@ export function ItemPicker({ rows, columns, variables, selected, onToggle }: Ite
             {group.prefix ?? t("reliabilityTab.ungrouped")}
           </p>
           <div className="flex flex-wrap gap-2 mt-1">
-            {group.items.map((item) => {
-              const isSelected = selected.includes(item.name);
-              return (
-                <button
-                  key={item.name}
-                  type="button"
-                  onClick={() => onToggle(item.name)}
-                  aria-pressed={isSelected}
-                  className={`rounded-md px-3 py-1.5 text-sm text-left ${
-                    isSelected
-                      ? "bg-brand text-white"
-                      : "border border-neutral-300 dark:border-neutral-600"
-                  }`}
-                >
-                  <span className="font-medium">{item.name}</span>
-                  {item.label && <span className="ml-1 opacity-80">— {item.label}</span>}
-                </button>
-              );
-            })}
+            {group.items.map(({ name, label }) => (
+              <ColumnSelectionButton key={name} name={name} label={label} selected={selected.includes(name)} onToggle={onToggle} />
+            ))}
           </div>
         </div>
       ))}
