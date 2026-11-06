@@ -7,6 +7,7 @@ import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { activeFactorRun, finishFactorRun, runFactorAnalysis, startFactorRun, type FactorMethod, type FactorRunInput } from "../factor/runFactorAnalysis";
 import { ScreePlot } from "../factor/ScreePlot";
+import { FactorLoadingsTable } from "../factor/FactorLoadingsTable";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
@@ -263,37 +264,7 @@ export function FactorTab({
                   </tbody>
                 </table>
               </div>
-              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-                <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-                  {paf
-                    ? t(result.rotation === "none" ? "factorTab.pafUnrotatedLoadings" : "factorTab.pafLoadingsHeader")
-                    : t(result.rotation === "none" ? "factorTab.pcaUnrotatedLoadings" : "factorTab.loadingsMatrixHeader")}
-                </p>
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-neutral-200 dark:border-neutral-600">
-                      <th className="text-left p-2">{t("factorTab.variableColumnHeader")}</th>
-                      {Array.from({ length: result.nFactors }, (_, i) => (
-                        <th key={i} className="text-right p-2">
-                          {columnPrefix}{i + 1}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {input.columns.map((name, i) => (
-                      <tr key={name} className="border-b border-neutral-100 dark:border-neutral-700/50">
-                        <td className="p-2 font-medium">{name}</td>
-                        {result.loadings[i]?.slice(0, result.nFactors).map((v, j) => (
-                          <td key={j} className="p-2 text-right">
-                            {v.toFixed(3)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <FactorLoadingsTable method={method} columnNames={input.columns} solution={result} />
             </div>
           )}
         </>
