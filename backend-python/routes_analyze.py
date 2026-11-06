@@ -4,8 +4,9 @@ API routes cho phân tích — nhận rows (string[][]) + params, gọi analysis
 from typing import Any
 import numpy as np
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool, StrictFloat, StrictInt
 
+from factor_analysis import FactorAnalysisError
 from analysis_impl import (
     run_descriptive,
     run_ttest,
@@ -233,7 +234,7 @@ class KMeansBody(BaseModel):
 class EFABody(BaseModel):
     rows: list[list[str]]
     columnNames: list[str]
-    nFactors: int | None = None
+    nFactors: StrictInt | StrictFloat | StrictBool | str | None = None
 
 
 class PairwisePosthocBody(BaseModel):
@@ -845,18 +846,13 @@ async def analyze_kmeans(body: KMeansBody):
 
 
 @router.post("/efa")
-async def analyze_efa(body: EFABody):
+def analyze_efa(body: EFABody):
     try:
-        result = run_efa(body.rows, body.columnNames, body.nFactors)
-        if result is None:
-            raise HTTPException(status_code=400, detail="Cần ít nhất 2 cột và đủ dữ liệu (n >= 10)")
-        return {"result": result}
-    except HTTPException:
-        raise
+        return {"result": run_efa(body.rows, body.columnNames, body.nFactors)}
+    except FactorAnalysisError as error:
+        raise HTTPException(status_code=error.status, detail=error.detail) from error
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/pairwise-posthoc")

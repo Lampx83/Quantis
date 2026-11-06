@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
 
+from factor_analysis import run_pca
+
 MAX_ROWS = int(os.environ.get("QUANTIS_ANALYSIS_MAX_ROWS", "100000"))
 
 
@@ -1300,69 +1302,8 @@ def run_kmeans(rows: list, column_names: list[str], k: int, max_iter: int = 100)
     }
 
 
-# ---------- EFA (PCA extraction + varimax rotation) ----------
-def _varimax(loadings: np.ndarray, tol: float = 1e-10, max_iter: int = 1000) -> np.ndarray:
-    """Varimax thô (không chuẩn hoá Kaiser). Gradient đúng: Λᵀ(Λ³ − Λ·diag(mean(Λ²))) — thuật toán SVD chuẩn.
-    Sau xoay: đổi dấu để tổng loading mỗi cột dương và sắp xếp nhân tố theo tổng bình phương loading giảm dần."""
-    p, k = loadings.shape
-    L = loadings.copy()
-    if k < 2:
-        return L
-    d_old = 0.0
-    for _ in range(max_iter):
-        G = L**3 - L @ np.diag((L**2).sum(axis=0)) / p
-        u, s, vh = np.linalg.svd(loadings.T @ G)
-        R = u @ vh
-        L = loadings @ R
-        d = float(s.sum())
-        if d_old != 0.0 and d < d_old * (1 + tol):
-            break
-        d_old = d
-    signs = np.where(L.sum(axis=0) < 0, -1.0, 1.0)
-    L = L * signs
-    order = np.argsort(-(L**2).sum(axis=0), kind="stable")
-    return L[:, order]
-
-
-def run_efa(rows: list, column_names: list[str], n_factors: int = None):
-    from sklearn.decomposition import PCA
-    from sklearn.preprocessing import StandardScaler
-
-    df = _rows_to_df(rows)
-    cols = [c for c in column_names if c in df.columns]
-    if len(cols) < 2 or len(df) < 10:
-        return None
-    data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
-    if len(data) < 10:
-        return None
-    # PCA trên MA TRẬN TƯƠNG QUAN (như SPSS/R): tổng eigenvalue = số biến. Trước đây StandardScaler (ddof=0) rồi PCA
-    # (ddof=1) làm mọi eigenvalue bị nhân n/(n−1).
-    R = np.corrcoef(data.values.T)
-    evals, evecs = np.linalg.eigh(R)
-    order = np.argsort(evals)[::-1]
-    evals = np.clip(evals[order], 0.0, None)
-    evecs = evecs[:, order]
-    # Quy ước dấu ổn định: thành phần lớn nhất của mỗi vector mang dấu dương
-    for j in range(evecs.shape[1]):
-        if evecs[np.argmax(np.abs(evecs[:, j])), j] < 0:
-            evecs[:, j] = -evecs[:, j]
-    n_components = min(len(cols), len(data) - 1)
-    eigenvalues = evals[:n_components].tolist()
-    loadings = evecs[:, :n_components] * np.sqrt(evals[:n_components])
-    if n_factors is None:
-        n_factors = max(1, sum(1 for e in eigenvalues if e > 1))
-    n_factors = min(int(n_factors), loadings.shape[1])
-    loadings_k = loadings[:, :n_factors]
-    rotated = _varimax(loadings_k)
-    total_var = sum(eigenvalues)
-    variance_explained = [(eigenvalues[i] / total_var * 100) for i in range(n_factors)] if total_var else []
-    return {
-        "eigenvalues": eigenvalues,
-        "varianceExplained": variance_explained,
-        "loadings": rotated.tolist(),
-        "columnNames": cols,
-        "nFactors": n_factors,
-    }
+def run_efa(rows: list, column_names: list[str], n_factors: object = None):
+    return run_pca(rows, column_names, n_factors, MAX_ROWS)
 
 
 # ---------- Post-hoc pairwise (sau ANOVA: Welch t + Bonferroni) ----------
