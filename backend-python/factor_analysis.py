@@ -1,7 +1,13 @@
-"""Correlation-based PCA and shared factor-analysis routines."""
+"""Correlation-based PCA and principal axis factoring."""
 
 import numpy as np
 import pandas as pd
+
+
+VARIMAX_MAX_SWEEPS = 100
+# Same tolerance and iteration cap as the R reference. Check each communality.
+PAF_MAX_ITERATIONS = 1000
+PAF_TOLERANCE = 1e-10
 
 
 class FactorAnalysisError(ValueError):
@@ -76,7 +82,7 @@ def varimax(loadings: np.ndarray, failure_code: str) -> np.ndarray:
     """Raw Varimax using the same pairwise sweeps as browser PCA."""
     rotated = loadings.copy()
     p, k = rotated.shape
-    for _ in range(100):
+    for _ in range(VARIMAX_MAX_SWEEPS):
         converged = True
         for i in range(k - 1):
             for j in range(i + 1, k):
@@ -134,4 +140,54 @@ def run_pca(rows: list, columns: list[str], count: object, max_rows: int) -> dic
         "suggestedCount": suggested,
         "varianceExplained": solution["varianceBefore"],
         **solution,
+    }
+
+
+def smc_reduced_correlation(correlation: np.ndarray) -> np.ndarray:
+    """Replace the diagonal with squared multiple correlations."""
+    try:
+        inverse_diagonal = np.diag(np.linalg.inv(correlation))
+    except np.linalg.LinAlgError as error:
+        raise FactorAnalysisError("pafSingular") from error
+    if not np.isfinite(inverse_diagonal).all() or np.any(inverse_diagonal < 1 - PAF_TOLERANCE):
+        raise FactorAnalysisError("pafSingular")
+    reduced = correlation.copy()
+    np.fill_diagonal(reduced, np.maximum(1 - 1 / inverse_diagonal, 0))
+    return reduced
+
+
+def extract_paf(reduced: np.ndarray, columns: list[str], count: int, root_tolerance: float) -> np.ndarray:
+    working = reduced.copy()
+    for _ in range(PAF_MAX_ITERATIONS):
+        values, vectors = descending_eigen(working, "pafEigenFailed")
+        if values[count - 1] <= root_tolerance:
+            raise FactorAnalysisError("pafNonpositiveRoots", 422)
+        loadings = vectors[:, :count] * np.sqrt(values[:count])
+        communalities = (loadings**2).sum(axis=1)
+        if np.max(np.abs(communalities - np.diag(working))) <= PAF_TOLERANCE:
+            heywood = communalities > 1 + 1e-8
+            if heywood.any():
+                raise FactorAnalysisError("pafHeywood", 422, columns=[name for name, flag in zip(columns, heywood) if flag])
+            return loadings
+        np.fill_diagonal(working, communalities)
+    raise FactorAnalysisError("pafNonconvergence", 422)
+
+
+def run_paf(rows: list, columns: list[str], count: object, max_rows: int) -> dict:
+    data = complete_sample(rows, columns, max_rows)
+    if len(data) < 10:
+        raise FactorAnalysisError("pafMinimumRows")
+    correlation = correlation_matrix(data, columns, "pafEigenFailed")
+    values, _ = descending_eigen(correlation, "pafEigenFailed")
+    rank = numerical_rank(values)
+    if rank < len(columns):
+        raise FactorAnalysisError("pafSingular")
+    n_factors = validate_count(count, rank - 1, "pafInvalidCount")
+    reduced = smc_reduced_correlation(correlation)
+    unrotated = extract_paf(reduced, columns, n_factors, values[0] * 1e-10)
+    return {
+        "method": "paf",
+        "columnNames": columns,
+        "nUsed": len(data),
+        **summarize_solution(unrotated, "pafRotationFailed"),
     }

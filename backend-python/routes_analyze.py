@@ -6,8 +6,9 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, StrictBool, StrictFloat, StrictInt
 
-from factor_analysis import FactorAnalysisError
+from factor_analysis import FactorAnalysisError, run_paf
 from analysis_impl import (
+    MAX_ROWS,
     run_descriptive,
     run_ttest,
     run_chi2,
@@ -231,7 +232,7 @@ class KMeansBody(BaseModel):
     maxIter: int = 100
 
 
-class EFABody(BaseModel):
+class FactorBody(BaseModel):
     rows: list[list[str]]
     columnNames: list[str]
     nFactors: StrictInt | StrictFloat | StrictBool | str | None = None
@@ -846,13 +847,19 @@ async def analyze_kmeans(body: KMeansBody):
 
 
 @router.post("/efa")
-def analyze_efa(body: EFABody):
+def analyze_efa(body: FactorBody):
     try:
         return {"result": run_efa(body.rows, body.columnNames, body.nFactors)}
     except FactorAnalysisError as error:
         raise HTTPException(status_code=error.status, detail=error.detail) from error
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/paf")
+def analyze_paf(body: FactorBody):
+    try:
+        return {"result": run_paf(body.rows, body.columnNames, body.nFactors, MAX_ROWS)}
+    except FactorAnalysisError as error:
+        raise HTTPException(status_code=error.status, detail=error.detail) from error
 
 
 @router.post("/pairwise-posthoc")
