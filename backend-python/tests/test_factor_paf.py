@@ -37,7 +37,7 @@ def test_one_factor_needs_no_rotation():
     assert result["varianceBefore"] == result["varianceAfter"]
 
 
-@pytest.mark.parametrize("count", [None, 0, 1.5, 9])
+@pytest.mark.parametrize("count", [0, 1.5, 9])
 def test_manual_paf_count_must_be_an_integer_smaller_than_item_count(count):
     rows, _ = factor_fixture("survey", "paf")
     response = request_paf(rows, count)
@@ -59,7 +59,10 @@ def test_paf_rejects_nonpositive_extraction_roots():
     rows, _ = factor_fixture("no_signal", "paf")
     response = request_paf(rows, 1)
     assert response.status_code == 422
-    assert response.json()["detail"] == {"code": "pafNonpositiveRoots"}
+    detail = response.json()["detail"]
+    assert detail["code"] == "pafNonpositiveRoots"
+    assert detail["result"]["suggestedCount"] == 0
+    assert detail["result"]["nFactors"] is None
 
 
 def test_paf_rejects_a_converged_heywood_solution():
@@ -70,7 +73,9 @@ def test_paf_rejects_a_converged_heywood_solution():
     rows = [["x", "y", "z"], *sample.astype(str).tolist()]
     response = request_paf(rows, 1)
     assert response.status_code == 422, response.text
-    assert response.json()["detail"] == {"code": "pafHeywood", "columns": ["x"]}
+    detail = response.json()["detail"]
+    assert detail["code"] == "pafHeywood"
+    assert detail["columns"] == ["x"]
 
 
 def test_paf_distinguishes_extraction_and_rotation_nonconvergence(monkeypatch):
@@ -79,9 +84,9 @@ def test_paf_distinguishes_extraction_and_rotation_nonconvergence(monkeypatch):
         patch.setattr(factor_analysis, "PAF_MAX_ITERATIONS", 1, raising=False)
         extraction = request_paf(rows, 2)
     assert extraction.status_code == 422
-    assert extraction.json()["detail"] == {"code": "pafNonconvergence"}
+    assert extraction.json()["detail"]["code"] == "pafNonconvergence"
 
     monkeypatch.setattr(factor_analysis, "VARIMAX_MAX_SWEEPS", 0, raising=False)
     rotation = request_paf(rows, 2)
     assert rotation.status_code == 422
-    assert rotation.json()["detail"] == {"code": "pafRotationFailed"}
+    assert rotation.json()["detail"]["code"] == "pafRotationFailed"

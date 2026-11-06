@@ -856,6 +856,7 @@ def analyze_efa(body: FactorBody):
 
 @router.post("/paf")
 def analyze_paf(body: FactorBody):
+    # A synchronous route keeps extraction and permutations off the event loop.
     try:
         return {"result": run_paf(body.rows, body.columnNames, body.nFactors, MAX_ROWS)}
     except FactorAnalysisError as error:

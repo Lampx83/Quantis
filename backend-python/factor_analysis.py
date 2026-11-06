@@ -1,4 +1,6 @@
-"""Correlation-based PCA and principal axis factoring."""
+"""Correlation-based PCA, principal axis factoring, and parallel analysis."""
+
+from collections.abc import Iterator
 
 import numpy as np
 import pandas as pd
@@ -8,6 +10,11 @@ VARIMAX_MAX_SWEEPS = 100
 # Same tolerance and iteration cap as the R reference. Check each communality.
 PAF_MAX_ITERATIONS = 1000
 PAF_TOLERANCE = 1e-10
+PARALLEL_REPEATS = 500
+PARALLEL_SEED = 4302
+# The local proxy benchmark took about 2 seconds at 3,000 × 30 and 5 at 5,000 × 40.
+PARALLEL_MAX_ROWS = 3000
+PARALLEL_MAX_ITEMS = 30
 
 
 class FactorAnalysisError(ValueError):
@@ -34,7 +41,7 @@ def complete_sample(rows: list, columns: list[str], max_rows: int) -> np.ndarray
     return data[np.isfinite(data).all(axis=1)]
 
 
-def correlation_matrix(data: np.ndarray, columns: list[str], failure_code: str) -> np.ndarray:
+def normalize_sample(data: np.ndarray, columns: list[str], failure_code: str) -> np.ndarray:
     constant = np.all(data == data[0], axis=0)
     if constant.any():
         raise FactorAnalysisError("constantColumns", columns=[name for name, flag in zip(columns, constant) if flag])
@@ -45,7 +52,11 @@ def correlation_matrix(data: np.ndarray, columns: list[str], failure_code: str) 
     norms = np.linalg.norm(centered, axis=0)
     if np.any(norms == 0):
         raise FactorAnalysisError(failure_code, 422)
-    correlation = (centered.T @ centered) / np.outer(norms, norms)
+    return centered / norms
+
+
+def correlation_matrix(normalized: np.ndarray) -> np.ndarray:
+    correlation = normalized.T @ normalized
     np.fill_diagonal(correlation, 1)
     return correlation
 
@@ -122,7 +133,7 @@ def run_pca(rows: list, columns: list[str], count: object, max_rows: int) -> dic
     data = complete_sample(rows, columns, max_rows)
     if len(data) < 10:
         raise FactorAnalysisError("pcaMinimumRows")
-    correlation = correlation_matrix(data, columns, "pcaEigenFailed")
+    correlation = correlation_matrix(normalize_sample(data, columns, "pcaEigenFailed"))
     values, vectors = descending_eigen(correlation, "pcaEigenFailed")
     if values[-1] < -len(columns) * 1e-12:
         raise FactorAnalysisError("pcaEigenFailed", 422)
@@ -156,6 +167,50 @@ def smc_reduced_correlation(correlation: np.ndarray) -> np.ndarray:
     return reduced
 
 
+def reduced_roots(reduced: np.ndarray) -> np.ndarray:
+    try:
+        values = np.linalg.eigvalsh(reduced)[::-1]
+    except np.linalg.LinAlgError as error:
+        raise FactorAnalysisError("pafEigenFailed", 422) from error
+    if not np.isfinite(values).all():
+        raise FactorAnalysisError("pafEigenFailed", 422)
+    return values
+
+
+def permutation_indices(n: int, p: int) -> Iterator[np.ndarray]:
+    rng = np.random.default_rng(PARALLEL_SEED)
+    rows = np.broadcast_to(np.arange(n)[:, None], (n, p))
+    for _ in range(PARALLEL_REPEATS):
+        yield rng.permuted(rows, axis=0)
+
+
+def permutation_cutoff(normalized: np.ndarray) -> np.ndarray:
+    n, p = normalized.shape
+    columns = np.arange(p)
+    roots = []
+    for indices in permutation_indices(n, p):
+        # Permutations preserve each column's mean and norm.
+        shuffled = normalized[indices, columns]
+        roots.append(reduced_roots(smc_reduced_correlation(correlation_matrix(shuffled))))
+    return np.quantile(roots, 0.95, axis=0)
+
+
+def parallel_summary(normalized: np.ndarray, observed: np.ndarray) -> dict:
+    summary = {"screeEigenvalues": observed.tolist(), "parallelCutoff": None, "suggestedCount": None, "parallelIssue": None}
+    n, p = normalized.shape
+    if n > PARALLEL_MAX_ROWS or p > PARALLEL_MAX_ITEMS:
+        summary["parallelIssue"] = {"code": "pafParallelLimit", "maxRows": PARALLEL_MAX_ROWS, "maxItems": PARALLEL_MAX_ITEMS}
+        return summary
+    try:
+        cutoff = permutation_cutoff(normalized)
+    except FactorAnalysisError:
+        summary["parallelIssue"] = {"code": "pafParallelFailed"}
+        return summary
+    summary["parallelCutoff"] = cutoff.tolist()
+    summary["suggestedCount"] = next((i for i, passed in enumerate(observed > cutoff) if not passed), p)
+    return summary
+
+
 def extract_paf(reduced: np.ndarray, columns: list[str], count: int, root_tolerance: float) -> np.ndarray:
     working = reduced.copy()
     for _ in range(PAF_MAX_ITERATIONS):
@@ -177,17 +232,37 @@ def run_paf(rows: list, columns: list[str], count: object, max_rows: int) -> dic
     data = complete_sample(rows, columns, max_rows)
     if len(data) < 10:
         raise FactorAnalysisError("pafMinimumRows")
-    correlation = correlation_matrix(data, columns, "pafEigenFailed")
+    normalized = normalize_sample(data, columns, "pafEigenFailed")
+    correlation = correlation_matrix(normalized)
     values, _ = descending_eigen(correlation, "pafEigenFailed")
     rank = numerical_rank(values)
     if rank < len(columns):
         raise FactorAnalysisError("pafSingular")
-    n_factors = validate_count(count, rank - 1, "pafInvalidCount")
+    n_factors = None if count is None else validate_count(count, rank - 1, "pafInvalidCount")
     reduced = smc_reduced_correlation(correlation)
-    unrotated = extract_paf(reduced, columns, n_factors, values[0] * 1e-10)
-    return {
+    observed = reduced_roots(reduced)
+    root_tolerance = values[0] * 1e-10
+    maximum = min(rank - 1, int(np.count_nonzero(observed > root_tolerance)))
+    result = {
         "method": "paf",
         "columnNames": columns,
         "nUsed": len(data),
-        **summarize_solution(unrotated, "pafRotationFailed"),
+        "nFactors": None,
+        "issue": None,
+        **parallel_summary(normalized, observed),
     }
+    if n_factors is None:
+        n_factors = result["suggestedCount"]
+        if n_factors is None:
+            return result
+        if n_factors == 0:
+            return {**result, "issue": {"code": "pafNoSuggestion"}}
+        if n_factors > maximum:
+            return {**result, "issue": {"code": "pafSuggestionOutOfRange", "max": maximum}}
+
+    try:
+        unrotated = extract_paf(reduced, columns, n_factors, root_tolerance)
+        return {**result, **summarize_solution(unrotated, "pafRotationFailed")}
+    except FactorAnalysisError as error:
+        error.detail["result"] = result
+        raise
