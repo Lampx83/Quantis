@@ -162,7 +162,7 @@ export function RegressionTab({
 
   const activeImputationIndex = selectedDataset?.imputationMeta?.activeImputationIndex ?? null;
 
-  const captureOlsRun = (result: RegressionRunResult) => {
+  const captureOlsRun = (result: RegressionRunResult, fittedRows = rows) => {
     if (!selectedDataset) return;
     setHc3Enabled(false);
     const run: RegressionRun = {
@@ -172,7 +172,7 @@ export function RegressionTab({
       yCol: olsYCol,
       xCols: olsXSelected,
       activeImputationIndex,
-      result,
+      result: { ...result, nInput: result.nInput ?? Math.max(0, fittedRows.length - 1) },
     };
     setOlsRun(run);
     useAnalysisStore.getState().setRegressionRun(run);
@@ -202,7 +202,7 @@ export function RegressionTab({
           reconstructed,
           activeImputationIndex
         );
-        if (res) captureOlsRun(res);
+        if (res) captureOlsRun(res, reconstructed?.[0] ?? rows);
         else setOlsRun(null);
         if (!res && reconstructed) showToast(t("regressionExplainer.miceOlsFailed"));
       } finally {
@@ -707,7 +707,6 @@ export function RegressionTab({
             <RegressionDiagnosticsPanel
               run={olsRun}
               selectedDatasetId={selectedDataset.id}
-              submittedRows={rows.length > 0 ? rows.length - 1 : 0}
               variables={selectedDataset.variables}
               stale={stale}
             />

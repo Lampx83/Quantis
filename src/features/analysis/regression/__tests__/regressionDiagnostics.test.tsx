@@ -195,7 +195,6 @@ function panelProps(overrides: Partial<RegressionDiagnosticsPanelProps> = {}): R
   return {
     run: makeRun(),
     selectedDatasetId: "ds_reg",
-    submittedRows: 412,
     ...overrides,
   };
 }
@@ -594,6 +593,20 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
       const html = renderHydrated();
 
       expect(html).toContain('data-testid="regdiag-stale"');
+    });
+
+    it("uses the original submitted row count when reopening a stale run without backend accounting", () => {
+      useAnalysisStore.setState({
+        regressionRun: storedRun({
+          datasetRowCount: 8,
+          result: { ...baseResult, n: 7, nInput: undefined, nDropped: undefined, diagnostics: undefined },
+        }),
+      });
+
+      const html = renderHydrated();
+
+      expect(html).toContain('data-testid="regdiag-stale"');
+      expect(html).toContain("7 of 8 rows used, 1 excluded (listwise deletion)");
     });
   });
 

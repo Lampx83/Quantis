@@ -171,9 +171,9 @@ function vifOffenders(vif: Record<string, { vif: number | null }>, translate: Tr
     .join(", ");
 }
 
-function sampleAccounting(run: RegressionRun, submittedRows: number) {
+function sampleAccounting(run: RegressionRun) {
   const result = run.result;
-  const nInput = typeof result.nInput === "number" ? result.nInput : submittedRows;
+  const nInput = result.nInput ?? run.datasetRowCount;
   const nUsed = result.n;
   return {
     nInput,
@@ -211,8 +211,6 @@ export function buildDiagnosticsTsv(
 export interface RegressionDiagnosticsPanelProps {
   run: RegressionRun;
   selectedDatasetId: string;
-  /** Rows submitted to the fit, header excluded — the fallback when the payload has no nInput. */
-  submittedRows: number;
   /** Variable metadata for the plot axis titles (R5.2). */
   variables?: Dataset["variables"];
   /** R9.2: the dataset changed since the fit; numbers stay, navigation is disabled. */
@@ -236,7 +234,6 @@ export function requestDiagnosticsRowFocus(datasetId: string, rowIndex: number):
 export function RegressionDiagnosticsPanel({
   run,
   selectedDatasetId,
-  submittedRows,
   variables,
   stale = false,
   initialExpanded = true,
@@ -277,7 +274,7 @@ export function RegressionDiagnosticsPanel({
       count: counts.notApplicable,
     });
   }
-  const accounting = sampleAccounting(run, submittedRows);
+  const accounting = sampleAccounting(run);
 
   const sampleLine = t("regDiag.sampleLine", {
     used: accounting.nUsed,
