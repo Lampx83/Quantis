@@ -8,6 +8,7 @@ import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { activeFactorRun, finishFactorRun, runFactorAnalysis, startFactorRun, type FactorMethod, type FactorRunInput } from "../factor/runFactorAnalysis";
 import { ScreePlot } from "../factor/ScreePlot";
 import { FactorLoadingsTable } from "../factor/FactorLoadingsTable";
+import { FactorVarianceTable } from "../factor/FactorVarianceTable";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
@@ -102,7 +103,6 @@ export function FactorTab({
   const processing = activeRun != null && outcome == null;
   const paf = method === "paf";
   const issue = outcome?.issue;
-  const columnPrefix = paf ? "F" : "PC";
 
   const runAnalysis = async () => {
     const next = startFactorRun(input);
@@ -241,29 +241,8 @@ export function FactorTab({
                 ]}
                 title={t("factorTab.askAiTitle")}
               />
-              <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
-                <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-                  {t(paf ? "factorTab.pafVarianceHeader" : "factorTab.eigenvaluesHeader")}
-                </p>
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-neutral-200 dark:border-neutral-600">
-                      <th className="text-left p-2">{t(paf ? "factorTab.pafColumnHeader" : "factorTab.factorColumnHeader")}</th>
-                      {!paf && <th className="text-right p-2">Eigenvalue</th>}
-                      <th className="text-right p-2">{t("factorTab.varianceExplainedHeader")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.varianceBefore.map((variance, i) => (
-                      <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
-                        <td className="p-2 font-medium">{columnPrefix}{i + 1}</td>
-                        {!paf && <td className="p-2 text-right">{outcome.eigenvalues[i].toFixed(3)}</td>}
-                        <td className="p-2 text-right">{variance.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <FactorVarianceTable method={method} rotation={result.rotation}
+                varianceBefore={result.varianceBefore} varianceAfter={result.varianceAfter} />
               <FactorLoadingsTable method={method} columnNames={input.columns} solution={result} />
             </div>
           )}
