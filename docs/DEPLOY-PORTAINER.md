@@ -7,7 +7,7 @@ Hướng dẫn đưa backend Quantis (Node + Python) lên máy chủ chạy Dock
 Khi code được đẩy lên branch **main** (hoặc chạy thủ công workflow), workflow `.github/workflows/push-dockerhub.yml` build hai image và push lên Docker Hub:
 
 - `DOCKERHUB_USER/quantis-backend:latest` (context `backend/`, mặc định chạy chế độ JSON + proxy, cổng 4001)
-- `DOCKERHUB_USER/quantis-python:latest` (context `backend-python/`; Dockerfile phải `COPY` đủ các module `main.py routes_analyze.py analysis_impl.py panel_impl.py parse_file.py`)
+- `DOCKERHUB_USER/quantis-python:latest` (context `backend-python/`; Dockerfile phải `COPY` đủ các module `main.py routes_analyze.py analysis_impl.py factor_analysis.py panel_impl.py parse_file.py regression_diagnostics.py`)
 
 Hiện hai image công khai là `lampx83/quantis-backend` và `lampx83/quantis-python` (đã được push lại sau mỗi lần merge vào `main`).
 
