@@ -382,7 +382,19 @@ def _stride_indices(n: int) -> list[int]:
     return list(range(0, n, step))
 
 
-def _obs_block(model: Any, used: list[int], influence: Any) -> dict:
+def _external_studentized(model: Any, leverage: np.ndarray) -> np.ndarray:
+    resid = np.asarray(model.resid, dtype=float)
+    if model.df_resid <= 1:
+        return np.full_like(resid, np.nan)
+
+    # Removing observation i reduces SSE by e_i² / (1 − h_i).
+    remaining = 1 - leverage
+    deleted_ssr = model.ssr - resid**2 / remaining
+    variance = remaining * deleted_ssr / (model.df_resid - 1)
+    return resid / np.sqrt(np.where((remaining > 0) & (deleted_ssr > 0), variance, np.nan))
+
+
+def _obs_block(model: Any, used: list[int], influence: Any, studentized: np.ndarray) -> dict:
     n = len(used)
     idx = np.asarray(_stride_indices(n), dtype=int)
     cooks = np.asarray(influence.cooks_distance[0], dtype=float)
@@ -393,7 +405,7 @@ def _obs_block(model: Any, used: list[int], influence: Any) -> dict:
         "fitted": _finite_list(fitted[idx]),
         "resid": _finite_list(resid[idx]),
         "stdResid": _finite_list(np.asarray(influence.resid_studentized_internal, dtype=float)[idx]),
-        "studentized": _finite_list(np.asarray(influence.resid_studentized_external, dtype=float)[idx]),
+        "studentized": _finite_list(studentized[idx]),
         "leverage": _finite_list(np.asarray(influence.hat_matrix_diag, dtype=float)[idx]),
         "cookD": _finite_list(cooks[idx]),
     }
@@ -509,15 +521,13 @@ def build_regression_diagnostics(
     try:
         model, used = _fit_judged_table(rows, y_col, x_cols)
         with warnings.catch_warnings():
-            # df_resid = 1 leaves the externally studentized residual undefined; that is a
-            # non-finite statistic, handled at the boundary, not a warning worth surfacing.
-            # The OLSInfluence properties are lazy, so force them inside this block.
+            # Undefined influence statistics are serialized as null.
             warnings.simplefilter("ignore", RuntimeWarning)
             influence = model.get_influence()
             cooks = np.asarray(influence.cooks_distance[0], dtype=float)
             leverage = np.asarray(influence.hat_matrix_diag, dtype=float)
-            studentized = np.asarray(influence.resid_studentized_external, dtype=float)
-            np.asarray(influence.resid_studentized_internal, dtype=float)
+            studentized = _external_studentized(model, leverage)
+            obs = _obs_block(model, used, influence, studentized)
         n_used = len(used)
         n_predictors = len(x_cols)
         vif = _safe_vif(model, x_cols)
@@ -526,7 +536,7 @@ def build_regression_diagnostics(
             "errorCode": None,
             "errorDetail": None,
             "sample": _sample_block(max(0, len(rows) - 1), n_used, method, m, active_imputation),
-            "obs": _obs_block(model, used, influence),
+            "obs": obs,
             "qq": _qq_block(model.resid),
             "assumptions": _assumptions(
                 model, n_used, n_predictors, x_cols, vif, cooks, leverage, studentized

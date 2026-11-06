@@ -18,7 +18,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from scipy import stats as scipy_stats  # noqa: E402
 from statsmodels.regression.linear_model import OLS  # noqa: E402
-from statsmodels.stats.outliers_influence import variance_inflation_factor  # noqa: E402
+from statsmodels.stats.outliers_influence import OLSInfluence, variance_inflation_factor  # noqa: E402
 from statsmodels.tools import add_constant  # noqa: E402
 
 import routes_analyze  # noqa: E402
@@ -208,6 +208,20 @@ def test_obs_block_matches_statsmodels():
     np.testing.assert_allclose(obs["studentized"], influence.resid_studentized_external, atol=TOL)
     np.testing.assert_allclose(obs["leverage"], influence.hat_matrix_diag, atol=TOL)
     np.testing.assert_allclose(obs["cookD"], influence.cooks_distance[0], atol=TOL)
+
+
+def test_ols_diagnostics_do_not_refit_for_external_studentization(monkeypatch):
+    def reject_leave_one_out(_):
+        raise AssertionError("diagnostics refit OLS for each observation")
+
+    monkeypatch.setattr(OLSInfluence, "_res_looo", property(reject_leave_one_out))
+    result = post_ols(make_rows(n=6000)).json()["result"]
+    diag = result["diagnostics"]
+
+    assert diag["ok"], diag.get("errorDetail")
+    assert diag["sampled"]
+    assert len(diag["obs"]["studentized"]) == 3000
+    assert all(value is not None for value in diag["obs"]["studentized"])
 
 
 def test_obs_row_index_is_ascending_model_sample():
