@@ -145,6 +145,10 @@ describe("computeStandardizedAlpha", () => {
   it("reproduces the golden standardized alpha", () => {
     expect(computeStandardizedAlpha(goldenSample().data)).toBeCloseTo(0.84171747737, 9);
   });
+
+  it.each([4, 0.1])("is undefined when a selected item is constant at %s", (value) => {
+    expect(computeStandardizedAlpha([[1, 1, value], [2, 3, value], [3, 2, value]])).toBeNull();
+  });
 });
 
 describe("computeItemDiagnostics", () => {
@@ -525,6 +529,8 @@ describe("computeReliability", () => {
     const result = computeReliability(rows, ITEMS, REVERSE, REFLECTION);
 
     expect(result.statistics.alpha).toBeNull();
+    expect(result.statistics.alphaStandardized).toBeNull();
+    expect(result.statistics.meanInterItemR).not.toBeNull();
     expect(result.verdict.verdict).toBe("notApplicable");
     expect(result.verdict.reasonKey).toBe("reliabilityVerdict.scale.notApplicable.constantItem");
     expect(result.verdict.reasonParams).toMatchObject({ items: "Q4" });

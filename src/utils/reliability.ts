@@ -36,7 +36,8 @@ export interface ReliabilityItemStatistics {
   alphaIfDeleted: number | null;
 }
 
-const meanOf = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+const meanOf = (a: number[]) =>
+  a.length > 0 && a.every((value) => value === a[0]) ? a[0] : a.reduce((x, y) => x + y, 0) / a.length;
 
 /** Phương sai mẫu (n − 1): α và SD của item đều dùng ước lượng không lệch này, giống SPSS. */
 const varOf = (a: number[]) => {
@@ -256,13 +257,14 @@ export function computeAlpha(data: number[][]): number | null {
  */
 export function computeStandardizedAlpha(data: number[][]): number | null {
   const k = data[0]?.length ?? 0;
-  const n = data.length;
-  if (k < 2 || n < 2) return null;
-  return standardizedAlphaFromMean(computeMeanInterItemR(data), k);
+  return standardizedAlphaFromMean(summarizeInterItemR(data), k);
 }
 
-function standardizedAlphaFromMean(rbar: number | null, k: number): number | null {
-  if (rbar === null) return null;
+function standardizedAlphaFromMean(
+  { mean: rbar, validColumns }: ReturnType<typeof summarizeInterItemR>,
+  k: number,
+): number | null {
+  if (rbar === null || validColumns !== k) return null;
   const denominator = 1 + (k - 1) * rbar;
   if (Math.abs(denominator) < 1e-12) return null;
   return (k * rbar) / denominator;
@@ -341,9 +343,13 @@ export function computeInterItemMatrix(data: number[][]): number[][] {
  * không có cặp nào xác định — ví dụ mọi item đều hằng số.
  */
 export function computeMeanInterItemR(data: number[][]): number | null {
+  return summarizeInterItemR(data).mean;
+}
+
+function summarizeInterItemR(data: number[][]): { mean: number | null; validColumns: number } {
   const n = data.length;
   const k = data[0]?.length ?? 0;
-  if (n < 2 || k < 2) return null;
+  if (n < 2 || k < 2) return { mean: null, validColumns: 0 };
   const totals = new Array<number>(n).fill(0);
   let validColumns = 0;
   for (let j = 0; j < k; j++) {
@@ -354,10 +360,10 @@ export function computeMeanInterItemR(data: number[][]): number | null {
     validColumns++;
     for (let i = 0; i < n; i++) totals[i] += (column[i] - mean) / norm;
   }
-  if (validColumns < 2) return null;
+  if (validColumns < 2) return { mean: null, validColumns };
   // Squared norm of the summed unit columns = k + 2Σr. O(nk), no pairwise matrix.
   const squaredNorm = totals.reduce((sum, total) => sum + total * total, 0);
-  return (squaredNorm - validColumns) / (validColumns * (validColumns - 1));
+  return { mean: (squaredNorm - validColumns) / (validColumns * (validColumns - 1)), validColumns };
 }
 
 // ---------------------------------------------------------------------------
@@ -597,15 +603,15 @@ export function computeReliability(
   const sample = buildScaleSample(rows, items, reverse, reflection);
   const k = items.length;
   const alpha = computeAlpha(sample.data);
-  const meanInterItemR = computeMeanInterItemR(sample.data);
+  const correlations = summarizeInterItemR(sample.data);
   const statistics: ReliabilityStatistics = {
     alpha,
-    alphaStandardized: standardizedAlphaFromMean(meanInterItemR, k),
+    alphaStandardized: standardizedAlphaFromMean(correlations, k),
     ci: computeFeldtCi(alpha, k, sample.data.length),
     k,
     nScaleSample: sample.data.length,
     nInput: sample.nInput,
-    meanInterItemR,
+    meanInterItemR: correlations.mean,
   };
   const itemStatistics = computeItemDiagnostics(rows, items, sample);
   const constantItems = itemStatistics.filter((it) => it.sd === 0).map((it) => it.name);
