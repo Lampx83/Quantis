@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getAnalysisRows, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";
+import { getAnalysisRows, numCell, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";
+import { createFactorSample, factorApiRows } from "@/utils/factorSample";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -11,6 +12,62 @@ export interface FactorTabProps {
   selectedDataset: Dataset;
   analysisBackendAvailable?: boolean;
   showToast?: (msg: string) => void;
+}
+
+function FactorAdequacy({ result }: { result: KMOBartlettResult }) {
+  const { n, nInput, kmo, msa, issue, bartlettChi2, bartlettDf, bartlettP } = result;
+  const rows = [
+    { label: t("factorTab.kmoLabel"), value: kmo?.toFixed(3), term: "kmo", warn: kmo != null && kmo < 0.5 },
+    { label: t("factorTab.bartlettChi2Label"), value: bartlettChi2?.toFixed(3), term: "bartlett" },
+    { label: t("factorTab.bartlettDfLabel"), value: bartlettChi2 != null ? bartlettDf : null },
+    { label: t("factorTab.bartlettSigLabel"), value: bartlettP != null && bartlettP < 0.001 ? "< 0.001" : bartlettP?.toFixed(3), warn: bartlettP != null && bartlettP >= 0.05 },
+  ] as const;
+  const warningClass = "font-semibold text-amber-700 dark:text-amber-400";
+  return (
+    <section className="mb-4 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm" data-testid="kmo-bartlett">
+      <h3 className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
+        {t("factorTab.kmoTitle")}
+        <span className="ml-2 font-normal text-neutral-500">{t("factorTab.casesLabel")}: {n}/{nInput}</span>
+      </h3>
+      {issue ? (
+        <p className="p-2 text-amber-700 dark:text-amber-400">
+          {t(`factorTab.${issue.code}`, "columns" in issue ? { items: issue.columns.join(", ") } : undefined)}
+        </p>
+      ) : (
+        <>
+          <table className="w-full">
+            <tbody>
+              {rows.map(({ label, value, ...detail }) => (
+                <tr key={label} className="border-b border-neutral-100 dark:border-neutral-700/50">
+                  <th scope="row" className="p-2 text-left font-normal">{label}{"term" in detail && <InfoHint term={detail.term} />}</th>
+                  <td className={`p-2 text-right ${"warn" in detail && detail.warn ? warningClass : ""}`}>{value ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="p-2">
+            <p className="font-medium mb-1">{t("factorTab.msaHeader")}</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {result.columnNames.map((name, i) => {
+                const value = msa[i];
+                return (
+                  <span key={name} className={value != null && value < 0.5 ? warningClass : ""}>
+                    {name}: {value?.toFixed(3) ?? "—"}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+          <div className="p-2 space-y-1 text-amber-700 dark:text-amber-400">
+            {msa.includes(null) && <p>{t("factorTab.uncorrelatedItems")}</p>}
+            {kmo != null && kmo < 0.5 && <p>{t("factorTab.kmoUnacceptable")}</p>}
+            {msa.some((value) => value != null && value < 0.5) && <p>{t("factorTab.msaLowFlag")}</p>}
+            {bartlettP != null && bartlettP >= 0.05 && <p>{t("factorTab.bartlettNotSignificant")}</p>}
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 export function FactorTab({
@@ -24,8 +81,8 @@ export function FactorTab({
     rows.length >= 2
       ? cols.filter((c) => {
           const ci = rows[0].indexOf(c);
-          const vals = rows.slice(1).map((r) => r[ci]);
-          return vals.every((v) => v === "" || !Number.isNaN(Number(v)));
+          return ci >= 0 && (selectedDataset.variables?.[c]?.type === "numeric" ||
+            rows.slice(1).every((r) => !String(r[ci] ?? "").trim() || !Number.isNaN(numCell(r[ci]))));
         })
       : [];
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
@@ -33,29 +90,46 @@ export function FactorTab({
   const [result, setResult] = useState<EFAResult | null>(null);
   const [efaLoading, setEfaLoading] = useState(false);
   const [kmoResult, setKmoResult] = useState<KMOBartlettResult | null>(null);
+  const [pcaError, setPcaError] = useState<string | null>(null);
 
-  const toggleCol = (c: string) =>
+  const clearResult = () => {
+    setResult(null);
+    setKmoResult(null);
+    setPcaError(null);
+  };
+
+  const toggleCol = (c: string) => {
     setSelectedCols((prev) =>
       prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
     );
+    clearResult();
+  };
 
   const runEFA = async () => {
     if (selectedCols.length < 2) return;
     const k = typeof nFactors === "number" && nFactors >= 1 ? nFactors : undefined;
-    // KMO + Bartlett luôn tính ở frontend (độc lập backend Python) trên đúng các biến được chọn.
-    setKmoResult(computeKMOBartlett(rows, selectedCols));
+    clearResult();
+    const sample = createFactorSample(rows, selectedCols);
+    setKmoResult(computeKMOBartlett(sample));
+    if (sample.issue && sample.issue.code !== "insufficientRows") return;
+    if (sample.nUsed < 10) {
+      setPcaError(t("factorTab.pcaMinimumRows"));
+      return;
+    }
     if (analysisBackendAvailable) {
       setEfaLoading(true);
       try {
-        const res = await quantisApi.analyzeEFA(rows, selectedCols, k);
-        setResult(res ?? null);
+        const res = await quantisApi.analyzeEFA(factorApiRows(sample), sample.columnNames, k);
+        setResult(res);
+        if (!res) setPcaError(t("factorTab.pcaFailed"));
       } finally {
         setEfaLoading(false);
       }
       return;
     }
-    const res = computeEFA(rows, selectedCols, k);
-    setResult(res ?? null);
+    const res = computeEFA(sample, k);
+    setResult(res);
+    if (!res) setPcaError(t("factorTab.pcaFailed"));
   };
 
   return (
@@ -107,8 +181,7 @@ export function FactorTab({
                 onChange={(e) => {
                   const v = e.target.value;
                   setNFactors(v === "" ? "" : Math.max(1, parseInt(v, 10) || 1));
-                  setResult(null);
-                  setKmoResult(null);
+                  clearResult();
                 }}
                 className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
                 placeholder="Auto"
@@ -117,7 +190,7 @@ export function FactorTab({
             <button
               type="button"
               onClick={runEFA}
-              disabled={efaLoading}
+              disabled={efaLoading || selectedCols.length < 2}
               className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               {efaLoading ? (
@@ -130,6 +203,8 @@ export function FactorTab({
               )}
             </button>
           </div>
+          {kmoResult && <FactorAdequacy result={kmoResult} />}
+          {pcaError && <p role="alert" className="my-3 text-amber-700 dark:text-amber-400">{pcaError}</p>}
           {result && (
             <div className="space-y-4">
               <AIAssistPanel
@@ -164,60 +239,6 @@ export function FactorTab({
                 ]}
                 title={t("factorTab.askAiTitle")}
               />
-              {kmoResult && (
-                <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm" data-testid="kmo-bartlett">
-                  <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-                    {t("factorTab.kmoTitle")}
-                    <span className="ml-2 font-normal text-neutral-500">({t("factorTab.casesLabel")}: {kmoResult.n})</span>
-                  </p>
-                  {kmoResult.singular || kmoResult.kmo == null ? (
-                    <p className="p-3 text-amber-700 dark:text-amber-400">{t("factorTab.kmoSingular")}</p>
-                  ) : (
-                    <>
-                      <table className="w-full">
-                        <tbody>
-                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                            <td className="p-2">{t("factorTab.kmoLabel")}<InfoHint term="kmo" /></td>
-                            <td className={`p-2 text-right font-semibold ${kmoResult.kmo >= 0.5 ? "" : "text-red-600 dark:text-red-400"}`}>{kmoResult.kmo.toFixed(3)}</td>
-                          </tr>
-                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                            <td className="p-2">{t("factorTab.bartlettChi2Label")}<InfoHint term="bartlett" /></td>
-                            <td className="p-2 text-right">{kmoResult.bartlettChi2 != null ? kmoResult.bartlettChi2.toFixed(3) : "—"}</td>
-                          </tr>
-                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                            <td className="p-2">{t("factorTab.bartlettDfLabel")}</td>
-                            <td className="p-2 text-right">{kmoResult.bartlettDf}</td>
-                          </tr>
-                          <tr className="border-b border-neutral-100 dark:border-neutral-700/50">
-                            <td className="p-2">{t("factorTab.bartlettSigLabel")}</td>
-                            <td className={`p-2 text-right font-semibold ${kmoResult.bartlettP != null && kmoResult.bartlettP < 0.05 ? "" : "text-red-600 dark:text-red-400"}`}>
-                              {kmoResult.bartlettP == null ? "—" : kmoResult.bartlettP < 0.001 ? "< 0.001" : kmoResult.bartlettP.toFixed(3)}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                      <div className="p-2 border-t border-neutral-100 dark:border-neutral-700/50">
-                        <p className="font-medium mb-1">{t("factorTab.msaHeader")}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1">
-                          {kmoResult.columnNames.map((name, i) => {
-                            const m = kmoResult.msa[i];
-                            return (
-                              <span key={name} className={m != null && m < 0.5 ? "text-red-600 dark:text-red-400 font-semibold" : ""}>
-                                {name}: {m != null ? m.toFixed(3) : "—"}{m != null && m < 0.5 ? ` (${t("factorTab.msaLowFlag")})` : ""}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <div className="p-2 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
-                        <p>{kmoResult.kmo >= 0.9 ? t("factorTab.kmoMarvelous") : kmoResult.kmo >= 0.8 ? t("factorTab.kmoMeritorious") : kmoResult.kmo >= 0.7 ? t("factorTab.kmoMiddling") : kmoResult.kmo >= 0.6 ? t("factorTab.kmoMediocre") : kmoResult.kmo >= 0.5 ? t("factorTab.kmoMiserable") : t("factorTab.kmoUnacceptable")}</p>
-                        {kmoResult.bartlettP != null && <p>{kmoResult.bartlettP < 0.05 ? t("factorTab.bartlettSignificant") : t("factorTab.bartlettNotSignificant")}</p>}
-                        <p>{t("factorTab.kmoCriteria")}</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
                 <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
                   {t("factorTab.eigenvaluesHeader")}
