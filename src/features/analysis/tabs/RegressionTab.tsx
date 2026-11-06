@@ -110,6 +110,7 @@ export function RegressionTab({
     return hydratedRun;
   });
   const olsResult = olsRun?.result ?? null;
+  const [olsRunSequence, setOlsRunSequence] = useState(0);
   const [hc3Enabled, setHc3Enabled] = useState(initialHc3Enabled ?? false);
   const [logYCol, setLogYCol] = useState("");
   const [logXSelected, setLogXSelected] = useState<string[]>([]);
@@ -174,6 +175,7 @@ export function RegressionTab({
       activeImputationIndex,
       result: { ...result, nInput: result.nInput ?? Math.max(0, fittedRows.length - 1) },
     };
+    setOlsRunSequence((sequence) => sequence + 1);
     setOlsRun(run);
     useAnalysisStore.getState().setRegressionRun(run);
   };
@@ -705,6 +707,7 @@ export function RegressionTab({
           )}
           {olsRun && selectedDataset && (
             <RegressionDiagnosticsPanel
+              key={olsRunSequence}
               run={olsRun}
               selectedDatasetId={selectedDataset.id}
               variables={selectedDataset.variables}
