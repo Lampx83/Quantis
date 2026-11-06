@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFactorSample, factorApiRows } from "../factorSample";
-import { computeEFA, computeKMOBartlett, getAnalysisRows } from "../stats";
+import { computeFactorPca } from "../factorPca";
+import { computeKMOBartlett, getAnalysisRows } from "../stats";
 import type { VariableMetadata } from "../../types";
 
 describe("factor analysis sample", () => {
@@ -31,7 +32,7 @@ describe("factor analysis sample", () => {
     const constant = createFactorSample(rows, ["b", "a"]);
     expect(constant).toMatchObject({ nUsed: 3, issue: { code: "constantColumns", columns: ["b"] } });
     expect(computeKMOBartlett(constant)).toMatchObject({ n: 3, kmo: null, bartlettP: null });
-    expect(computeEFA(constant)).toBeNull();
+    expect(computeFactorPca(constant).solution).toBeNull();
   });
 
   it("keeps Bartlett's result when KMO and MSA are undefined for uncorrelated items", () => {

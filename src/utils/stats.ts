@@ -2475,29 +2475,6 @@ export function computeVIF(rows: string[][], xCols: string[]): Record<string, nu
   return vif;
 }
 
-// --- EFA (PCA-based factor extraction) ---
-export interface EFAResult {
-  eigenvalues: number[];
-  varianceExplained: number[];
-  loadings: number[][];
-  columnNames: string[];
-  nFactors: number;
-}
-
-/** Exploratory factor analysis (PCA extraction, varimax rotation). */
-export function computeEFA(sample: FactorSample, nFactors?: number): EFAResult | null {
-  const { correlation, nUsed, columnNames } = sample;
-  const p = columnNames.length;
-  if (!correlation || nUsed < 10 || p < 2) return null;
-  const { eigenvalues, eigenvectors } = eigenDecomposition(correlation);
-  const K = nFactors ?? Math.min(p, eigenvalues.filter((e) => e > 1).length || 1);
-  const loadings = eigenvectors.map((ev) => ev.map((v, j) => v * Math.sqrt(Math.max(0, eigenvalues[j]))));
-  const rotated = varimax(loadings.slice(0, p).map((row) => row.slice(0, K)));
-  const totalVar = eigenvalues.reduce((a, b) => a + b, 0);
-  const varianceExplained = eigenvalues.slice(0, K).map((e) => (e / totalVar) * 100);
-  return { eigenvalues: eigenvalues.slice(0, p), varianceExplained, loadings: rotated, columnNames, nFactors: K };
-}
-
 /** Xác suất đuôi phải của χ² (survival function), chính xác cả khi p rất nhỏ. */
 function chiSquareSurvival(x: number, df: number): number {
   if (df <= 0) return NaN;
@@ -2599,85 +2576,6 @@ export function computeKMOBartlett(sample: FactorSample): KMOBartlettResult {
     determinant: Math.exp(logDet),
     issue: null,
   };
-}
-
-function eigenDecomposition(matrix: number[][]): { eigenvalues: number[]; eigenvectors: number[][] } {
-  const n = matrix.length;
-  let A = matrix.map((r) => r.map((x) => x));
-  const V: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => i === j ? 1 : 0));
-  for (let iter = 0; iter < 100; iter++) {
-    let maxOff = 0;
-    let p = 0, q = 1;
-    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
-      if (Math.abs(A[i][j]) > maxOff) { maxOff = Math.abs(A[i][j]); p = i; q = j; }
-    }
-    if (maxOff < 1e-12) break;
-    const theta = 0.5 * Math.atan2(2 * A[p][q], A[q][q] - A[p][p]);
-    const c = Math.cos(theta); const s = Math.sin(theta);
-    for (let i = 0; i < n; i++) {
-      const api = A[p][i]; const aqi = A[q][i];
-      A[p][i] = c * api - s * aqi; A[q][i] = s * api + c * aqi;
-    }
-    for (let i = 0; i < n; i++) {
-      const aip = A[i][p]; const aiq = A[i][q];
-      A[i][p] = c * aip - s * aiq; A[i][q] = s * aip + c * aiq;
-    }
-    for (let i = 0; i < n; i++) {
-      const vip = V[i][p]; const viq = V[i][q];
-      V[i][p] = c * vip - s * viq; V[i][q] = s * vip + c * viq;
-    }
-  }
-  const diag = A.map((r, i) => ({ val: r[i], idx: i }));
-  diag.sort((a, b) => b.val - a.val);
-  const eigenvalues = diag.map((d) => d.val);
-  const perm = diag.map((d) => d.idx);
-  const eigenvectors = V.map((row) => perm.map((p) => row[p]));
-  return { eigenvalues, eigenvectors };
-}
-
-function varimax(loadings: number[][]): number[][] {
-  const nRows = loadings.length;
-  const nCols = loadings[0]?.length ?? 0;
-  if (nCols < 2) return loadings;
-  const L = loadings.map((r) => r.map((x) => x));
-  // Xoay varimax thô (Kaiser 1958), từng cặp cột: tan 4θ = (D − 2AB/p) / (C − (A² − B²)/p),
-  // với u = x² − y², v = 2xy, A = Σu, B = Σv, C = Σ(u² − v²), D = 2Σuv.
-  for (let iter = 0; iter < 100; iter++) {
-    let maxAngle = 0;
-    for (let j = 0; j < nCols - 1; j++) {
-      for (let k = j + 1; k < nCols; k++) {
-        let A = 0, B = 0, C = 0, D = 0;
-        for (let i = 0; i < nRows; i++) {
-          const x = L[i][j]; const y = L[i][k];
-          const u = x * x - y * y; const v = 2 * x * y;
-          A += u; B += v; C += u * u - v * v; D += 2 * u * v;
-        }
-        const num = D - (2 * A * B) / nRows;
-        const den = C - (A * A - B * B) / nRows;
-        const theta = 0.25 * Math.atan2(num, den);
-        if (Math.abs(theta) < 1e-10) continue;
-        maxAngle = Math.max(maxAngle, Math.abs(theta));
-        const cos = Math.cos(theta); const sin = Math.sin(theta);
-        for (let i = 0; i < nRows; i++) {
-          const x = L[i][j]; const y = L[i][k];
-          L[i][j] = x * cos + y * sin; L[i][k] = -x * sin + y * cos;
-        }
-      }
-    }
-    if (maxAngle < 1e-8) break;
-  }
-  // Quy ước trình bày: dấu cột sao cho tổng loading dương; sắp xếp nhân tố theo tổng bình phương loading giảm dần (như SPSS).
-  for (let j = 0; j < nCols; j++) {
-    let sum = 0;
-    for (let i = 0; i < nRows; i++) sum += L[i][j];
-    if (sum < 0) for (let i = 0; i < nRows; i++) L[i][j] = -L[i][j];
-  }
-  const order = Array.from({ length: nCols }, (_, j) => j).sort((a, b) => {
-    let sa = 0, sb = 0;
-    for (let i = 0; i < nRows; i++) { sa += L[i][a] * L[i][a]; sb += L[i][b] * L[i][b]; }
-    return sb - sa;
-  });
-  return L.map((row) => order.map((j) => row[j]));
 }
 
 // --- Mediation (Baron-Kenny; nhiều M = trung gian song song) ---

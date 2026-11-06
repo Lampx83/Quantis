@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getAnalysisRows, numCell, computeEFA, computeKMOBartlett, type EFAResult, type KMOBartlettResult } from "@/utils/stats";
+import { getAnalysisRows, numCell, computeKMOBartlett, type KMOBartlettResult } from "@/utils/stats";
 import { createFactorSample, factorApiRows } from "@/utils/factorSample";
+import { computeFactorPca } from "@/utils/factorPca";
 import * as quantisApi from "@/api";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
@@ -13,6 +14,8 @@ export interface FactorTabProps {
   analysisBackendAvailable?: boolean;
   showToast?: (msg: string) => void;
 }
+
+type DisplayedPca = NonNullable<Awaited<ReturnType<typeof quantisApi.analyzeEFA>>> & { usedFallback?: boolean };
 
 function FactorAdequacy({ result }: { result: KMOBartlettResult }) {
   const { n, nInput, kmo, msa, issue, bartlettChi2, bartlettDf, bartlettP } = result;
@@ -87,7 +90,7 @@ export function FactorTab({
       : [];
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
   const [nFactors, setNFactors] = useState<number | "">("");
-  const [result, setResult] = useState<EFAResult | null>(null);
+  const [result, setResult] = useState<DisplayedPca | null>(null);
   const [efaLoading, setEfaLoading] = useState(false);
   const [kmoResult, setKmoResult] = useState<KMOBartlettResult | null>(null);
   const [pcaError, setPcaError] = useState<string | null>(null);
@@ -107,7 +110,7 @@ export function FactorTab({
 
   const runEFA = async () => {
     if (selectedCols.length < 2) return;
-    const k = typeof nFactors === "number" && nFactors >= 1 ? nFactors : undefined;
+    const k = nFactors === "" ? undefined : nFactors;
     clearResult();
     const sample = createFactorSample(rows, selectedCols);
     setKmoResult(computeKMOBartlett(sample));
@@ -117,6 +120,10 @@ export function FactorTab({
       return;
     }
     if (analysisBackendAvailable) {
+      if (k != null && (!Number.isInteger(k) || k < 1 || k > sample.columnNames.length)) {
+        setPcaError(t("factorTab.pcaInvalidCount", { max: sample.columnNames.length }));
+        return;
+      }
       setEfaLoading(true);
       try {
         const res = await quantisApi.analyzeEFA(factorApiRows(sample), sample.columnNames, k);
@@ -127,9 +134,16 @@ export function FactorTab({
       }
       return;
     }
-    const res = computeEFA(sample, k);
-    setResult(res);
-    if (!res) setPcaError(t("factorTab.pcaFailed"));
+    const { issue, solution, eigenvalues, suggestedCount, columnNames } = computeFactorPca(sample, k);
+    if (issue) {
+      setPcaError(t(`factorTab.${issue.code}`, "max" in issue ? { max: issue.max } : undefined));
+    }
+    if (solution) {
+      setResult({
+        eigenvalues, columnNames, loadings: solution.loadings, nFactors: solution.nFactors,
+        varianceExplained: solution.varianceBefore, usedFallback: k == null && suggestedCount === 0,
+      });
+    }
   };
 
   return (
@@ -172,15 +186,16 @@ export function FactorTab({
           </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label className="block text-sm font-medium mb-1">{t("factorTab.numFactorsLabel")}</label>
+              <label htmlFor="pca-component-count" className="block text-sm font-medium mb-1">{t("factorTab.numFactorsLabel")}</label>
               <input
+                id="pca-component-count"
                 type="number"
                 min={1}
                 max={selectedCols.length}
                 value={nFactors}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setNFactors(v === "" ? "" : Math.max(1, parseInt(v, 10) || 1));
+                  setNFactors(v === "" ? "" : Number(v));
                   clearResult();
                 }}
                 className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
@@ -207,6 +222,8 @@ export function FactorTab({
           {pcaError && <p role="alert" className="my-3 text-amber-700 dark:text-amber-400">{pcaError}</p>}
           {result && (
             <div className="space-y-4">
+              {result.usedFallback && <p className="text-sm">{t("factorTab.pcaFallback")}</p>}
+              {result.nFactors === 1 && <p className="text-sm">{t("factorTab.pcaNoRotation")}</p>}
               <AIAssistPanel
                 context={`EFA: ${result.nFactors} nhân tố. Eigenvalues: ${result.eigenvalues
                   .slice(0, result.nFactors)
@@ -254,7 +271,7 @@ export function FactorTab({
                   <tbody>
                     {result.eigenvalues.slice(0, result.nFactors).map((e, i) => (
                       <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
-                        <td className="p-2 font-medium">F{i + 1}</td>
+                        <td className="p-2 font-medium">PC{i + 1}</td>
                         <td className="p-2 text-right">{e.toFixed(3)}</td>
                         <td className="p-2 text-right">
                           {result.varianceExplained[i]?.toFixed(1) ?? "—"}%
@@ -266,7 +283,7 @@ export function FactorTab({
               </div>
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
                 <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-                  {t("factorTab.loadingsMatrixHeader")}
+                  {t(result.nFactors === 1 ? "factorTab.pcaUnrotatedLoadings" : "factorTab.loadingsMatrixHeader")}
                 </p>
                 <table className="w-full">
                   <thead>
@@ -274,7 +291,7 @@ export function FactorTab({
                       <th className="text-left p-2">{t("factorTab.variableColumnHeader")}</th>
                       {Array.from({ length: result.nFactors }, (_, i) => (
                         <th key={i} className="text-right p-2">
-                          F{i + 1}
+                          PC{i + 1}
                         </th>
                       ))}
                     </tr>
