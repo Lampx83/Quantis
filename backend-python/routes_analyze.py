@@ -564,22 +564,13 @@ def _diagnostics_table(body: "OLSBody", imputed_data: list | None):
     return imputed_data[active - 1], active, "mice-active", None
 
 
-def _n_input_for_result(body: "OLSBody", imputed_data: list | None, judged_rows: list | None) -> int:
-    """Rows submitted for the model whose coefficients are returned (header excluded)."""
-    if judged_rows is not None:
-        return max(0, len(judged_rows) - 1)
-    if body.rows:
-        return max(0, len(body.rows) - 1)
-    if imputed_data:
-        return max(0, len(imputed_data[0]) - 1)
-    return 0
-
-
 def _result_with_diagnostics(result: dict, body: "OLSBody", imputed_data: list | None) -> dict:
     """Merge the additive sample keys and the diagnostics payload into an OLS result (R1.1–R1.2)."""
     judged_rows, active_imputation, sample_method, error_code = _diagnostics_table(body, imputed_data)
 
-    n_input = _n_input_for_result(body, imputed_data, judged_rows)
+    # Pooled fits share the same used count. Report submitted rows for the first fitted table.
+    fitted_rows = imputed_data[0] if imputed_data else body.rows
+    n_input = max(0, len(fitted_rows) - 1)
     n_used = int(result.get("n", 0))
     result["nInput"] = int(n_input)
     result["nDropped"] = int(max(0, n_input - n_used))

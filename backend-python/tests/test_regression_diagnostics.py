@@ -547,6 +547,19 @@ def test_active_index_zero_judges_the_posted_rows():
     assert result["nDropped"] == result["nInput"] - result["n"]
 
 
+@pytest.mark.parametrize("imputation_count", [1, 2])
+def test_coefficients_count_rows_from_fitted_imputations(imputation_count):
+    original = make_rows(n=8)
+    tables = [make_rows(n=20, seed=i, missing_every=10) for i in range(imputation_count)]
+    response = post_ols(original, imputedDatasets=tables, activeImputationIndex=0)
+
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert (result["nInput"], result["n"], result["nDropped"]) == (20, 18, 2)
+    judged = result["diagnostics"]["sample"]
+    assert (judged["nInput"], judged["nUsed"], judged["nDropped"]) == (8, 8, 0)
+
+
 def test_active_index_selects_the_imputed_table():
     original, tables = make_imputation_bundle()
     baseline = post_ols([], imputedDatasets=tables, activeImputationIndex=1).json()["result"]
