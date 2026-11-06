@@ -70,6 +70,18 @@ describe("factor analysis routing and response validation", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:4001/api/quantis/analyze/efa");
   });
 
+  it("keeps PCA working past the service row limit and reports the limit for PAF", async () => {
+    const limited = () => Response.json({ detail: { code: "rowLimit", max: 100000 } }, { status: 400 });
+    fetchMock.mockResolvedValueOnce(limited());
+    expect(await runFactorAnalysis(startFactorRun({ ...input, method: "pca" }).request))
+      .toMatchObject({ issue: null, solution: { nFactors: 1 } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockResolvedValueOnce(limited());
+    expect(await runFactorAnalysis(startFactorRun(input).request))
+      .toMatchObject({ issue: { code: "rowLimit", max: 100000 }, solution: null });
+  });
+
   it("requests automatic PAF when the count is blank", async () => {
     fetchMock.mockResolvedValueOnce(reply());
     const run = startFactorRun({ ...input, count: undefined });

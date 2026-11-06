@@ -137,7 +137,12 @@ export async function runFactorAnalysis({ input, sample }: FactorRequest): Promi
   const ok = response.status >= 200 && response.status < 300;
   const detail = asRecord(body?.detail);
   const result = asRecord(ok ? body?.result : detail?.result);
-  if (!ok && (method !== "paf" || !result)) return { ...emptyOutcome, issue: readAnalysisError(detail) };
+  if (!ok && (method !== "paf" || !result)) {
+    const error = readAnalysisError(detail);
+    // The service caps submitted rows; the browser engine has no cap, so PCA keeps working.
+    if (method === "pca" && error.code === "rowLimit") return computeFactorPca(sample, count);
+    return { ...emptyOutcome, issue: error };
+  }
   const { columnNames, nUsed } = sample;
   const p = columnNames.length;
   if (result?.method !== method || result.nUsed !== nUsed || !Array.isArray(result.columnNames)
