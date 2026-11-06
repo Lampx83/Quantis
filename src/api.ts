@@ -945,22 +945,22 @@ export async function analyzeKMeans(
   }
 }
 
-/** Phân tích: EFA (trích nhân tố PCA + varimax). */
-export async function analyzeEFA(
+export async function requestFactorAnalysis(
+  method: "pca" | "paf",
   rows: string[][],
   columnNames: string[],
   nFactors?: number
-): Promise<{ eigenvalues: number[]; varianceExplained: number[]; loadings: number[][]; columnNames: string[]; nFactors: number } | null> {
+): Promise<{ status: number; body: unknown } | null> {
+  const base = getANALYZE_BASE();
+  if (!base) return null;
   try {
-    const res = await fetch(`${getANALYZE_BASE()}/efa`, {
+    const res = await fetch(`${base}/${method === "pca" ? "efa" : "paf"}`, {
       method: "POST",
       credentials: "include",
       headers: getHeaders(),
-      body: JSON.stringify({ rows, columnNames, nFactors: nFactors ?? undefined }),
+      body: JSON.stringify({ rows, columnNames, nFactors }),
     });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json?.result ?? null;
+    return { status: res.status, body: await res.json().catch(() => null) };
   } catch {
     return null;
   }

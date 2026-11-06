@@ -1,6 +1,6 @@
 import type { FactorSample, FactorSampleIssue } from "./factorSample";
 
-export interface PcaSolution {
+export interface FactorSolution {
   nFactors: number;
   rotation: "none" | "varimax";
   unrotatedLoadings: number[][];
@@ -20,7 +20,7 @@ export interface PcaRun {
   nUsed: number;
   eigenvalues: number[];
   suggestedCount: number | null;
-  solution: PcaSolution | null;
+  solution: FactorSolution | null;
   issue: PcaIssue | null;
 }
 

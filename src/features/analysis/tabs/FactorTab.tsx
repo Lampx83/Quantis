@@ -1,21 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Dataset } from "@/types";
-import { getAnalysisRows, numCell, computeKMOBartlett, type KMOBartlettResult } from "@/utils/stats";
-import { createFactorSample, factorApiRows } from "@/utils/factorSample";
-import { computeFactorPca } from "@/utils/factorPca";
-import * as quantisApi from "@/api";
+import { getAnalysisRows, numCell, type KMOBartlettResult } from "@/utils/stats";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
+import { activeFactorRun, finishFactorRun, runFactorAnalysis, startFactorRun, type FactorMethod, type FactorRunInput } from "../factor/runFactorAnalysis";
 
 export interface FactorTabProps {
   selectedDataset: Dataset;
   analysisBackendAvailable?: boolean;
   showToast?: (msg: string) => void;
 }
-
-type DisplayedPca = NonNullable<Awaited<ReturnType<typeof quantisApi.analyzeEFA>>> & { usedFallback?: boolean };
 
 function FactorAdequacy({ result }: { result: KMOBartlettResult }) {
   const { n, nInput, kmo, msa, issue, bartlettChi2, bartlettDf, bartlettP } = result;
@@ -79,71 +75,38 @@ export function FactorTab({
   showToast: _showToast,
 }: FactorTabProps) {
   const rows = getAnalysisRows(selectedDataset);
-  const cols = selectedDataset.columnNames ?? [];
-  const numericCols =
-    rows.length >= 2
-      ? cols.filter((c) => {
-          const ci = rows[0].indexOf(c);
-          return ci >= 0 && (selectedDataset.variables?.[c]?.type === "numeric" ||
-            rows.slice(1).every((r) => !String(r[ci] ?? "").trim() || !Number.isNaN(numCell(r[ci]))));
-        })
-      : [];
+  const { id: datasetId, columnNames, variables } = selectedDataset;
+  const numericCols = useMemo(() => {
+    if (rows.length < 2) return [];
+    const records = rows.slice(1);
+    return (columnNames ?? []).filter((c) => {
+      const ci = rows[0].indexOf(c);
+      return ci >= 0 && (variables?.[c]?.type === "numeric" ||
+        records.every((r) => !String(r[ci] ?? "").trim() || !Number.isNaN(numCell(r[ci]))));
+    });
+  }, [rows, columnNames, variables]);
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
-  const [nFactors, setNFactors] = useState<number | "">("");
-  const [result, setResult] = useState<DisplayedPca | null>(null);
-  const [efaLoading, setEfaLoading] = useState(false);
-  const [kmoResult, setKmoResult] = useState<KMOBartlettResult | null>(null);
-  const [pcaError, setPcaError] = useState<string | null>(null);
+  const [method, setMethod] = useState<FactorMethod>("pca");
+  const [count, setCount] = useState<number>();
+  const [run, setRun] = useState<ReturnType<typeof startFactorRun> | null>(null);
+  const input = useMemo<FactorRunInput>(() => ({
+    datasetId, rows, columns: selectedCols.filter((name) => numericCols.includes(name)), method, count,
+    backendAvailable: analysisBackendAvailable,
+  }), [datasetId, rows, selectedCols, numericCols, method, count, analysisBackendAvailable]);
+  const activeRun = activeFactorRun(run, input);
+  const kmoResult = activeRun?.adequacy;
+  const outcome = activeRun?.outcome;
+  const result = outcome?.solution;
+  const processing = activeRun != null && outcome == null;
+  const paf = method === "paf";
+  const issue = outcome?.issue;
+  const columnPrefix = paf ? "F" : "PC";
 
-  const clearResult = () => {
-    setResult(null);
-    setKmoResult(null);
-    setPcaError(null);
-  };
-
-  const toggleCol = (c: string) => {
-    setSelectedCols((prev) =>
-      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
-    );
-    clearResult();
-  };
-
-  const runEFA = async () => {
-    if (selectedCols.length < 2) return;
-    const k = nFactors === "" ? undefined : nFactors;
-    clearResult();
-    const sample = createFactorSample(rows, selectedCols);
-    setKmoResult(computeKMOBartlett(sample));
-    if (sample.issue && sample.issue.code !== "insufficientRows") return;
-    if (sample.nUsed < 10) {
-      setPcaError(t("factorTab.pcaMinimumRows"));
-      return;
-    }
-    if (analysisBackendAvailable) {
-      if (k != null && (!Number.isInteger(k) || k < 1 || k > sample.columnNames.length)) {
-        setPcaError(t("factorTab.pcaInvalidCount", { max: sample.columnNames.length }));
-        return;
-      }
-      setEfaLoading(true);
-      try {
-        const res = await quantisApi.analyzeEFA(factorApiRows(sample), sample.columnNames, k);
-        setResult(res);
-        if (!res) setPcaError(t("factorTab.pcaFailed"));
-      } finally {
-        setEfaLoading(false);
-      }
-      return;
-    }
-    const { issue, solution, eigenvalues, suggestedCount, columnNames } = computeFactorPca(sample, k);
-    if (issue) {
-      setPcaError(t(`factorTab.${issue.code}`, "max" in issue ? { max: issue.max } : undefined));
-    }
-    if (solution) {
-      setResult({
-        eigenvalues, columnNames, loadings: solution.loadings, nFactors: solution.nFactors,
-        varianceExplained: solution.varianceBefore, usedFallback: k == null && suggestedCount === 0,
-      });
-    }
+  const runAnalysis = async () => {
+    const next = startFactorRun(input);
+    setRun(next);
+    const outcome = await runFactorAnalysis(next.request);
+    setRun((current) => finishFactorRun(current, next.request, outcome));
   };
 
   return (
@@ -158,11 +121,11 @@ export function FactorTab({
               ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}.`
               : undefined
           }
-          context="Phân tích nhân tố khám phá (EFA): trích xuất nhân tố (PCA), xoay varimax. Chọn ít nhất 2 biến (item), có thể chỉ định số nhân tố hoặc để eigenvalue > 1."
+          context={t(paf ? "factorTab.pafContext" : "factorTab.pcaContext")}
           quickPrompts={[
             {
               label: t("factorTab.aiPromptSuggestFactorsLabel"),
-              systemHint: `Bạn là chuyên gia EFA. Gợi ý cách chọn số nhân tố (eigenvalue > 1, scree plot), ý nghĩa loadings và đặt tên nhân tố. ${aiAnswerLangHint()}`,
+              systemHint: `${t(paf ? "factorTab.pafContext" : "factorTab.pcaContext")} ${aiAnswerLangHint()}`,
             },
           ]}
           title={t("factorTab.askAiTitle")}
@@ -176,8 +139,8 @@ export function FactorTab({
               <label key={c} className="flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={selectedCols.includes(c)}
-                  onChange={() => toggleCol(c)}
+                  checked={input.columns.includes(c)}
+                  onChange={() => setSelectedCols(input.columns.includes(c) ? input.columns.filter((name) => name !== c) : [...input.columns, c])}
                   className="rounded"
                 />
                 <span className="text-sm">{c}</span>
@@ -186,29 +149,36 @@ export function FactorTab({
           </div>
           <div className="flex flex-wrap gap-4 items-end mb-4">
             <div>
-              <label htmlFor="pca-component-count" className="block text-sm font-medium mb-1">{t("factorTab.numFactorsLabel")}</label>
+              <label htmlFor="factor-method" className="block text-sm font-medium mb-1">{t("factorTab.methodLabel")}</label>
+              <select
+                id="factor-method"
+                value={method}
+                onChange={(e) => setMethod(e.target.value === "paf" ? "paf" : "pca")}
+                className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
+              >
+                <option value="pca">{t("factorTab.pcaMethod")}</option>
+                <option value="paf">{t("factorTab.pafMethod")}</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="factor-count" className="block text-sm font-medium mb-1">{t(paf ? "factorTab.pafCountLabel" : "factorTab.numFactorsLabel")}</label>
               <input
-                id="pca-component-count"
+                id="factor-count"
                 type="number"
                 min={1}
-                max={selectedCols.length}
-                value={nFactors}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setNFactors(v === "" ? "" : Number(v));
-                  clearResult();
-                }}
+                max={Math.max(1, input.columns.length - (paf ? 1 : 0))}
+                value={count ?? ""}
+                onChange={(e) => setCount(e.target.value === "" ? undefined : e.target.valueAsNumber)}
                 className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 w-28"
-                placeholder="Auto"
               />
             </div>
             <button
               type="button"
-              onClick={runEFA}
-              disabled={efaLoading || selectedCols.length < 2}
+              onClick={runAnalysis}
+              disabled={processing || input.columns.length < 2}
               className="rounded-md bg-brand text-white px-4 py-2 hover:opacity-90 disabled:opacity-50 inline-flex items-center gap-2"
             >
-              {efaLoading ? (
+              {processing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden />{" "}
                   {t("factorTab.processingLabel")}
@@ -219,23 +189,22 @@ export function FactorTab({
             </button>
           </div>
           {kmoResult && <FactorAdequacy result={kmoResult} />}
-          {pcaError && <p role="alert" className="my-3 text-amber-700 dark:text-amber-400">{pcaError}</p>}
-          {result && (
+          {paf && !analysisBackendAvailable && (
+            <p className="my-3 text-amber-700 dark:text-amber-400">{t("factorTab.pafBackendRequired")}</p>
+          )}
+          {issue && issue.code !== kmoResult?.issue?.code && issue.code !== "pafBackendRequired" && (
+            <p role="alert" className="my-3 text-amber-700 dark:text-amber-400">
+              {t(`factorTab.${issue.code}`, { max: issue.max ?? "—", items: issue.columns?.join(", ") ?? "—" })}
+            </p>
+          )}
+          {result && outcome && (
             <div className="space-y-4">
-              {result.usedFallback && <p className="text-sm">{t("factorTab.pcaFallback")}</p>}
-              {result.nFactors === 1 && <p className="text-sm">{t("factorTab.pcaNoRotation")}</p>}
+              {!paf && count == null && outcome.suggestedCount === 0 && <p className="text-sm">{t("factorTab.pcaFallback")}</p>}
+              {result.rotation === "none" && <p className="text-sm">{t(paf ? "factorTab.pafNoRotation" : "factorTab.pcaNoRotation")}</p>}
               <AIAssistPanel
-                context={`EFA: ${result.nFactors} nhân tố. Eigenvalues: ${result.eigenvalues
-                  .slice(0, result.nFactors)
-                  .map((e) => e.toFixed(2))
-                  .join(", ")}. Phương sai giải thích: ${
-                  result.varianceExplained
-                    ?.slice(0, result.nFactors)
-                    .map((v) => v?.toFixed(1) + "%")
-                    .join(", ") ?? "—"
-                }. Loadings (varimax) cho các biến: ${result.columnNames
-                  .slice(0, 6)
-                  .join(", ")}${result.columnNames.length > 6 ? "..." : ""}.${
+                context={`${method.toUpperCase()}, ${result.nFactors}, ${result.rotation}. Variance before rotation: ${
+                  result.varianceBefore.map((v) => v.toFixed(1) + "%").join(", ")
+                }. Loadings: ${input.columns.map((name, i) => `${name} ${result.loadings[i].map((v) => v.toFixed(3)).join(", ")}`).join(" | ")}.${
                   kmoResult && kmoResult.kmo != null
                     ? ` KMO = ${kmoResult.kmo.toFixed(3)}; Bartlett χ²(${kmoResult.bartlettDf}) = ${
                         kmoResult.bartlettChi2?.toFixed(2) ?? "—"
@@ -251,31 +220,29 @@ export function FactorTab({
                 quickPrompts={[
                   {
                     label: t("factorTab.explainResultsLabel"),
-                    systemHint: `Bạn là chuyên gia phân tích nhân tố (EFA). Giải thích: số nhân tố trích, eigenvalue (>1), % phương sai giải thích, loadings (trọng số từng biến trên từng nhân tố). Gợi ý cách đặt tên nhân tố dựa trên biến có loading cao. ${aiAnswerLangHint()}`,
+                    systemHint: `${t(paf ? "factorTab.pafContext" : "factorTab.pcaContext")} ${aiAnswerLangHint()}`,
                   },
                 ]}
                 title={t("factorTab.askAiTitle")}
               />
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
                 <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-                  {t("factorTab.eigenvaluesHeader")}
+                  {t(paf ? "factorTab.pafVarianceHeader" : "factorTab.eigenvaluesHeader")}
                 </p>
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-600">
-                      <th className="text-left p-2">{t("factorTab.factorColumnHeader")}</th>
-                      <th className="text-right p-2">Eigenvalue</th>
+                      <th className="text-left p-2">{t(paf ? "factorTab.pafColumnHeader" : "factorTab.factorColumnHeader")}</th>
+                      {!paf && <th className="text-right p-2">Eigenvalue</th>}
                       <th className="text-right p-2">{t("factorTab.varianceExplainedHeader")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {result.eigenvalues.slice(0, result.nFactors).map((e, i) => (
+                    {result.varianceBefore.map((variance, i) => (
                       <tr key={i} className="border-b border-neutral-100 dark:border-neutral-700/50">
-                        <td className="p-2 font-medium">PC{i + 1}</td>
-                        <td className="p-2 text-right">{e.toFixed(3)}</td>
-                        <td className="p-2 text-right">
-                          {result.varianceExplained[i]?.toFixed(1) ?? "—"}%
-                        </td>
+                        <td className="p-2 font-medium">{columnPrefix}{i + 1}</td>
+                        {!paf && <td className="p-2 text-right">{outcome.eigenvalues[i].toFixed(3)}</td>}
+                        <td className="p-2 text-right">{variance.toFixed(1)}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -283,7 +250,9 @@ export function FactorTab({
               </div>
               <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm">
                 <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-                  {t(result.nFactors === 1 ? "factorTab.pcaUnrotatedLoadings" : "factorTab.loadingsMatrixHeader")}
+                  {paf
+                    ? t(result.rotation === "none" ? "factorTab.pafUnrotatedLoadings" : "factorTab.pafLoadingsHeader")
+                    : t(result.rotation === "none" ? "factorTab.pcaUnrotatedLoadings" : "factorTab.loadingsMatrixHeader")}
                 </p>
                 <table className="w-full">
                   <thead>
@@ -291,13 +260,13 @@ export function FactorTab({
                       <th className="text-left p-2">{t("factorTab.variableColumnHeader")}</th>
                       {Array.from({ length: result.nFactors }, (_, i) => (
                         <th key={i} className="text-right p-2">
-                          PC{i + 1}
+                          {columnPrefix}{i + 1}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {result.columnNames.map((name, i) => (
+                    {input.columns.map((name, i) => (
                       <tr key={name} className="border-b border-neutral-100 dark:border-neutral-700/50">
                         <td className="p-2 font-medium">{name}</td>
                         {result.loadings[i]?.slice(0, result.nFactors).map((v, j) => (
