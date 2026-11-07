@@ -63,7 +63,7 @@ export function ScreePlot({ method, eigenvalues, parallelCutoff, suggestedCount,
               <tr key={rank} className="border-b border-neutral-100 dark:border-neutral-700/50">
                 <th scope="row" className="p-2 text-left font-normal">{rank}</th>
                 <td className="p-2 text-right">{observed.toFixed(3)}</td>
-                {reference != null && <td className="p-2 text-right">{reference.toFixed(3)}</td>}
+                {hasReference && <td className="p-2 text-right">{reference != null ? reference.toFixed(3) : "—"}</td>}
               </tr>
             ))}
           </tbody>

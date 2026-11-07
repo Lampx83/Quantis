@@ -36,4 +36,11 @@ describe("Scree plot and its accessible values", () => {
     expect(html).toContain("-0.200");
     expect(html).not.toContain("Phân vị 95");
   });
+
+  it("renders a placeholder cell when a reference cutoff is missing", () => {
+    const html = renderToStaticMarkup(
+      <ScreePlot method="paf" eigenvalues={[1.2, 0.8]} parallelCutoff={[0.9]} suggestedCount={1} usedCount={1} />
+    );
+    expect(html).toContain("—</td>");
+  });
 });
