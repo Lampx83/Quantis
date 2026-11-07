@@ -305,12 +305,13 @@ describe("Task 6: Frontend Regression Tab - Hồi Quy Tuyến Tính Gộp Rubin"
       },
     });
 
+    const showToastSpy = vi.fn();
     let rendered: any = null;
     function Harness() {
       rendered = RegressionTab({
         selectedDataset: mockBundleDataset,
         analysisBackendAvailable: true,
-        showToast: vi.fn(),
+        showToast: showToastSpy,
         initialOlsYCol: "Y",
         initialOlsXSelected: ["X1", "X2"],
         initialOlsResult: mockRubinOlsResult,
@@ -335,13 +336,81 @@ describe("Task 6: Frontend Regression Tab - Hồi Quy Tuyến Tính Gộp Rubin"
     );
     expect(copyBtn).toBeDefined();
 
-    copyBtn.props.onClick();
+    await copyBtn.props.onClick();
+    await Promise.resolve();
 
     expect(clipboardText).toContain("df (Rubin)");
     expect(clipboardText).toContain("FMI (%)");
     expect(clipboardText).toContain("2.4\t12.5%");
     expect(clipboardText).toContain("2.1\t28.4%");
     expect(clipboardText).toContain("2.8\t5.6%");
+    expect(showToastSpy).toHaveBeenCalledWith(t("regDiag.copied"));
+  });
+
+  it("shows success toast on copy resolve and failure toast on rejection or missing clipboard for OLS table", async () => {
+    const originalClipboard = navigator.clipboard;
+    try {
+      const showToastSpy = vi.fn();
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockResolvedValue(undefined),
+        },
+      });
+
+      let rendered: any = null;
+      function Harness() {
+        rendered = RegressionTab({
+          selectedDataset: mockBundleDataset,
+          analysisBackendAvailable: true,
+          showToast: showToastSpy,
+          initialOlsYCol: "Y",
+          initialOlsXSelected: ["X1", "X2"],
+          initialOlsResult: mockRubinOlsResult,
+        });
+        return rendered;
+      }
+      renderToStaticMarkup(<Harness />);
+
+      const buttons: any[] = [];
+      function collect(node: any) {
+        if (!node) return;
+        if (node.type === "button") buttons.push(node);
+        if (node.props?.children) {
+          const ch = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+          ch.forEach(collect);
+        }
+      }
+      collect(rendered);
+
+      const copyBtn = buttons.find((b) =>
+        String(b.props?.children).includes(t("regressionExplainer.copyTableButton"))
+      );
+      expect(copyBtn).toBeDefined();
+
+      // Case 1: success
+      await copyBtn.props.onClick();
+      await Promise.resolve();
+      expect(showToastSpy).toHaveBeenCalledWith(t("regDiag.copied"));
+
+      // Case 2: rejecting writeText
+      showToastSpy.mockClear();
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new Error("Clipboard permission denied")),
+        },
+      });
+      await copyBtn.props.onClick();
+      await Promise.resolve();
+      expect(showToastSpy).toHaveBeenCalledWith(t("regDiag.copyFailed"));
+
+      // Case 3: missing clipboard
+      showToastSpy.mockClear();
+      Object.assign(navigator, { clipboard: undefined });
+      await copyBtn.props.onClick();
+      expect(showToastSpy).toHaveBeenCalledWith(t("regDiag.copyFailed"));
+    } finally {
+      Object.assign(navigator, { clipboard: originalClipboard });
+    }
   });
 
   it("6. displays active set note in other models (Logistic, Poisson, Ridge) when dataset is a MICE Bundle", () => {

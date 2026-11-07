@@ -241,6 +241,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     setLocale("en");
     vi.restoreAllMocks();
     useAnalysisStore.setState({ regressionRun: null });
+    useUIStore.setState({ toast: null });
   });
 
   it("leads with verdicts and keeps thresholds under the statistics", () => {
@@ -443,6 +444,50 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
 
     expect(clipboardText).toBe(buildDiagnosticsTsv(makeDiagnostics(), t));
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it("shows success toast on copy resolve and failure toast on rejection or missing clipboard", async () => {
+    const originalClipboard = navigator.clipboard;
+    try {
+      useUIStore.setState({ toast: null });
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockResolvedValue(undefined),
+        },
+      });
+
+      const tree = capturePanel(panelProps());
+      const copyButton = findByTestId(tree, "regdiag-copy");
+      expect(copyButton).not.toBeNull();
+
+      await copyButton.props.onClick();
+      await Promise.resolve();
+
+      expect(useUIStore.getState().toast).toBe(t("regDiag.copied"));
+
+      // Rejecting writeText
+      useUIStore.setState({ toast: null });
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new Error("Clipboard error")),
+        },
+      });
+
+      await copyButton.props.onClick();
+      await Promise.resolve();
+
+      expect(useUIStore.getState().toast).toBe(t("regDiag.copyFailed"));
+
+      // Missing clipboard API
+      useUIStore.setState({ toast: null });
+      Object.assign(navigator, { clipboard: undefined });
+
+      await copyButton.props.onClick();
+
+      expect(useUIStore.getState().toast).toBe(t("regDiag.copyFailed"));
+    } finally {
+      Object.assign(navigator, { clipboard: originalClipboard });
+    }
   });
 
   it("renders no section when the run belongs to another dataset", () => {

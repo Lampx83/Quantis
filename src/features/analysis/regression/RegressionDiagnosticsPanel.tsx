@@ -238,6 +238,7 @@ export function RegressionDiagnosticsPanel({
   stale = false,
   initialExpanded = true,
 }: RegressionDiagnosticsPanelProps) {
+  const { showToast } = useUIStore();
   const [expanded, setExpanded] = useState(initialExpanded);
   if (run.datasetId !== selectedDatasetId) return null;
 
@@ -406,7 +407,14 @@ export function RegressionDiagnosticsPanel({
                   type="button"
                   data-testid="regdiag-copy"
                   onClick={() => {
-                    void navigator.clipboard?.writeText(buildDiagnosticsTsv(ok, t));
+                    if (typeof navigator === "undefined" || !navigator.clipboard) {
+                      showToast(t("regDiag.copyFailed"));
+                      return;
+                    }
+                    void navigator.clipboard
+                      .writeText(buildDiagnosticsTsv(ok, t))
+                      .then(() => showToast(t("regDiag.copied")))
+                      .catch(() => showToast(t("regDiag.copyFailed")));
                   }}
                   className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                 >

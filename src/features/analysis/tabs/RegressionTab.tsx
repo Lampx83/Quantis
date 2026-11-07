@@ -483,7 +483,14 @@ export function RegressionTab({
                         4
                       )}, n = ${olsResult.n}`,
                     ].join("\n");
-                    void navigator.clipboard.writeText(tsv);
+                    if (typeof navigator === "undefined" || !navigator.clipboard) {
+                      showToast?.(t("regDiag.copyFailed"));
+                      return;
+                    }
+                    void navigator.clipboard
+                      .writeText(tsv)
+                      .then(() => showToast?.(t("regDiag.copied")))
+                      .catch(() => showToast?.(t("regDiag.copyFailed")));
                   }}
                   className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                 >
