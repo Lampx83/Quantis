@@ -24,6 +24,7 @@ from statsmodels.tools import add_constant  # noqa: E402
 import routes_analyze  # noqa: E402
 from analysis_impl import run_ols  # noqa: E402
 from main import app  # noqa: E402
+import regression_diagnostics  # noqa: E402
 from regression_diagnostics import (  # noqa: E402
     collinearity_verdict,
     influence_verdict,
@@ -270,6 +271,19 @@ def test_robust_hc3_matches_statsmodels():
         assert abs(diag["robustHC3"]["pValue"][key] - float(robust.pvalues[pos])) < TOL
         assert abs(diag["robustHC3"]["ciLower"][key] - ci[pos, 0]) < TOL
         assert abs(diag["robustHC3"]["ciUpper"][key] - ci[pos, 1]) < TOL
+
+
+def test_robust_hc3_handles_missing_predictor_gracefully():
+    rows = make_rows()
+    model, _ = fitted_reference(rows)
+    block = regression_diagnostics._hc3_block(model, ["X1", "MissingCol"])
+    assert block["se"]["MissingCol"] is None
+    assert block["tStat"]["MissingCol"] is None
+    assert block["pValue"]["MissingCol"] is None
+    assert block["ciLower"]["MissingCol"] is None
+    assert block["ciUpper"]["MissingCol"] is None
+    assert block["se"]["(Intercept)"] is not None
+    assert block["se"]["X1"] is not None
 
 
 def test_qq_matches_blom_positions():

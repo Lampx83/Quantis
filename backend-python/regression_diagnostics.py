@@ -465,7 +465,14 @@ def _hc3_block(model: Any, x_cols: list[str]) -> dict:
 
     block: dict[str, dict] = {"se": {}, "tStat": {}, "pValue": {}, "ciLower": {}, "ciUpper": {}}
     for display, source in [("(Intercept)", "const")] + [(c, c) for c in x_cols]:
-        position = source_names.index(source) if source in source_names else 0
+        if source not in source_names:
+            block["se"][display] = None
+            block["tStat"][display] = None
+            block["pValue"][display] = None
+            block["ciLower"][display] = None
+            block["ciUpper"][display] = None
+            continue
+        position = source_names.index(source)
         block["se"][display] = _finite(at(robust.bse, position))
         block["tStat"][display] = _finite(at(robust.tvalues, position))
         block["pValue"][display] = _finite(at(robust.pvalues, position))
