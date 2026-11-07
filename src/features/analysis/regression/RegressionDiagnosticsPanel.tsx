@@ -67,7 +67,7 @@ function formatNumber(value: number | null | undefined, translate: Translate): s
 
 function formatP(value: number | null | undefined, translate: Translate): string {
   if (value == null || !Number.isFinite(value)) return translate("regDiag.stat.unavailable");
-  return value < 0.001 ? "< .001" : value.toFixed(4);
+  return value < 0.001 ? "< .001" : `= ${value.toFixed(4)}`;
 }
 
 function statLines(
@@ -418,11 +418,10 @@ export function RegressionDiagnosticsPanel({
                 <table data-testid="regdiag-table" className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                      <th className="text-left p-2">{t("regDiag.table.assumption")}</th>
-                      <th className="text-left p-2">{t("regDiag.table.statistic")}</th>
-                      <th className="text-left p-2">{t("regDiag.table.threshold")}</th>
-                      <th className="text-left p-2">{t("regDiag.table.verdict")}</th>
-                      <th className="text-left p-2">{t("regDiag.table.action")}</th>
+                      <th scope="col" className="text-left p-2">{t("regDiag.table.verdict")}</th>
+                      <th scope="col" className="text-left p-2">{t("regDiag.table.assumption")}</th>
+                      <th scope="col" className="text-left p-2">{t("regDiag.table.statistic")}</th>
+                      <th scope="col" className="text-left p-2">{t("regDiag.table.action")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -475,20 +474,29 @@ function AssumptionTableRow({
       : row.id === "influence"
       ? "cooksDistance"
       : "vif";
+  const name = t(`regDiag.row.${row.id}`);
+  const explanation = row.applicable
+    ? t(`regDiag.explain.${row.id}.${row.verdict}`)
+    : t(`regDiag.reason.${row.notApplicableReason}`);
+  const vif = row.applicable && row.id === "collinearity" ? vifOffenders(diagnostics.vif, t) : "";
+  const hintText = [explanation, t(`glossary.${nameHint}.text`), vif].filter(Boolean).join("\n\n");
 
   return (
     <tr data-testid={`regdiag-row-${row.id}`} className="border-b border-neutral-100 dark:border-neutral-700/50 align-top">
       <td className="p-2">
-        <div className="font-medium">
-          {t(`regDiag.row.${row.id}`)}
-          <InfoHint term={nameHint} />
-        </div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          {row.applicable
-            ? t(`regDiag.explain.${row.id}.${row.verdict}`)
-            : t(`regDiag.reason.${row.notApplicableReason}`)}
-        </p>
+        <span
+          data-testid={`regdiag-verdict-${row.id}`}
+          className={`inline-block text-xs px-2 py-0.5 rounded border ${
+            row.applicable ? VERDICT_CLASS[row.verdict] : NOT_APPLICABLE_CLASS
+          }`}
+        >
+          {verdictLabel(row, t)}
+        </span>
       </td>
+      <th scope="row" className="p-2 text-left font-medium">
+        {name}
+        <InfoHint term={nameHint} title={name} text={hintText} hoverText={explanation} />
+      </th>
 
       {row.applicable ? (
         <td data-testid={`regdiag-stat-${row.id}`} className="p-2 text-xs">
@@ -511,25 +519,15 @@ function AssumptionTableRow({
           ) : (
             statLines(row, t).map((line) => <div key={line}>{line}</div>)
           )}
+          <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+            {t("regDiag.table.thresholdNote", {
+              rule: thresholdText(row.id, diagnostics.thresholds, t),
+            })}
+          </p>
         </td>
       ) : (
         <td className="p-2" />
       )}
-
-      <td className="p-2 text-xs">
-        {row.applicable ? thresholdText(row.id, diagnostics.thresholds, t) : null}
-      </td>
-
-      <td className="p-2">
-        <span
-          data-testid={`regdiag-verdict-${row.id}`}
-          className={`inline-block text-xs px-2 py-0.5 rounded border ${
-            row.applicable ? VERDICT_CLASS[row.verdict] : NOT_APPLICABLE_CLASS
-          }`}
-        >
-          {verdictLabel(row, t)}
-        </span>
-      </td>
 
       <td className="p-2 text-xs">
         {row.applicable && (
@@ -540,10 +538,8 @@ function AssumptionTableRow({
                 stale={stale}
                 onJumpToRow={onJumpToRow}
               />
-            ) : row.id === "collinearity" ? (
-              t("regDiag.action.collinearity", {
-                list: vifOffenders(diagnostics.vif, t),
-              })
+            ) : row.verdict === "pass" ? (
+              <span className="text-neutral-500 dark:text-neutral-400">{t("regDiag.action.none")}</span>
             ) : (
               t(`regDiag.action.${row.id}`)
             )}
@@ -568,9 +564,18 @@ export function InfluenceAction({
     return <span className="text-neutral-500 dark:text-neutral-400">{t("regDiag.action.influenceNone")}</span>;
   }
 
-  const rest = diagnostics.influential.slice(1, 3);
+  const flagged = diagnostics.influential.slice(0, 3).map((entry) =>
+    t("regDiag.influential.row", {
+      row: entry.rowIndex + 1,
+      cookD: formatNumber(entry.cookD, t),
+      studentized: formatNumber(entry.studentized, t),
+    })
+  );
+  const remaining = diagnostics.influential.length - flagged.length;
+  if (remaining > 0) flagged.push(t("regDiag.influential.more", { count: remaining }));
+
   return (
-    <div className="space-y-1">
+    <div className="flex items-center">
       <button
         type="button"
         data-testid="regdiag-jump-influence"
@@ -581,27 +586,7 @@ export function InfluenceAction({
       >
         {t("regDiag.action.influence")}
       </button>
-      <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-        {t("regDiag.influential.row", {
-          row: top.rowIndex + 1,
-          cookD: formatNumber(top.cookD, t),
-          studentized: formatNumber(top.studentized, t),
-        })}
-      </p>
-      {rest.map((entry) => (
-        <p key={entry.rowIndex} className="text-[11px] text-neutral-500 dark:text-neutral-400">
-          {t("regDiag.influential.row", {
-            row: entry.rowIndex + 1,
-            cookD: formatNumber(entry.cookD, t),
-            studentized: formatNumber(entry.studentized, t),
-          })}
-        </p>
-      ))}
-      {diagnostics.influential.length > 3 && (
-        <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-          {t("regDiag.influential.more", { count: diagnostics.influential.length - 3 })}
-        </p>
-      )}
+      <InfoHint title={t("regDiag.influential.heading")} text={flagged.join("\n")} />
     </div>
   );
 }

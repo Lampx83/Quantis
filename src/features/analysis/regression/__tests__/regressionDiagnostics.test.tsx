@@ -243,8 +243,15 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     useAnalysisStore.setState({ regressionRun: null });
   });
 
-  it("renders the four rows in fixed order with verdict, statistic, threshold, explanation and one action", () => {
+  it("leads with verdicts and keeps thresholds under the statistics", () => {
     const html = renderPanel(panelProps());
+    const header = html.match(/<thead>(.*?)<\/thead>/)?.[1] ?? "";
+    expect(Array.from(header.matchAll(/<th\b[^>]*>(.*?)<\/th>/g), ([, label]) => label)).toEqual([
+      "Verdict",
+      "Assumption",
+      "Statistic",
+      "Next step",
+    ]);
 
     const order = ["linearity", "normality", "influence", "collinearity"].map((id) =>
       html.indexOf(`data-testid="regdiag-verdict-${id}"`)
@@ -265,16 +272,33 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
     expect(html).toContain("largest |t| = 3.9000");
     expect(html).toContain("Largest VIF = 2.3100");
 
-    // Thresholds come from the constants, not from literals in the UI.
-    expect(html).toContain("BP p ≥ 0.05 and RESET p ≥ 0.05");
-    expect(html).toContain("VIF &lt; 5; violation from 10");
+    const linearity = html.match(/<tr\b[^>]*data-testid="regdiag-row-linearity"[^>]*>([\s\S]*?)<\/tr>/)?.[1] ?? "";
+    expect(linearity).toMatch(/^<td[^>]*><span data-testid="regdiag-verdict-linearity"/);
+    expect(linearity.match(/data-testid="regdiag-stat-linearity"[^>]*>([\s\S]*?)<\/td>/)?.[1]).toContain(
+      "Threshold: BP p ≥ 0.05 and RESET p ≥ 0.05"
+    );
+    expect(html).toContain("Threshold: VIF &lt; 5; violation from 10");
 
-    // One explanation sentence and exactly one action per applicable row.
-    expect(html).toContain("One of the two tests shows a mild sign of non-linearity");
-    expect(html).toContain("Reconsider the functional form");
+    expect(linearity).toContain('title="One of the two tests shows a mild sign of non-linearity or changing variance."');
+    expect(linearity).toContain(">Check model form and variance<");
+    expect(html).toContain(">Open flagged row<");
+    expect(html).toContain(">No action needed<");
     for (const id of ["linearity", "normality", "influence", "collinearity"]) {
       expect(html.split(`data-testid="regdiag-action-${id}"`).length - 1).toBe(1);
     }
+  });
+
+  it("formats a small p-value as an inequality", () => {
+    const diagnostics = makeDiagnostics();
+    const linearity = diagnostics.assumptions.find((row) => row.id === "linearity");
+    if (!linearity?.applicable || linearity.id !== "linearity") {
+      throw new Error("Expected applicable linearity check");
+    }
+    linearity.stats.bp.p = 0.0001;
+
+    const html = renderPanel(panelProps({ run: makeRun({}, diagnostics) }));
+
+    expect(html).toContain("Breusch-Pagan χ²(3) = 12.4100, p &lt; .001");
   });
 
   it("renders the same section in Vietnamese", () => {
@@ -303,7 +327,7 @@ describe("Phase 4.1 Task 7: regression diagnostics panel", () => {
 
     expect(html).toContain('data-testid="regdiag-verdict-collinearity"');
     expect(html).toContain("Not applicable");
-    expect(html).toContain("The model has a single predictor, so multicollinearity cannot exist.");
+    expect(html).toContain('title="The model has a single predictor, so multicollinearity cannot exist."');
     expect(html).not.toContain('data-testid="regdiag-stat-collinearity"');
     expect(html).not.toContain('data-testid="regdiag-action-collinearity"');
   });

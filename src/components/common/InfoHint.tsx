@@ -38,12 +38,14 @@ export function InfoHint({
   term,
   title: customTitle,
   text: customText,
+  hoverText,
   icon,
   className = "",
 }: {
   term?: GlossaryTerm;
   title?: string;
   text?: string;
+  hoverText?: string;
   icon?: React.ReactNode;
   className?: string;
 }) {
@@ -92,7 +94,7 @@ export function InfoHint({
         data-testid={term ? `info-hint-${term}` : "info-hint"}
         aria-label={customTitle ? title : `${t("glossary.ariaPrefix")}: ${title}`}
         aria-expanded={open}
-        title={title}
+        title={hoverText && open ? undefined : hoverText ?? title}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -113,7 +115,7 @@ export function InfoHint({
             className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 shadow-lg p-3 text-sm leading-relaxed"
           >
             <p className="font-semibold mb-1">{title}</p>
-            <p className="text-neutral-700 dark:text-neutral-300">{text}</p>
+            <p className="whitespace-pre-line text-neutral-700 dark:text-neutral-300">{text}</p>
           </div>,
           document.body
         )}
