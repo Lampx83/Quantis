@@ -841,8 +841,14 @@ async def analyze_kmeans(body: KMeansBody):
 def analyze_efa(body: FactorBody):
     try:
         return {"result": run_efa(body.rows, body.columnNames, body.nFactors)}
+    except HTTPException:
+        raise
     except FactorAnalysisError as error:
         raise HTTPException(status_code=error.status, detail=error.detail) from error
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/paf")
@@ -850,8 +856,14 @@ def analyze_paf(body: FactorBody):
     # A synchronous route keeps extraction and permutations off the event loop.
     try:
         return {"result": run_paf(body.rows, body.columnNames, body.nFactors, MAX_ROWS)}
+    except HTTPException:
+        raise
     except FactorAnalysisError as error:
         raise HTTPException(status_code=error.status, detail=error.detail) from error
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/pairwise-posthoc")
