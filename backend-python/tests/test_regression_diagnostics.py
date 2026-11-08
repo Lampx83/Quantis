@@ -668,9 +668,12 @@ def test_perfect_collinearity_is_a_violation_with_null_statistics():
     rows = [["Y", "X1", "X2"]]
     rng = np.random.default_rng(5)
     for _ in range(50):
-        x1 = rng.normal()
+        # Integers keep X2 exactly twice X1 after decimal serialization.
+        x1 = rng.integers(-10, 11)
         y = 1.0 + 2.0 * x1 + rng.normal(0, 0.5)
         rows.append([f"{y:.10f}", f"{x1:.10f}", f"{2.0 * x1:.10f}"])
+
+    assert all(float(row[2]) == 2.0 * float(row[1]) for row in rows[1:])
 
     result = post_ols(rows, x_cols=("X1", "X2")).json()["result"]
     diag = result["diagnostics"]
