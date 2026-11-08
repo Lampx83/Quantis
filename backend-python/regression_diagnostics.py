@@ -445,13 +445,21 @@ def _vif_block(model: Any, x_cols: list[str]) -> dict:
     exog = np.asarray(model.model.exog, dtype=float)
     names = list(model.model.exog_names)
     out: dict[str, dict] = {}
+    # Check dependence independently: statsmodels 0.15 caps even infinite VIFs.
+    scales = np.linalg.norm(exog, axis=0)
+    scaled = exog / np.where(scales > 0, scales, 1.0)
+    rank = np.linalg.matrix_rank(scaled)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         with np.errstate(divide="ignore", invalid="ignore"):
             for column in x_cols:
                 if column not in names:
                     continue
-                vif = _finite(variance_inflation_factor(exog, names.index(column)))
+                index = names.index(column)
+                dependent = rank < exog.shape[1] and np.linalg.matrix_rank(
+                    np.delete(scaled, index, axis=1)
+                ) == rank
+                vif = None if dependent else _finite(variance_inflation_factor(exog, index))
                 out[column] = {
                     "vif": vif,
                     "tolerance": None if vif in (None, 0.0) else _finite(1.0 / vif),

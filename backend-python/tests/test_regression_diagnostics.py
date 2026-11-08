@@ -695,6 +695,38 @@ def test_perfect_collinearity_is_a_violation_with_null_statistics():
     assert not _has_non_finite(result)
 
 
+def test_singular_design_keeps_vif_for_independent_predictor():
+    rng = np.random.default_rng(12)
+    x1 = rng.normal(size=80)
+    x3 = rng.normal(size=80)
+    design = add_constant(pd.DataFrame({"X1": x1, "X2": 2 * x1, "X3": x3}))
+    model = OLS(rng.normal(size=80), design).fit()
+
+    block = regression_diagnostics._vif_block(model, ["X1", "X2", "X3"])
+
+    assert block["X1"] == {"vif": None, "tolerance": None}
+    assert block["X2"] == {"vif": None, "tolerance": None}
+    assert block["X3"]["vif"] == pytest.approx(
+        variance_inflation_factor(design, 3)
+    )
+
+
+def test_near_collinearity_keeps_finite_vif():
+    rng = np.random.default_rng(12)
+    x1 = rng.normal(size=80)
+    design = add_constant(pd.DataFrame({
+        "X1": x1, "X2": 2 * x1 + rng.normal(scale=1e-5, size=80),
+    }))
+    model = OLS(rng.normal(size=80), design).fit()
+
+    block = regression_diagnostics._vif_block(model, ["X1", "X2"])
+
+    for column in ("X1", "X2"):
+        assert block[column]["vif"] > 1e6
+        assert np.isfinite(block[column]["vif"])
+        assert block[column]["tolerance"] > 0
+
+
 def _has_non_finite(value):
     if isinstance(value, float):
         return not np.isfinite(value)
