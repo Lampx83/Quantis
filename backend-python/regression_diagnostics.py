@@ -418,8 +418,14 @@ def _obs_block(model: Any, used: list[int], influence: Any, studentized: np.ndar
 
 
 def _qq_block(resid: Any) -> dict:
-    """Normal Q-Q using Blom plotting positions (statsmodels ProbPlot convention)."""
-    osm, osr = scipy_stats.probplot(np.asarray(resid, dtype=float), dist="norm", fit=False)
+    """Standardized residual quantiles for the UI's standard-normal y=x line."""
+    residuals = np.asarray(resid, dtype=float)
+    # Rescale first so computing the sample SD cannot overflow or underflow.
+    magnitude = np.max(np.abs(residuals))
+    scaled = residuals / magnitude if magnitude > 0 else residuals
+    sd = np.std(scaled, ddof=1)
+    standardized = (scaled - scaled.mean()) / sd if sd > 0 else np.full_like(scaled, np.nan)
+    osm, osr = scipy_stats.probplot(standardized, dist="norm", fit=False)
     theoretical = np.asarray(osm, dtype=float)
     sample = np.asarray(osr, dtype=float)
     n = len(theoretical)

@@ -286,15 +286,40 @@ def test_robust_hc3_handles_missing_predictor_gracefully():
     assert block["se"]["X1"] is not None
 
 
-def test_qq_matches_blom_positions():
+def test_qq_matches_normal_positions_of_standardized_residuals():
     rows = make_rows()
     diag = post_ols(rows).json()["result"]["diagnostics"]
     model, _ = fitted_reference(rows)
-    osm, osr = scipy_stats.probplot(np.asarray(model.resid), dist="norm", fit=False)
+    standardized = scipy_stats.zscore(np.asarray(model.resid), ddof=1)
+    osm, osr = scipy_stats.probplot(standardized, dist="norm", fit=False)
 
     assert len(diag["qq"]["theoretical"]) == len(diag["qq"]["sample"]) == 80
     np.testing.assert_allclose(diag["qq"]["theoretical"], osm, atol=TOL)
     np.testing.assert_allclose(diag["qq"]["sample"], osr, atol=TOL)
+
+
+@pytest.mark.parametrize("scale", [0.01, 10.0])
+def test_qq_quantiles_do_not_depend_on_response_units(scale):
+    rows = make_rows(n=300)
+    transformed = [rows[0], *[
+        [str(20 + scale * float(row[0])), *row[1:]] for row in rows[1:]
+    ]]
+    original = post_ols(rows).json()["result"]["diagnostics"]["qq"]
+    changed = post_ols(transformed).json()["result"]["diagnostics"]["qq"]
+
+    np.testing.assert_allclose(changed["theoretical"], original["theoretical"], atol=TOL)
+    np.testing.assert_allclose(changed["sample"], original["sample"], atol=TOL)
+    assert np.mean(changed["sample"]) == pytest.approx(0, abs=TOL)
+    assert np.std(changed["sample"], ddof=1) == pytest.approx(1, abs=TOL)
+
+
+@pytest.mark.parametrize("value", [0.0, 4.0])
+def test_qq_marks_constant_residual_quantiles_unavailable(value):
+    qq = regression_diagnostics._qq_block(np.full(10, value))
+
+    assert qq["sample"] == [None] * 10
+    assert all(np.isfinite(qq["theoretical"]))
+    json.dumps(qq, allow_nan=False)
 
 
 def test_small_sample_is_not_sampled():
