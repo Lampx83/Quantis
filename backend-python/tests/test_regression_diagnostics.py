@@ -394,6 +394,36 @@ def test_linearity_stats_match_statsmodels():
     assert abs(stats["reset"]["p"] - float(reset.pvalue)) < TOL
 
 
+@pytest.mark.parametrize("groups", [2, 3])
+def test_reset_is_inapplicable_when_fitted_squared_adds_no_design_rank(groups):
+    # A saturated group model already spans every group-constant fitted value,
+    # including its square. Identical noise in each group keeps BP unremarkable.
+    noise = np.random.default_rng(42).normal(size=100)
+    x_cols = [f"X{i}" for i in range(1, groups)]
+    rows = [["Y", *x_cols]]
+    for group in range(groups):
+        for error in noise:
+            rows.append([
+                str(3 + 10 * group + error),
+                *[str(int(group == i)) for i in range(1, groups)],
+            ])
+
+    response = post_ols(rows, x_cols=x_cols)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    diag = result["diagnostics"]
+
+    assert result["n"] == groups * len(noise)
+    assert diag["ok"] is True
+    assert diag["assumptions"][0] == {
+        "id": "linearity",
+        "applicable": False,
+        "notApplicableReason": "notComputable",
+    }
+    assert diag["assumptions"][1]["applicable"] is True
+    assert diag["assumptions"][2]["applicable"] is True
+
+
 def test_normality_stats_match_scipy():
     rows = make_rows()
     diag = post_ols(rows).json()["result"]["diagnostics"]

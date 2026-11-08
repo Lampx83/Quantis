@@ -219,7 +219,13 @@ def _linearity_row(model: Any, n: int, k: int) -> dict:
     from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
 
     try:
-        lm, lm_p, _, _ = het_breuschpagan(model.resid, model.model.exog)
+        design = np.asarray(model.model.exog, dtype=float)
+        augmented = np.column_stack((design, np.asarray(model.fittedvalues) ** 2))
+        # Binary and saturated group models already span fitted values squared.
+        # RESET's coefficient test is not identifiable without an added rank.
+        if np.linalg.matrix_rank(augmented) <= np.linalg.matrix_rank(design):
+            return _inapplicable("linearity", "notComputable")
+        lm, lm_p, _, _ = het_breuschpagan(model.resid, design)
         reset = linear_reset(model, power=2, use_f=True)
         stats = {
             "bp": {"chi2": _finite(lm), "df": int(k), "p": _finite(lm_p)},
