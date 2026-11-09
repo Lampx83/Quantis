@@ -8,7 +8,7 @@ const source: Dataset = {
   data: [["X"], ["1"], ["2"]], preview: [["X"], ["1"], ["2"]],
   sourceFormat: "csv", createdAt: "", updatedAt: "",
 };
-const storedWorkspace = () => JSON.parse(localStorage.getItem("quantis_data")!).state;
+const storedWorkspace = () => JSON.parse(localStorage.getItem("quantis_data:local")!).state;
 const currentDataset = () => useDataStore.getState().datasets[0];
 const byteLength = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 
@@ -133,6 +133,7 @@ describe("transformation audit", () => {
   });
 
   it("loads older datasets with an empty audit", async () => {
+    localStorage.removeItem("quantis_data:local");
     localStorage.setItem("quantis_data", JSON.stringify({
       state: { datasets: [source], selectedDatasetId: source.id }, version: 0,
     }));

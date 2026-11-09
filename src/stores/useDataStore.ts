@@ -5,6 +5,7 @@ import { ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache, workspaceOwner } from "./useSyncStore";
+import { readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
 import {
   applyDatasetChange,
   createHistoryStep,
@@ -412,10 +413,8 @@ export const useDataStore = create<DataState>()(
         getItem: (name) => {
           try {
             const owner = workspaceOwner(useSyncStore.getState().authUser);
-            const newData = localStorage.getItem(name);
-            if (newData) {
-              const parsed = JSON.parse(newData);
-              if ((parsed?.state?.owner ?? "local") !== owner) return null;
+            const parsed = readWorkspaceCache(name, owner);
+            if (parsed) {
               if (parsed?.state?.datasets && Array.isArray(parsed.state.datasets)) {
                 parsed.state.datasets = parsed.state.datasets.map((ds: Dataset) =>
                   ds.variables ? ds : ensureDatasetMetadata(ds)
@@ -437,7 +436,7 @@ export const useDataStore = create<DataState>()(
                 version: 0,
               };
               try {
-                localStorage.setItem(name, JSON.stringify(migrated));
+                localStorage.setItem(workspaceCacheKey(name, owner), JSON.stringify(migrated));
                 localStorage.removeItem("quantis_datasets");
                 localStorage.removeItem("quantis_selectedDatasetId");
               } catch {}
@@ -452,6 +451,7 @@ export const useDataStore = create<DataState>()(
           if (switchingOwner || (typeof window === "undefined" && typeof localStorage === "undefined")) return;
           const sync = useSyncStore.getState();
           const local = persistsWorkspaceLocally(sync);
+          const key = workspaceCacheKey(name, value.state.owner);
           try {
             if (!local) {
               // Khi online và kết nối server: Server/DB là nguồn chính, chỉ lưu selectedDatasetId xuống localStorage để giữ ngữ cảnh
@@ -462,10 +462,10 @@ export const useDataStore = create<DataState>()(
                   datasets: [],
                 },
               };
-              localStorage.setItem(name, JSON.stringify(lightweightValue));
+              localStorage.setItem(key, JSON.stringify(lightweightValue));
               return;
             }
-            localStorage.setItem(name, JSON.stringify(value));
+            localStorage.setItem(key, JSON.stringify(value));
             sync.setLocalSaveFailure("datasets", false);
           } catch {
             if (local) sync.setLocalSaveFailure("datasets", true);
@@ -473,7 +473,7 @@ export const useDataStore = create<DataState>()(
         },
         removeItem: (name) => {
           try {
-            localStorage.removeItem(name);
+            localStorage.removeItem(workspaceCacheKey(name, workspaceOwner(useSyncStore.getState().authUser)));
           } catch {}
         },
       },

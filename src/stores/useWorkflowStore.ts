@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workflow, WorkflowStep } from "@/types";
 import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache, workspaceOwner } from "./useSyncStore";
+import { readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
 
 let switchingOwner = false;
 
@@ -171,11 +172,8 @@ export const useWorkflowStore = create<WorkflowState>()(
         getItem: (name) => {
           try {
             const owner = workspaceOwner(useSyncStore.getState().authUser);
-            const newData = localStorage.getItem(name);
-            if (newData) {
-              const parsed = JSON.parse(newData);
-              return (parsed?.state?.owner ?? "local") === owner ? parsed : null;
-            }
+            const cached = readWorkspaceCache(name, owner);
+            if (cached) return cached;
 
             // Fallback: migration từ key cũ quantis_workflows
             if (owner !== "local") return null;
@@ -191,7 +189,7 @@ export const useWorkflowStore = create<WorkflowState>()(
                 version: 0,
               };
               try {
-                localStorage.setItem(name, JSON.stringify(migrated));
+                localStorage.setItem(workspaceCacheKey(name, owner), JSON.stringify(migrated));
                 localStorage.removeItem("quantis_workflows");
               } catch {}
               return migrated;
@@ -205,6 +203,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           if (switchingOwner || (typeof window === "undefined" && typeof localStorage === "undefined")) return;
           const sync = useSyncStore.getState();
           const local = persistsWorkspaceLocally(sync);
+          const key = workspaceCacheKey(name, value.state.owner);
           try {
             if (!local) {
               const lightweightValue = {
@@ -214,10 +213,10 @@ export const useWorkflowStore = create<WorkflowState>()(
                   workflows: [],
                 },
               };
-              localStorage.setItem(name, JSON.stringify(lightweightValue));
+              localStorage.setItem(key, JSON.stringify(lightweightValue));
               return;
             }
-            localStorage.setItem(name, JSON.stringify(value));
+            localStorage.setItem(key, JSON.stringify(value));
             sync.setLocalSaveFailure("workflows", false);
           } catch {
             if (local) sync.setLocalSaveFailure("workflows", true);
@@ -225,7 +224,7 @@ export const useWorkflowStore = create<WorkflowState>()(
         },
         removeItem: (name) => {
           try {
-            localStorage.removeItem(name);
+            localStorage.removeItem(workspaceCacheKey(name, workspaceOwner(useSyncStore.getState().authUser)));
           } catch {}
         },
       },
