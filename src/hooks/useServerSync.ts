@@ -63,8 +63,10 @@ export function startWorkspaceSync(): () => void {
     const state = useSyncStore.getState();
     if (applyingPull || !current(epoch) || !canSyncToServer(state)) return;
     if (state.workspaceSaveStatus === "saved") state.setWorkspaceSaveStatus("idle");
-    if (!state.isOnline) return;
     dirty = true;
+    if (!state.isOnline && didPull && state.workspaceSaveStatus !== "failed") {
+      state.setWorkspaceSaveStatus("pending");
+    }
     cancelSave();
     armSave();
   }
@@ -82,6 +84,8 @@ export function startWorkspaceSync(): () => void {
       if (ownerChanged || !canSync) {
         didPull = false;
         dirty = false;
+      } else if (didPull && (dirty || saving) && state.workspaceSaveStatus !== "failed") {
+        state.setWorkspaceSaveStatus("pending");
       }
       if (ownerChanged) saving = false;
       epoch = state.workspaceEpoch;

@@ -157,6 +157,29 @@ describe("workspace sync ownership", () => {
     expect(save.mock.calls[1][0].datasets[0].data?.[1][0]).toBe("3");
   });
 
+  it("keeps offline edits cached until the reconnect save succeeds", async () => {
+    vi.spyOn(api, "getData").mockResolvedValue({ datasets: [dataset("a-data")], workflows: [] });
+    const pending = deferred<boolean>();
+    const save = vi.spyOn(api, "saveData").mockReturnValue(pending.promise);
+    const sync = useSyncStore.getState();
+    sync.setUseBackend(true);
+    stop = startWorkspaceSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const data = useDataStore.getState();
+    sync.setIsOnline(false);
+    data.updateCell(0, 0, "offline edit", "a-data");
+    sync.setIsOnline(true);
+    data.setSelectedDatasetId("a-data");
+    const cached = () => JSON.parse(localStorage.getItem("quantis_data")!).state.datasets;
+    expect(cached()[0]?.data[1][0]).toBe("offline edit");
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(save.mock.calls[0]?.[0].datasets[0].data?.[1][0]).toBe("offline edit");
+    pending.resolve(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cached()).toEqual([]);
+  });
+
   it("ignores an in-flight save result after the Portal owner changes", async () => {
     const pull = vi.spyOn(api, "getData").mockResolvedValue({ datasets: [dataset("a-data")], workflows: [] });
     const pending = deferred<boolean>();

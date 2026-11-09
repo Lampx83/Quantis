@@ -4,7 +4,7 @@ import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
 import * as quantisApi from "@/api";
 
 type LocalSaveScope = "datasets" | "workflows";
-type WorkspaceSaveStatus = "idle" | "saved" | "failed";
+type WorkspaceSaveStatus = "idle" | "pending" | "saved" | "failed";
 
 export interface SyncState {
   // Connection
@@ -210,7 +210,7 @@ export function persistsWorkspaceLocally(s: {
   isOnline: boolean;
   workspaceSaveStatus?: WorkspaceSaveStatus;
 }): boolean {
-  return !canSyncToServer(s) || !s.isOnline || s.workspaceSaveStatus === "failed";
+  return !canSyncToServer(s) || !s.isOnline || s.workspaceSaveStatus === "pending" || s.workspaceSaveStatus === "failed";
 }
 
 export function shouldWriteWorkspaceCache(state: SyncState, previous: SyncState): boolean {
