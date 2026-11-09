@@ -148,6 +148,7 @@ export function startWorkspaceSync(): () => void {
 export function useServerSync() {
   const { selectedDatasetId, datasets } = useDataStore();
   const {
+    isOnline,
     setUseBackend,
     analysisBackendAvailable,
     setAnalysisBackendAvailable,
@@ -163,8 +164,17 @@ export function useServerSync() {
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
   useEffect(() => {
-    quantisApi.checkBackendAvailable().then(setUseBackend);
-  }, [setUseBackend]);
+    if (useSyncStore.getState().useBackend) return;
+    if (!isOnline) {
+      setUseBackend(false);
+      return;
+    }
+    let cancelled = false;
+    void quantisApi.checkBackendAvailable().then((available) => {
+      if (!cancelled) setUseBackend(available);
+    });
+    return () => { cancelled = true; };
+  }, [isOnline, setUseBackend]);
 
   useEffect(() => {
     quantisApi.checkAnalysisBackendAvailable().then(setAnalysisBackendAvailable);

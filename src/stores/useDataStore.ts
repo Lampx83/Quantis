@@ -4,7 +4,7 @@ import type { Dataset, DatasetChangeSummary, DerivationSummary, TransformChangeS
 import { ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
-import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache, workspaceOwner } from "./useSyncStore";
+import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache } from "./useSyncStore";
 import { readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
 import {
   applyDatasetChange,
@@ -407,12 +407,12 @@ export const useDataStore = create<DataState>()(
         ({
           datasets: s.datasets,
           selectedDatasetId: s.selectedDatasetId,
-          owner: workspaceOwner(useSyncStore.getState().authUser),
+          owner: useSyncStore.getState().workspaceOwner,
         }),
       storage: {
         getItem: (name) => {
           try {
-            const owner = workspaceOwner(useSyncStore.getState().authUser);
+            const owner = useSyncStore.getState().workspaceOwner;
             const parsed = readWorkspaceCache(name, owner);
             if (parsed) {
               if (parsed?.state?.datasets && Array.isArray(parsed.state.datasets)) {
@@ -473,7 +473,7 @@ export const useDataStore = create<DataState>()(
         },
         removeItem: (name) => {
           try {
-            localStorage.removeItem(workspaceCacheKey(name, workspaceOwner(useSyncStore.getState().authUser)));
+            localStorage.removeItem(workspaceCacheKey(name, useSyncStore.getState().workspaceOwner));
           } catch {}
         },
       },

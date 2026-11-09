@@ -88,16 +88,18 @@ export async function getAuthConfig(): Promise<AuthConfig | null> {
   }
 }
 
-export async function getAuthMe(): Promise<AuthUser | null> {
+/** Null means signed out. Undefined means the session could not be checked. */
+export async function getAuthMe(): Promise<AuthUser | null | undefined> {
   const prefix = getAuthPrefix();
-  if (!prefix) return null;
+  if (!prefix) return undefined;
   try {
     const res = await fetch(`${prefix}/me`, { credentials: "include", cache: "no-store" });
-    if (!res.ok) return null;
+    if (res.status === 401) return null;
+    if (!res.ok) return undefined;
     const data = await res.json();
     return data.user ?? null;
   } catch {
-    return null;
+    return undefined;
   }
 }
 

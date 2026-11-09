@@ -49,8 +49,8 @@ export function useAuthSession() {
           const realUser = user && (user.email !== "guest@local" || user.name !== "Guest") ? user : null;
           const u = fromWindow ?? realUser;
           if (u) setAuthUser(u);
-        } else {
-          setAuthUser(user ?? null);
+        } else if (user !== undefined) {
+          setAuthUser(user);
         }
       })
       .finally(() => {
@@ -101,7 +101,7 @@ export function useAuthSession() {
       if (document.visibilityState === "visible") {
         const epoch = useSyncStore.getState().workspaceEpoch;
         quantisApi.getAuthMe().then((user) => {
-          if (!user && useSyncStore.getState().workspaceEpoch === epoch) setAuthUser(null);
+          if (user === null && useSyncStore.getState().workspaceEpoch === epoch) setAuthUser(null);
         });
       }
     };
