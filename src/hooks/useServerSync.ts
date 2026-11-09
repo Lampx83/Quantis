@@ -1,29 +1,120 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect } from "react";
 import {
   useDataStore,
   useWorkflowStore,
   useAnalysisStore,
   useSyncStore,
   useUIStore,
-  canSyncToServer as checkCanSyncToServer,
+  canSyncToServer,
+  type SyncState,
 } from "@/stores";
 import * as quantisApi from "@/api";
 import { clearWorkspaceLocalData, setServerSettings } from "@/utils/storage";
 import { getAnalysisRows } from "@/utils/stats";
 import { numericColumnNames } from "@/utils/metadata";
 
+/** Owns one sync session and invalidates work synchronously when the workspace changes. */
+export function startWorkspaceSync(): () => void {
+  let epoch = useSyncStore.getState().workspaceEpoch;
+  let pullVersion = 0;
+  let pulling = false;
+  let didPull = false;
+  let applyingPull = false;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function cancelSave() {
+    clearTimeout(timer);
+    timer = undefined;
+  }
+
+  function current(ownerEpoch: number) {
+    return !stopped && useSyncStore.getState().workspaceEpoch === ownerEpoch;
+  }
+
+  function scheduleSave() {
+    const state = useSyncStore.getState();
+    if (applyingPull || !current(epoch) || !state.isOnline || !canSyncToServer(state)) return;
+    cancelSave();
+    const ownerEpoch = epoch;
+    timer = setTimeout(async () => {
+      timer = undefined;
+      const connection = useSyncStore.getState();
+      if (!current(ownerEpoch) || !connection.isOnline || !canSyncToServer(connection)) return;
+      const datasets = useDataStore.getState().datasets;
+      const workflows = useWorkflowStore.getState().workflows;
+      const ok = await quantisApi.saveData({ datasets, workflows }).catch(() => false);
+      if (!ok && current(ownerEpoch)) useSyncStore.getState().setUseBackend(false);
+    }, 1500);
+  }
+
+  function updateConnection(state: SyncState, previous?: SyncState) {
+    const canSync = canSyncToServer(state);
+    const ownerChanged = epoch !== state.workspaceEpoch;
+    if (previous && !ownerChanged && state.isOnline === previous.isOnline &&
+      canSync === canSyncToServer(previous)) return;
+
+    if (ownerChanged || !canSync || !state.isOnline) {
+      cancelSave();
+      pullVersion++;
+      pulling = false;
+      if (ownerChanged || !canSync) didPull = false;
+      epoch = state.workspaceEpoch;
+      state.setWorkspacePullLoading(false);
+    }
+    if (!state.isOnline || !canSync || didPull || pulling) return;
+
+    const ownerEpoch = epoch;
+    const request = ++pullVersion;
+    const valid = () => current(ownerEpoch) && pullVersion === request;
+    pulling = true;
+    state.setWorkspacePullLoading(true);
+    void quantisApi.getData()
+      .then((data) => {
+        if (!valid() || !data) return;
+        cancelSave();
+        applyingPull = true;
+        try {
+          useDataStore.getState().hydrateFromServer(data.datasets);
+          useWorkflowStore.getState().hydrateFromServer(data.workflows);
+          clearWorkspaceLocalData();
+        } finally {
+          applyingPull = false;
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!valid()) return;
+        pulling = false;
+        didPull = true;
+        useSyncStore.getState().setWorkspacePullLoading(false);
+      });
+  }
+
+  const unsubscribe = [
+    useDataStore.subscribe((state, previous) => {
+      if (state.datasets !== previous.datasets) scheduleSave();
+    }),
+    useWorkflowStore.subscribe((state, previous) => {
+      if (state.workflows !== previous.workflows) scheduleSave();
+    }),
+    useSyncStore.subscribe(updateConnection),
+  ];
+  updateConnection(useSyncStore.getState());
+  return () => {
+    stopped = true;
+    cancelSave();
+    unsubscribe.forEach((stop) => stop());
+    if (pulling) useSyncStore.getState().setWorkspacePullLoading(false);
+  };
+}
+
 export function useServerSync() {
-  const { setDatasets, selectedDatasetId, datasets } = useDataStore();
-  const { setWorkflows } = useWorkflowStore();
+  const { selectedDatasetId, datasets } = useDataStore();
   const {
-    useBackend,
     setUseBackend,
-    authConfig,
-    authUser,
     analysisBackendAvailable,
     setAnalysisBackendAvailable,
-    isOnline,
-    setWorkspacePullLoading,
   } = useSyncStore();
   const { mainSection, dataTab, analysisTab } = useUIStore();
   const {
@@ -32,9 +123,6 @@ export function useServerSync() {
     setCorrelationLoading,
     setDescriptiveBackendResult,
   } = useAnalysisStore();
-
-  const didPullServerWorkspaceRef = useRef(false);
-  const prevCanSyncRef = useRef(false);
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
@@ -55,74 +143,7 @@ export function useServerSync() {
     });
   }, []);
 
-  const canSyncToServer = useMemo(
-    () => checkCanSyncToServer({ useBackend, authConfig, authUser }),
-    [useBackend, authConfig, authUser]
-  );
-
-  // Kéo workspace từ server
-  useEffect(() => {
-    if (!canSyncToServer) {
-      didPullServerWorkspaceRef.current = false;
-      prevCanSyncRef.current = false;
-      setWorkspacePullLoading(false);
-      return;
-    }
-    if (!isOnline) return;
-
-    const becameSyncable = !prevCanSyncRef.current && canSyncToServer;
-    prevCanSyncRef.current = canSyncToServer;
-    const shouldPull = becameSyncable || !didPullServerWorkspaceRef.current;
-    if (!shouldPull) return;
-
-    let cancelled = false;
-    setWorkspacePullLoading(true);
-    quantisApi
-      .getData()
-      .then((data) => {
-        if (cancelled) return;
-        didPullServerWorkspaceRef.current = true;
-        if (!data) return;
-        setDatasets(data.datasets);
-        setWorkflows(data.workflows);
-        clearWorkspaceLocalData();
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setWorkspacePullLoading(false);
-      });
-    return () => {
-      cancelled = true;
-      setWorkspacePullLoading(false);
-    };
-  }, [canSyncToServer, isOnline, setDatasets, setWorkflows, setWorkspacePullLoading]);
-
-  // Ghi lên server khi online qua store subscriptions
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const triggerSync = () => {
-      const { isOnline: online, useBackend: backend, authConfig: ac, authUser: au } = useSyncStore.getState();
-      // Cùng điều kiện với nhánh kéo/lưu cục bộ: khách Portal (@local) không được ghi workspace lên server.
-      const canSync = checkCanSyncToServer({ useBackend: backend, authConfig: ac, authUser: au });
-      if (!canSync || !online) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(async () => {
-        const d = useDataStore.getState().datasets;
-        const w = useWorkflowStore.getState().workflows;
-        const ok = await quantisApi.saveData({ datasets: d, workflows: w });
-        if (!ok) useSyncStore.getState().setUseBackend(false);
-      }, 1500);
-    };
-
-    const unsubData = useDataStore.subscribe(triggerSync);
-    const unsubWorkflow = useWorkflowStore.subscribe(triggerSync);
-
-    return () => {
-      if (timer) clearTimeout(timer);
-      unsubData();
-      unsubWorkflow();
-    };
-  }, []);
+  useEffect(startWorkspaceSync, []);
 
   // Khi tab descriptive: lấy thống kê mô tả từ server nếu có backend
   useEffect(() => {

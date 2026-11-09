@@ -21,6 +21,7 @@ export interface SyncState {
 
   // Sync status
   workspacePullLoading: boolean;
+  workspaceEpoch: number;
   sidebarImportBusy: boolean;
   embedConfigGeneration: number;
 
@@ -75,6 +76,7 @@ export const useSyncStore = create<SyncState>((set) => ({
   sampleDatasetsLoading: false,
 
   workspacePullLoading: false,
+  workspaceEpoch: 0,
   sidebarImportBusy: false,
   embedConfigGeneration: 0,
 
@@ -92,7 +94,12 @@ export const useSyncStore = create<SyncState>((set) => ({
   setUseBackend: (useBackend) => set({ useBackend }),
   setAnalysisBackendAvailable: (analysisBackendAvailable) => set({ analysisBackendAvailable }),
   setAuthConfig: (authConfig) => set({ authConfig }),
-  setAuthUser: (authUser) => set({ authUser }),
+  setAuthUser: (authUser) => set((state) => ({
+    authUser,
+    workspaceEpoch: workspaceOwner(authUser) === workspaceOwner(state.authUser)
+      ? state.workspaceEpoch
+      : state.workspaceEpoch + 1,
+  })),
   setAuthLoading: (authLoading) => set({ authLoading }),
   setIsPortalAdmin: (isPortalAdmin) => set({ isPortalAdmin }),
   setSampleDatasetsList: (sampleDatasetsList) => set({ sampleDatasetsList }),
@@ -154,6 +161,10 @@ export function isPortalGuestUser(u: { id?: string; email?: string } | null | un
   if (!u) return false;
   const email = (u.email ?? "").trim().toLowerCase();
   return u.id === PORTAL_GUEST_ID || email.startsWith("guest@") || email.endsWith("@local");
+}
+
+export function workspaceOwner(user: AuthUser | null): string {
+  return user?.id && !isPortalGuestUser(user) ? `user:${user.id}` : "local";
 }
 
 /**

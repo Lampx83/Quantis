@@ -25,21 +25,26 @@ export function useAuthSession() {
       setAuthLoading(false);
       return;
     }
-    const portalUser = quantisApi.isPortalEmbed() ? quantisApi.getPortalUserFromWindow() : null;
+    const portal = quantisApi.isPortalEmbed();
+    const auth = useSyncStore.getState();
+    let ownerEpoch = auth.workspaceEpoch;
+    let cancelled = false;
+    const current = () => !cancelled && useSyncStore.getState().workspaceEpoch === ownerEpoch;
+    const portalUser = portal ? auth.authUser ?? (ownerEpoch === 0 ? quantisApi.getPortalUserFromWindow() : null) : null;
     if (portalUser) {
       setAuthUser(portalUser);
+      ownerEpoch = useSyncStore.getState().workspaceEpoch;
       quantisApi
         .getAuthConfig()
-        .then((c) => setAuthConfig(c ?? null))
+        .then((c) => { if (current()) setAuthConfig(c ?? null); })
         .finally(() => setAuthLoading(false));
-      return;
+      return () => { cancelled = true; };
     }
-    let cancelled = false;
     Promise.all([quantisApi.getAuthConfig(), quantisApi.getAuthMe()])
       .then(([config, user]) => {
-        if (cancelled) return;
+        if (!current()) return;
         setAuthConfig(config ?? null);
-        if (quantisApi.isPortalEmbed()) {
+        if (portal) {
           const fromWindow = quantisApi.getPortalUserFromWindow();
           const realUser = user && (user.email !== "guest@local" || user.name !== "Guest") ? user : null;
           const u = fromWindow ?? realUser;
@@ -70,6 +75,7 @@ export function useAuthSession() {
     const t1 = setTimeout(requestUser, 1000);
     const t2 = setTimeout(requestUser, 2500);
     const onMessage = (e: MessageEvent) => {
+      if (e.source !== win.parent && e.source !== win.top) return;
       const d = e.data as { type?: string; user?: { id?: string; email?: string; name?: string; isAdmin?: boolean } } | null;
       if (d?.type !== "PORTAL_USER" || !d?.user || typeof d.user.id !== "string") return;
       setAuthUser({
@@ -93,8 +99,9 @@ export function useAuthSession() {
     if (quantisApi.isPortalEmbed() || !authConfig?.authEnabled || !authUser) return;
     const onVis = () => {
       if (document.visibilityState === "visible") {
+        const epoch = useSyncStore.getState().workspaceEpoch;
         quantisApi.getAuthMe().then((user) => {
-          if (!user) setAuthUser(null);
+          if (!user && useSyncStore.getState().workspaceEpoch === epoch) setAuthUser(null);
         });
       }
     };

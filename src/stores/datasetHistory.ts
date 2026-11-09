@@ -2,11 +2,12 @@ import type { Dataset } from "@/types";
 import { generateId } from "@/utils/helpers";
 
 export interface DatasetChangeSummary {
-  action: "cell";
+  action: "cell" | "paste" | "insertRow" | "deleteRow";
   columns?: string[];
   firstRow?: number;
   lastRow?: number;
   cellCount?: number;
+  rowCount?: number;
 }
 
 export interface DatasetChange extends DatasetChangeSummary {
@@ -137,12 +138,43 @@ export function validCell(dataset: Dataset, row: number, column: number): boolea
     Number.isInteger(column) && column >= 0 && column < dataset.columnNames.length;
 }
 
-export function editMatrixCell(matrix: string[][] | undefined, row: number, column: number, value: string) {
-  const oldRow = matrix?.[row];
-  if (!matrix || !oldRow || oldRow[column] === value) return matrix;
+export interface CellEdit {
+  rowIndex: number;
+  colIndex: number;
+  value: string;
+}
+
+export function editMatrixCells(
+  matrix: string[][] | undefined,
+  dataset: Dataset,
+  edits: Iterable<CellEdit>,
+  changed: Set<CellEdit>,
+) {
+  if (!matrix) return matrix;
+  const offset = datasetRowOffset(matrix, dataset);
+  const rows = new Map<number, string[]>();
+  for (const edit of edits) {
+    const row = edit.rowIndex + offset;
+    if (!matrix[row] || matrix[row][edit.colIndex] === edit.value) continue;
+    const next = rows.get(row) ?? [...matrix[row]];
+    next[edit.colIndex] = edit.value;
+    rows.set(row, next);
+    changed.add(edit);
+  }
+  if (!rows.size) return matrix;
   const next = [...matrix];
-  const nextRow = [...oldRow];
-  nextRow[column] = value;
-  next[row] = nextRow;
+  for (const [row, values] of rows) next[row] = values;
+  return next;
+}
+
+export function editMatrixRow(
+  matrix: string[][] | undefined, dataset: Dataset, row: number, inserted?: string[],
+) {
+  if (!matrix) return matrix;
+  const index = row + datasetRowOffset(matrix, dataset);
+  if (inserted ? index > matrix.length : index >= matrix.length) return matrix;
+  const next = [...matrix];
+  if (inserted) next.splice(index, 0, inserted);
+  else next.splice(index, 1);
   return next;
 }

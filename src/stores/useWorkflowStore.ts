@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workflow, WorkflowStep } from "@/types";
-import { useSyncStore, canSyncToServer, persistsWorkspaceLocally } from "./useSyncStore";
+import { useSyncStore, persistsWorkspaceLocally, workspaceOwner } from "./useSyncStore";
+
+let switchingOwner = false;
 
 export interface WorkflowState {
   // --- Persisted State ---
@@ -163,16 +165,20 @@ export const useWorkflowStore = create<WorkflowState>()(
         ({
           workflows: s.workflows,
           selectedWorkflowId: s.selectedWorkflowId,
-        } as WorkflowState),
+          owner: workspaceOwner(useSyncStore.getState().authUser),
+        }),
       storage: {
         getItem: (name) => {
           try {
+            const owner = workspaceOwner(useSyncStore.getState().authUser);
             const newData = localStorage.getItem(name);
             if (newData) {
-              return JSON.parse(newData);
+              const parsed = JSON.parse(newData);
+              return (parsed?.state?.owner ?? "local") === owner ? parsed : null;
             }
 
             // Fallback: migration từ key cũ quantis_workflows
+            if (owner !== "local") return null;
             const oldWorkflows = localStorage.getItem("quantis_workflows");
             if (oldWorkflows) {
               const parsed = JSON.parse(oldWorkflows);
@@ -196,11 +202,9 @@ export const useWorkflowStore = create<WorkflowState>()(
           return null;
         },
         setItem: (name, value) => {
+          if (switchingOwner) return;
           try {
-            const syncState = useSyncStore.getState();
-            const canSync = canSyncToServer(syncState);
-            const persistWorkspaceLocally = !canSync || !syncState.isOnline;
-            if (!persistWorkspaceLocally) {
+            if (!persistsWorkspaceLocally(useSyncStore.getState())) {
               const lightweightValue = {
                 ...value,
                 state: {
@@ -228,9 +232,16 @@ export const useWorkflowStore = create<WorkflowState>()(
 
 // Khi chuyển từ "ghi lên server" sang "lưu cục bộ" (server từ chối, mất mạng, khách…) phải ghi lại bản đầy đủ xuống
 // localStorage — nếu không chỉ còn bản lưu nhẹ (danh sách rỗng) và dữ liệu mất khi tải lại trang.
-let wasPersistingLocally = persistsWorkspaceLocally(useSyncStore.getState());
-useSyncStore.subscribe((state) => {
-  const now = persistsWorkspaceLocally(state);
-  if (now && !wasPersistingLocally) useWorkflowStore.setState({});
-  wasPersistingLocally = now;
+useSyncStore.subscribe((state, previous) => {
+  if (state.workspaceEpoch !== previous.workspaceEpoch) {
+    switchingOwner = true;
+    try {
+      useWorkflowStore.setState(useWorkflowStore.getInitialState());
+      void useWorkflowStore.persist.rehydrate();
+    } finally {
+      switchingOwner = false;
+    }
+  } else if (persistsWorkspaceLocally(state) && !persistsWorkspaceLocally(previous)) {
+    useWorkflowStore.setState({});
+  }
 });

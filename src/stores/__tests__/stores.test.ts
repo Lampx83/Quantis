@@ -68,6 +68,83 @@ describe("DataStore & UIStore Expansion", () => {
   });
 
   describe("useDataStore Actions", () => {
+    it("reverses a whole paste and ignores invalid or unchanged batches", () => {
+      const store = useDataStore.getState();
+      store.batchUpdateCells([
+        { rowIndex: 0, colIndex: 2, value: "96" },
+        { rowIndex: 1, colIndex: 2, value: "98" },
+      ]);
+      expect(useDataStore.getState().datasets[0].preview.map((row) => row[2])).toEqual(["SCORE", "96", "98", "78"]);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].preview).toEqual(mockDataset.preview);
+      expect(store.undoDataset()).toBe(false);
+
+      store.batchUpdateCells([
+        { rowIndex: 0, colIndex: 2, value: "temporary" },
+        { rowIndex: 0, colIndex: 2, value: "85" },
+      ]);
+      store.batchUpdateCells([
+        { rowIndex: 0, colIndex: 2, value: "ignored" },
+        { rowIndex: 3, colIndex: 2, value: "invalid" },
+      ]);
+      expect(useDataStore.getState().datasets[0].preview).toEqual(mockDataset.preview);
+      expect(store.redoDataset()).toBe(true);
+    });
+
+    it.each([true, false])("restores row order, preview and counts with a header present: %s", (header) => {
+      const store = useDataStore.getState();
+      const rows = header ? mockDataset.preview : mockDataset.preview.slice(1);
+      store.setDatasets([{ ...mockDataset, data: rows, preview: rows.slice(0, header ? 3 : 2) }]);
+      const before = useDataStore.getState().datasets[0];
+      store.addRow(["7", "1", "99"], 1);
+      const inserted = useDataStore.getState().datasets[0];
+      expect(inserted.rows).toBe(4);
+      expect(inserted.data?.[header ? 2 : 1]).toEqual(["7", "1", "99"]);
+      store.removeRow(0);
+      expect(useDataStore.getState().datasets[0].rows).toBe(3);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].preview).toEqual(inserted.preview);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0]).toMatchObject({ rows: before.rows, preview: before.preview, data: before.data });
+      store.removeRow(-1);
+      expect(store.redoDataset()).toBe(true);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[header ? 1 : 0]).toEqual(["7", "1", "99"]);
+    });
+
+    it("keeps other histories when importing, replacing, or deleting datasets", () => {
+      const store = useDataStore.getState();
+      store.updateCell(0, 2, "92");
+      const first = useDataStore.getState().datasets[0];
+      const revision = store.getDatasetRevision(first.id);
+      store.addDataset({ ...mockDataset, id: "second" });
+      store.setSelectedDatasetId("second");
+      expect(store.getDatasetRevision(first.id)).toBe(revision);
+      store.updateCell(0, 2, "93");
+      store.setDatasets((datasets) => datasets.map((d) => d.id === first.id ? { ...first } : d));
+      expect(store.getDatasetRevision(first.id)).not.toBe(revision);
+      expect(store.undoDataset(first.id)).toBe(false);
+      expect(store.undoDataset()).toBe(true);
+      store.removeDataset(first.id);
+      store.addDataset(first);
+      expect(store.getDatasetRevision(first.id)).not.toBe(revision);
+    });
+
+    it("invalidates histories and revision tokens on hydration even if datasets are reused", async () => {
+      const store = useDataStore.getState();
+      store.updateCell(0, 2, "92");
+      const { datasets } = useDataStore.getState();
+      const revision = store.getDatasetRevision(mockDataset.id);
+      store.hydrateFromServer(datasets);
+      expect(store.getDatasetRevision(mockDataset.id)).not.toBe(revision);
+      expect(store.undoDataset()).toBe(false);
+      store.updateCell(0, 2, "96");
+      await useDataStore.persist.rehydrate();
+      expect(store.undoDataset()).toBe(false);
+      store.setDatasets([]);
+      expect(store.getDatasetRevision(mockDataset.id)).toBeUndefined();
+    });
+
     it("retains at most 50 undo steps per dataset", () => {
       const store = useDataStore.getState();
       for (let i = 0; i < 52; i++) store.updateCell(0, 2, String(i));
