@@ -12,7 +12,7 @@ export function AppStatusBar() {
     setShowLoginModal,
   } = useUIStore();
 
-  const { datasets, selectedDatasetId } = useDataStore();
+  const { datasets, selectedDatasetId, historyLimitDatasetId } = useDataStore();
   const { workflows, selectedWorkflowId, selectedWorkflowStepId } = useWorkflowStore();
   const { useBackend, authConfig, authUser, authLoading } = useSyncStore();
 
@@ -71,6 +71,9 @@ export function AppStatusBar() {
           </>
         )}
       </span>
+      {selectedDataset && selectedDataset.id === historyLimitDatasetId && (
+        <span role="status" className="text-amber-800 dark:text-amber-300">{t("datasetHistory.limit")}</span>
+      )}
       <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1.5 border-l border-neutral-200 pl-2 dark:border-neutral-600 sm:gap-2">
         {quantisApi.isPortalEmbed() && authLoading && !authUser && (
           <span className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap truncate">

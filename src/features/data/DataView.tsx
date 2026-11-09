@@ -11,6 +11,7 @@ import { VariableViewGrid } from "./grid/VariableViewGrid";
 import { BundleNavigationBar } from "./grid/BundleNavigationBar";
 import { TransformTab } from "./TransformTab";
 import { DescriptiveStatsView } from "./DescriptiveStatsView";
+import { useDatasetHistoryShortcuts } from "./useDatasetHistoryShortcuts";
 
 export interface DataViewProps {
   tab: DataTab;
@@ -114,6 +115,8 @@ export function DataView({
   descriptiveBackendResult = null,
 }: DataViewProps) {
   const selectedDs = selectedDatasetId ? datasets.find((d) => d.id === selectedDatasetId) ?? null : null;
+  const editing = tab === "preview" || tab === "import" || tab === "transform";
+  useDatasetHistoryShortcuts(editing ? selectedDs?.id ?? null : null);
 
   if (tab === "descriptive") {
     return (

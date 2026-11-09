@@ -5,11 +5,28 @@ import { ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { useSyncStore, canSyncToServer, persistsWorkspaceLocally } from "./useSyncStore";
+import {
+  applyDatasetChange,
+  createHistoryStep,
+  datasetRowOffset,
+  editMatrixCell,
+  newDatasetChange,
+  HISTORY_BYTE_LIMIT,
+  retainHistoryStep,
+  validCell,
+  type DatasetChangeSummary,
+  type DatasetContentPatch,
+  type DatasetHistory,
+} from "./datasetHistory";
 
 export interface DataState {
   // --- State ---
   datasets: Dataset[];
   selectedDatasetId: string | null;
+  historyByDataset: ReadonlyMap<string, DatasetHistory>;
+  historyLimitDatasetId: string | null;
+  undoDataset: (datasetId?: string) => boolean;
+  redoDataset: (datasetId?: string) => boolean;
 
   // --- Actions ---
   setDatasets: (datasets: Dataset[] | ((prev: Dataset[]) => Dataset[])) => void;
@@ -34,11 +51,60 @@ export interface DataState {
   cloneBundleAsStandardDataset: (datasetId: string, index: number) => Dataset | undefined;
 }
 
+function commitDatasetChange(
+  state: DataState,
+  dataset: Dataset,
+  patch: DatasetContentPatch,
+  summary: DatasetChangeSummary,
+  affectedRows?: readonly number[],
+): Partial<DataState> {
+  const change = newDatasetChange(dataset.id, "commit", summary);
+  const step = createHistoryStep(dataset, patch, change, affectedRows);
+  return {
+    datasets: state.datasets.map((d) => d === dataset ? applyDatasetChange(d, patch, change) : d),
+    historyByDataset: retainHistoryStep(state.historyByDataset, step),
+    historyLimitDatasetId: step.bytes > HISTORY_BYTE_LIMIT ? dataset.id :
+      state.historyLimitDatasetId === dataset.id ? null : state.historyLimitDatasetId,
+  };
+}
+
+function reverseDatasetChange(state: DataState, direction: "undo" | "redo", datasetId?: string): DataState | Partial<DataState> {
+  const id = datasetId ?? state.selectedDatasetId;
+  const dataset = state.datasets.find((d) => d.id === id);
+  const history = dataset && state.historyByDataset.get(dataset.id);
+  const stack = history?.[direction];
+  const step = stack?.[stack.length - 1];
+  if (!dataset || !history || !step) return state;
+
+  const historyByDataset = new Map(state.historyByDataset);
+  historyByDataset.set(dataset.id, direction === "undo"
+    ? { undo: history.undo.slice(0, -1), redo: [...history.redo, step] }
+    : { undo: [...history.undo, step], redo: history.redo.slice(0, -1) });
+  const change = newDatasetChange(dataset.id, direction, step.change, step.change.id);
+  const patch = direction === "undo" ? step.before : step.after;
+  return {
+    datasets: state.datasets.map((d) => d === dataset ? applyDatasetChange(d, patch, change) : d),
+    historyByDataset,
+  };
+}
+
 export const useDataStore = create<DataState>()(
   persist(
-    (set) => ({
+    (set, get) => {
+      function reverse(direction: "undo" | "redo", datasetId?: string): boolean {
+        const state = get();
+        const next = reverseDatasetChange(state, direction, datasetId);
+        if (next === state) return false;
+        set(next);
+        return true;
+      }
+      return {
       datasets: [],
       selectedDatasetId: null,
+      historyByDataset: new Map(),
+      historyLimitDatasetId: null,
+      undoDataset: (id) => reverse("undo", id),
+      redoDataset: (id) => reverse("redo", id),
 
       setDatasets: (datasets) =>
         set((s) => ({
@@ -68,52 +134,19 @@ export const useDataStore = create<DataState>()(
         })),
       hydrateFromServer: (datasets) => set({ datasets }),
 
-      updateCell: (rowIndex, colIndex, value, datasetId) =>
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          if (!targetId) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || target.readOnly) return s;
-          return {
-            datasets: s.datasets.map((d) => {
-              if (d.id !== targetId) return d;
-              const ensured = d.variables ? d : ensureDatasetMetadata(d);
-              const now = new Date().toISOString();
-              let newData = d.data;
-              if (d.data && d.data.length > 0) {
-                const hasHeader =
-                  d.data.length === d.rows + 1 ||
-                  (d.columnNames && d.data[0][0] === d.columnNames[0]);
-                const actualRow = hasHeader ? rowIndex + 1 : rowIndex;
-                if (actualRow >= 0 && actualRow < d.data.length) {
-                  const updatedRow = [...d.data[actualRow]];
-                  updatedRow[colIndex] = value;
-                  newData = [...d.data];
-                  newData[actualRow] = updatedRow;
-                }
-              }
-              let newPreview = d.preview;
-              if (d.preview && d.preview.length > 0) {
-                const hasPreviewHeader =
-                  d.preview.length === d.rows + 1 ||
-                  (d.columnNames && d.preview[0][0] === d.columnNames[0]);
-                const actualPreviewRow = hasPreviewHeader ? rowIndex + 1 : rowIndex;
-                if (actualPreviewRow >= 0 && actualPreviewRow < d.preview.length) {
-                  const updatedRow = [...d.preview[actualPreviewRow]];
-                  updatedRow[colIndex] = value;
-                  newPreview = [...d.preview];
-                  newPreview[actualPreviewRow] = updatedRow;
-                }
-              }
-              return {
-                ...ensured,
-                data: newData,
-                preview: newPreview,
-                updatedAt: now,
-              };
-            }),
-          };
-        }),
+      updateCell: (rowIndex, colIndex, value, datasetId) => {
+        const state = get();
+        const dataset = state.datasets.find((d) => d.id === (datasetId ?? state.selectedDatasetId));
+        if (!dataset || dataset.readOnly || !validCell(dataset, rowIndex, colIndex)) return;
+        const data = editMatrixCell(dataset.data, rowIndex + datasetRowOffset(dataset.data, dataset), colIndex, value);
+        const preview = editMatrixCell(dataset.preview, rowIndex + datasetRowOffset(dataset.preview, dataset), colIndex, value);
+        if (data === dataset.data && preview === dataset.preview) return;
+        const patch: DatasetContentPatch = { data, preview };
+        if (!dataset.variables) patch.variables = ensureDatasetMetadata(dataset).variables;
+        set(commitDatasetChange(state, dataset, patch, {
+          action: "cell", columns: [dataset.columnNames[colIndex]], firstRow: rowIndex + 1, lastRow: rowIndex + 1, cellCount: 1,
+        }, [rowIndex]));
+      },
 
       batchUpdateCells: (updates, datasetId) =>
         set((s) => {
@@ -564,7 +597,8 @@ export const useDataStore = create<DataState>()(
         });
         return created;
       },
-    }),
+      };
+    },
     {
       name: "quantis_data",
       partialize: (s) =>

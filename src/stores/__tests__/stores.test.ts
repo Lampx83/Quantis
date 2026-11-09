@@ -58,6 +58,7 @@ describe("DataStore & UIStore Expansion", () => {
   beforeEach(() => {
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(mockDataset))],
+      historyByDataset: new Map(),
       selectedDatasetId: "ds_test",
     });
     useUIStore.setState({
@@ -67,6 +68,65 @@ describe("DataStore & UIStore Expansion", () => {
   });
 
   describe("useDataStore Actions", () => {
+    it("retains at most 50 undo steps per dataset", () => {
+      const store = useDataStore.getState();
+      for (let i = 0; i < 52; i++) store.updateCell(0, 2, String(i));
+      for (let i = 0; i < 50; i++) expect(store.undoDataset()).toBe(true);
+      expect(store.undoDataset()).toBe(false);
+      expect(useDataStore.getState().datasets[0].data?.[1][2]).toBe("1");
+    });
+
+    it("commits an oversized edit while dropping only that dataset's disconnected history", () => {
+      const store = useDataStore.getState();
+      store.addDataset({ ...mockDataset, id: "second" });
+      store.updateCell(0, 2, "95");
+      store.updateCell(0, 2, "96", "second");
+      const oversized = "x".repeat(9 * 1024 * 1024);
+      store.updateCell(0, 2, oversized);
+      expect(useDataStore.getState().datasets[0].data?.[1][2]).toBe(oversized);
+      expect(useDataStore.getState().historyLimitDatasetId).toBe("ds_test");
+      expect(store.undoDataset()).toBe(false);
+      expect(store.undoDataset("second")).toBe(true);
+    });
+
+    it("drops dependent redos when the workspace budget evicts their prerequisite", () => {
+      const store = useDataStore.getState();
+      const rows = Array.from({ length: 50_000 }, () => ["1", "1", "85"]);
+      store.setDatasets([{ ...mockDataset, rows: rows.length, data: rows, preview: rows.slice(0, 5) }]);
+      store.addDataset({ ...mockDataset, id: "second", rows: rows.length, data: rows });
+      store.updateCell(0, 2, "first");
+      store.updateCell(0, 2, "second");
+      store.undoDataset();
+      store.undoDataset();
+      for (let i = 0; i < 20; i++) store.updateCell(0, 2, String(i), "second");
+      expect(store.redoDataset()).toBe(false);
+      expect(store.undoDataset("second")).toBe(true);
+    });
+
+    it("undoes and redoes only the selected dataset and preserves redo on invalid or unchanged edits", () => {
+      const store = useDataStore.getState();
+      store.addDataset({ ...mockDataset, id: "second" });
+      store.updateCell(0, 2, "95");
+      store.updateCell(0, 2, "99", "second");
+
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets.map((d) => d.preview[1][2])).toEqual(["85", "99"]);
+      expect(useDataStore.getState().datasets[0].data).toEqual(mockDataset.data);
+
+      store.updateCell(0, 2, "85");
+      store.updateCell(-1, 2, "ignored");
+      store.updateCell(0, 3, "ignored");
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[1][2]).toBe("95");
+
+      store.undoDataset();
+      store.updateCell(0, 2, "96");
+      expect(store.redoDataset()).toBe(false);
+      store.setSelectedDatasetId("second");
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets.map((d) => d.preview[1][2])).toEqual(["96", "85"]);
+    });
+
     it("addDataset should add a new dataset and prevent duplicate entries with identical IDs", () => {
       const { addDataset } = useDataStore.getState();
       const newDataset: Dataset = {
