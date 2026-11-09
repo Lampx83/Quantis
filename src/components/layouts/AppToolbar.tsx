@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Table2,
   ScanSearch,
@@ -23,22 +22,18 @@ import {
   Gauge,
   Undo2,
   Redo2,
-  History,
 } from "lucide-react";
 import { useDataStore, useUIStore, useWorkflowStore } from "@/stores";
 import { t, useLocale } from "@/i18n";
-import { TransformationHistory } from "@/features/data/TransformationHistory";
 
-function DatasetHistoryControls() {
+function DatasetUndoRedoControls() {
   useLocale();
-  const [open, setOpen] = useState(false);
-  const dataset = useDataStore((state) => state.datasets.find((d) => d.id === state.selectedDatasetId));
   const history = useDataStore((state) =>
     state.selectedDatasetId ? state.historyByDataset.get(state.selectedDatasetId) : undefined,
   );
-  const buttonClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm hover:bg-neutral-200 dark:hover:bg-neutral-700 disabled:opacity-40 disabled:pointer-events-none";
+  const buttonClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap hover:bg-neutral-200 dark:hover:bg-neutral-700 disabled:opacity-40 disabled:pointer-events-none";
   return (
-    <div className="flex items-center gap-1 border-l border-neutral-300 dark:border-neutral-600 pl-1">
+    <div className="ml-auto flex items-center gap-1">
       <button type="button" className={buttonClass} disabled={!history?.undo.length}
         onClick={() => useDataStore.getState().undoDataset()}>
         <Undo2 className="w-4 h-4" /> {t("datasetHistory.undo")}
@@ -47,11 +42,6 @@ function DatasetHistoryControls() {
         onClick={() => useDataStore.getState().redoDataset()}>
         <Redo2 className="w-4 h-4" /> {t("datasetHistory.redo")}
       </button>
-      <button type="button" className={buttonClass} disabled={!dataset} aria-haspopup="dialog"
-        onClick={() => setOpen(true)}>
-        <History className="w-4 h-4" /> {t("datasetHistory.open")}
-      </button>
-      {open && dataset && <TransformationHistory dataset={dataset} onClose={() => setOpen(false)} />}
     </div>
   );
 }
@@ -124,7 +114,7 @@ export function AppToolbar() {
           >
             <Shuffle className="w-4 h-4 shrink-0" /> {t("app.dataTab.transform")}
           </button>
-          <DatasetHistoryControls />
+          <DatasetUndoRedoControls />
         </div>
       )}
 
@@ -609,7 +599,7 @@ export function AppToolbar() {
                 {t("app.mainTab.presentation.label")}
               </span>
             )}
-            {["import", "clean", "transform"].includes(selectedStep.type) && <DatasetHistoryControls />}
+            {["import", "clean", "transform"].includes(selectedStep.type) && <DatasetUndoRedoControls />}
           </div>
         )}
     </>
