@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workflow, WorkflowStep } from "@/types";
-import { useSyncStore, persistsWorkspaceLocally, workspaceOwner } from "./useSyncStore";
+import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache, workspaceOwner } from "./useSyncStore";
 
 let switchingOwner = false;
 
@@ -244,7 +244,7 @@ useSyncStore.subscribe((state, previous) => {
     } finally {
       switchingOwner = false;
     }
-  } else if (persistsWorkspaceLocally(state) && !persistsWorkspaceLocally(previous)) {
+  } else if (shouldWriteWorkspaceCache(state, previous)) {
     useWorkflowStore.setState({});
   }
 });

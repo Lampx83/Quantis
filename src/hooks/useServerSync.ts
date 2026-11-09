@@ -21,6 +21,8 @@ export function startWorkspaceSync(): () => void {
   let didPull = false;
   let applyingPull = false;
   let stopped = false;
+  let saving = false;
+  let dirty = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function cancelSave() {
@@ -32,20 +34,39 @@ export function startWorkspaceSync(): () => void {
     return !stopped && useSyncStore.getState().workspaceEpoch === ownerEpoch;
   }
 
-  function scheduleSave() {
+  function armSave() {
     const state = useSyncStore.getState();
-    if (applyingPull || !current(epoch) || !state.isOnline || !canSyncToServer(state)) return;
-    cancelSave();
+    if (!dirty || timer || saving || pulling || !current(epoch) || !state.isOnline || !canSyncToServer(state)) return;
     const ownerEpoch = epoch;
     timer = setTimeout(async () => {
       timer = undefined;
       const connection = useSyncStore.getState();
       if (!current(ownerEpoch) || !connection.isOnline || !canSyncToServer(connection)) return;
+      saving = true;
+      dirty = false;
       const datasets = useDataStore.getState().datasets;
       const workflows = useWorkflowStore.getState().workflows;
       const ok = await quantisApi.saveData({ datasets, workflows }).catch(() => false);
-      if (!ok && current(ownerEpoch)) useSyncStore.getState().setUseBackend(false);
+      if (!current(ownerEpoch)) return;
+      saving = false;
+      const sync = useSyncStore.getState();
+      if (!ok) {
+        sync.setWorkspaceSaveStatus("failed");
+      } else if (datasets === useDataStore.getState().datasets && workflows === useWorkflowStore.getState().workflows) {
+        sync.setWorkspaceSaveStatus("saved");
+      }
+      armSave();
     }, 1500);
+  }
+
+  function scheduleSave() {
+    const state = useSyncStore.getState();
+    if (applyingPull || !current(epoch) || !canSyncToServer(state)) return;
+    if (state.workspaceSaveStatus === "saved") state.setWorkspaceSaveStatus("idle");
+    if (!state.isOnline) return;
+    dirty = true;
+    cancelSave();
+    armSave();
   }
 
   function updateConnection(state: SyncState, previous?: SyncState) {
@@ -58,11 +79,20 @@ export function startWorkspaceSync(): () => void {
       cancelSave();
       pullVersion++;
       pulling = false;
-      if (ownerChanged || !canSync) didPull = false;
+      if (ownerChanged || !canSync) {
+        didPull = false;
+        dirty = false;
+      }
+      if (ownerChanged) saving = false;
       epoch = state.workspaceEpoch;
       state.setWorkspacePullLoading(false);
     }
-    if (!state.isOnline || !canSync || didPull || pulling) return;
+    if (!state.isOnline || !canSync) return;
+    if (didPull || pulling) {
+      if (state.workspaceSaveStatus === "failed") dirty = true;
+      armSave();
+      return;
+    }
 
     const ownerEpoch = epoch;
     const request = ++pullVersion;
@@ -73,6 +103,7 @@ export function startWorkspaceSync(): () => void {
       .then((data) => {
         if (!valid() || !data) return;
         cancelSave();
+        dirty = false;
         applyingPull = true;
         try {
           useDataStore.getState().hydrateFromServer(data.datasets);
@@ -88,6 +119,7 @@ export function startWorkspaceSync(): () => void {
         pulling = false;
         didPull = true;
         useSyncStore.getState().setWorkspacePullLoading(false);
+        armSave();
       });
   }
 

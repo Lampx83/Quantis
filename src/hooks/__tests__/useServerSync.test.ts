@@ -103,4 +103,80 @@ describe("workspace sync ownership", () => {
     expect(save).not.toHaveBeenCalled();
     expect(useDataStore.getState().datasets.map((d) => d.id)).toEqual(["b-data"]);
   });
+
+  it("reports failed server saves, persists the audit locally, and reloads a recovered save", async () => {
+    const pull = vi.spyOn(api, "getData").mockResolvedValue({ datasets: [dataset("a-data")], workflows: [] });
+    const save = vi.spyOn(api, "saveData").mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    useSyncStore.getState().setUseBackend(true);
+    stop = startWorkspaceSync();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const data = useDataStore.getState();
+    data.updateCell(0, 0, "2", "a-data");
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(useSyncStore.getState().workspaceSaveStatus).toBe("failed");
+    const fallback = JSON.parse(localStorage.getItem("quantis_data")!).state;
+    expect(fallback.datasets[0].audit.entries).toHaveLength(1);
+    expect(fallback).not.toHaveProperty("historyByDataset");
+    expect(useSyncStore.getState().localSaveFailures.datasets).toBe(false);
+
+    data.updateCell(0, 0, "3", "a-data");
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(useSyncStore.getState().workspaceSaveStatus).toBe("saved");
+    const remote = JSON.parse(JSON.stringify(save.mock.calls[1][0]));
+    expect(Object.keys(remote)).toEqual(["datasets", "workflows"]);
+    expect(remote.datasets[0].audit.entries).toHaveLength(2);
+    expect(remote.datasets[0].data[1][0]).toBe("3");
+    expect(JSON.parse(localStorage.getItem("quantis_data")!).state.datasets).toEqual([]);
+
+    stop();
+    data.hydrateFromServer([]);
+    pull.mockResolvedValue(remote);
+    stop = startWorkspaceSync();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useDataStore.getState().datasets[0].audit).toEqual(remote.datasets[0].audit);
+    expect(data.undoDataset("a-data")).toBe(false);
+  });
+
+  it("serializes saves so an older result cannot overtake a newer edit", async () => {
+    vi.spyOn(api, "getData").mockResolvedValue({ datasets: [dataset("a-data")], workflows: [] });
+    const first = deferred<boolean>();
+    const save = vi.spyOn(api, "saveData").mockReturnValueOnce(first.promise).mockResolvedValue(true);
+    useSyncStore.getState().setUseBackend(true);
+    stop = startWorkspaceSync();
+    await vi.advanceTimersByTimeAsync(0);
+    const data = useDataStore.getState();
+    data.updateCell(0, 0, "2", "a-data");
+    await vi.advanceTimersByTimeAsync(1500);
+    data.updateCell(0, 0, "3", "a-data");
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(save).toHaveBeenCalledOnce();
+    first.resolve(true);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0].datasets[0].data?.[1][0]).toBe("3");
+  });
+
+  it("ignores an in-flight save result after the Portal owner changes", async () => {
+    const pull = vi.spyOn(api, "getData").mockResolvedValue({ datasets: [dataset("a-data")], workflows: [] });
+    const pending = deferred<boolean>();
+    const save = vi.spyOn(api, "saveData").mockReturnValueOnce(pending.promise);
+    const auth = useSyncStore.getState();
+    auth.setUseBackend(true);
+    stop = startWorkspaceSync();
+    await vi.advanceTimersByTimeAsync(0);
+    useDataStore.getState().updateCell(0, 0, "2", "a-data");
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(save).toHaveBeenCalledOnce();
+
+    pull.mockResolvedValue({ datasets: [dataset("b-data")], workflows: [] });
+    auth.setAuthUser(userB);
+    await vi.advanceTimersByTimeAsync(0);
+    pending.resolve(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useSyncStore.getState().workspaceSaveStatus).toBe("idle");
+    expect(useSyncStore.getState().useBackend).toBe(true);
+    expect(useDataStore.getState().datasets[0]).toMatchObject({ id: "b-data" });
+    expect(useDataStore.getState().datasets[0].audit).toBeUndefined();
+  });
 });

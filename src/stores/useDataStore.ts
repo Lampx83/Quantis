@@ -4,7 +4,7 @@ import type { Dataset, DatasetChangeSummary, DerivationSummary, TransformChangeS
 import { ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
-import { useSyncStore, persistsWorkspaceLocally, workspaceOwner } from "./useSyncStore";
+import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache, workspaceOwner } from "./useSyncStore";
 import {
   applyDatasetChange,
   createHistoryStep,
@@ -495,7 +495,7 @@ useSyncStore.subscribe((state, previous) => {
     } finally {
       switchingOwner = false;
     }
-  } else if (persistsWorkspaceLocally(state) && !persistsWorkspaceLocally(previous)) {
+  } else if (shouldWriteWorkspaceCache(state, previous)) {
     useDataStore.setState({});
   }
 });

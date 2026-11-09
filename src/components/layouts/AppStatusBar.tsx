@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen, User } from "lucide-react";
-import { useUIStore, useDataStore, useWorkflowStore, useSyncStore } from "@/stores";
+import { useUIStore, useDataStore, useWorkflowStore, useSyncStore, canSyncToServer, persistsWorkspaceLocally } from "@/stores";
 import * as quantisApi from "@/api";
 import { t, useLocale } from "@/i18n";
 
@@ -15,7 +15,14 @@ export function AppStatusBar() {
 
   const { datasets, selectedDatasetId, historyLimitDatasetId } = useDataStore();
   const { workflows, selectedWorkflowId, selectedWorkflowStepId } = useWorkflowStore();
-  const { useBackend, authConfig, authUser, authLoading, localSaveFailures } = useSyncStore();
+  const sync = useSyncStore();
+  const { useBackend, authConfig, authUser, authLoading, localSaveFailures, workspaceSaveStatus } = sync;
+  const localFailed = localSaveFailures.datasets || localSaveFailures.workflows;
+  const remoteSaved = workspaceSaveStatus === "saved" && sync.isOnline && canSyncToServer(sync);
+  const saveMessage = workspaceSaveStatus === "failed"
+    ? t(localFailed ? "workspaceSave.bothFailed" : "workspaceSave.remoteFailedLocalSaved")
+    : remoteSaved ? t("workspaceSave.remoteSaved")
+    : localFailed && persistsWorkspaceLocally(sync) ? t("workspaceSave.localFailed") : null;
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
   const selectedWorkflow = selectedWorkflowId ? workflows.find((w) => w.id === selectedWorkflowId) : null;
@@ -75,8 +82,8 @@ export function AppStatusBar() {
       {selectedDataset && selectedDataset.id === historyLimitDatasetId && (
         <span role="status" className="text-amber-800 dark:text-amber-300">{t("datasetHistory.limit")}</span>
       )}
-      {(localSaveFailures.datasets || localSaveFailures.workflows) && (
-        <span role="status" className="text-amber-800 dark:text-amber-300">{t("workspaceSave.localFailed")}</span>
+      {saveMessage && (
+        <span role="status" className={remoteSaved ? "" : "text-amber-800 dark:text-amber-300"}>{saveMessage}</span>
       )}
       <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1.5 border-l border-neutral-200 pl-2 dark:border-neutral-600 sm:gap-2">
         {quantisApi.isPortalEmbed() && authLoading && !authUser && (

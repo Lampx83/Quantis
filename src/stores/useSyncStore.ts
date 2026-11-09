@@ -4,6 +4,7 @@ import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
 import * as quantisApi from "@/api";
 
 type LocalSaveScope = "datasets" | "workflows";
+type WorkspaceSaveStatus = "idle" | "saved" | "failed";
 
 export interface SyncState {
   // Connection
@@ -25,6 +26,7 @@ export interface SyncState {
   workspacePullLoading: boolean;
   workspaceEpoch: number;
   localSaveFailures: Record<LocalSaveScope, boolean>;
+  workspaceSaveStatus: WorkspaceSaveStatus;
   sidebarImportBusy: boolean;
   embedConfigGeneration: number;
 
@@ -52,6 +54,7 @@ export interface SyncState {
   refreshSampleDatasets: () => Promise<void>;
   setWorkspacePullLoading: (loading: boolean) => void;
   setLocalSaveFailure: (scope: LocalSaveScope, failed: boolean) => void;
+  setWorkspaceSaveStatus: (status: WorkspaceSaveStatus) => void;
   setSidebarImportBusy: (busy: boolean) => void;
   setEmbedConfigGeneration: (gen: number | ((prev: number) => number)) => void;
 
@@ -82,6 +85,7 @@ export const useSyncStore = create<SyncState>((set) => ({
   workspacePullLoading: false,
   workspaceEpoch: 0,
   localSaveFailures: { datasets: false, workflows: false },
+  workspaceSaveStatus: "idle",
   sidebarImportBusy: false,
   embedConfigGeneration: 0,
 
@@ -102,7 +106,12 @@ export const useSyncStore = create<SyncState>((set) => ({
   setAuthUser: (authUser) => set((state) =>
     workspaceOwner(authUser) === workspaceOwner(state.authUser)
       ? { authUser }
-      : { authUser, workspaceEpoch: state.workspaceEpoch + 1, localSaveFailures: { datasets: false, workflows: false } }),
+      : {
+          authUser,
+          workspaceEpoch: state.workspaceEpoch + 1,
+          localSaveFailures: { datasets: false, workflows: false },
+          workspaceSaveStatus: "idle",
+        }),
   setAuthLoading: (authLoading) => set({ authLoading }),
   setIsPortalAdmin: (isPortalAdmin) => set({ isPortalAdmin }),
   setSampleDatasetsList: (sampleDatasetsList) => set({ sampleDatasetsList }),
@@ -120,6 +129,8 @@ export const useSyncStore = create<SyncState>((set) => ({
   setWorkspacePullLoading: (workspacePullLoading) => set({ workspacePullLoading }),
   setLocalSaveFailure: (scope, failed) => set((state) =>
     state.localSaveFailures[scope] === failed ? state : { localSaveFailures: { ...state.localSaveFailures, [scope]: failed } }),
+  setWorkspaceSaveStatus: (workspaceSaveStatus) => set((state) =>
+    state.workspaceSaveStatus === workspaceSaveStatus ? state : { workspaceSaveStatus }),
   setSidebarImportBusy: (sidebarImportBusy) => set({ sidebarImportBusy }),
   setEmbedConfigGeneration: (embedConfigGeneration) =>
     set((s) => ({
@@ -197,6 +208,13 @@ export function persistsWorkspaceLocally(s: {
   authConfig: AuthConfig | null;
   authUser: AuthUser | null;
   isOnline: boolean;
+  workspaceSaveStatus?: WorkspaceSaveStatus;
 }): boolean {
-  return !canSyncToServer(s) || !s.isOnline;
+  return !canSyncToServer(s) || !s.isOnline || s.workspaceSaveStatus === "failed";
+}
+
+export function shouldWriteWorkspaceCache(state: SyncState, previous: SyncState): boolean {
+  const local = persistsWorkspaceLocally(state);
+  const wasLocal = persistsWorkspaceLocally(previous);
+  return local !== wasLocal && (local || state.workspaceSaveStatus === "saved");
 }
