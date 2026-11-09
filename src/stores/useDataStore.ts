@@ -8,16 +8,19 @@ import { useSyncStore, persistsWorkspaceLocally, workspaceOwner } from "./useSyn
 import {
   applyDatasetChange,
   createHistoryStep,
+  datasetRowOffset,
   editMatrixCells,
   editMatrixRow,
   newDatasetChange,
   HISTORY_BYTE_LIMIT,
   retainHistoryStep,
+  sameContent,
   validCell,
   type CellEdit,
   type DatasetChangeSummary,
   type DatasetContentPatch,
   type DatasetHistory,
+  type TransformChangeSummary,
 } from "./datasetHistory";
 
 export interface DataState {
@@ -37,6 +40,7 @@ export interface DataState {
   setSelectedDatasetId: (id: string | null | ((prev: string | null) => string | null)) => void;
   hydrateFromServer: (datasets: Dataset[]) => void;
   getDatasetRevision: (id: string) => symbol | undefined;
+  commitDatasetTransform: (id: string, revision: symbol, result: Dataset, summary: TransformChangeSummary) => Dataset | undefined;
 
   // --- Cell & Row & Column Editing Actions ---
   updateCell: (rowIndex: number, colIndex: number, value: string, datasetId?: string) => void;
@@ -85,7 +89,7 @@ function commitDatasetChange(
   patch: DatasetContentPatch,
   summary: DatasetChangeSummary,
   affectedRows?: readonly number[],
-): Partial<DataState> {
+) {
   const change = newDatasetChange(dataset.id, "commit", summary);
   const step = createHistoryStep(dataset, patch, change, affectedRows);
   return {
@@ -174,6 +178,18 @@ export const useDataStore = create<DataState>()(
         }, { action, firstRow: row + 1, lastRow: row + 1, rowCount: 1 }, [row]));
       }
 
+      function editSchema(id: string | undefined, edit: (dataset: Dataset) => {
+        patch: DatasetContentPatch;
+        summary: DatasetChangeSummary;
+        affectedRows?: number[];
+      } | undefined) {
+        const state = get();
+        const dataset = state.datasets.find((d) => d.id === (id ?? state.selectedDatasetId));
+        if (!dataset || dataset.readOnly) return;
+        const result = edit(dataset);
+        if (result) set(commitDatasetChange(state, dataset, result.patch, result.summary, result.affectedRows));
+      }
+
       return {
       datasets: [],
       selectedDatasetId: null,
@@ -184,6 +200,22 @@ export const useDataStore = create<DataState>()(
       getDatasetRevision: (id) => {
         const dataset = get().datasets.find((d) => d.id === id);
         return dataset && revisionOf(dataset);
+      },
+      commitDatasetTransform: (id, revision, result, summary) => {
+        const state = get();
+        const dataset = state.datasets.find((d) => d.id === id);
+        if (!dataset || result.id !== id || revisionOf(dataset) !== revision) return;
+
+        const { name, rows, columns, columnNames, variables, preview, data, readOnly, imputationMeta } = result;
+        if (rows === dataset.rows && columns === dataset.columns && sameContent(columnNames, dataset.columnNames) &&
+          sameContent(data, dataset.data) && sameContent(variables, dataset.variables ?? ensureDatasetMetadata(dataset).variables) &&
+          Boolean(readOnly) === Boolean(dataset.readOnly) && sameContent(imputationMeta, dataset.imputationMeta)) return;
+
+        const next = commitDatasetChange(state, dataset, {
+          name, rows, columns, columnNames, variables, preview, data, readOnly, imputationMeta,
+        }, summary);
+        set(next);
+        return next.datasets.find((d) => d.id === id);
       },
 
       setDatasets: (datasets) =>
@@ -214,209 +246,86 @@ export const useDataStore = create<DataState>()(
         editCells("cell", [{ rowIndex, colIndex, value }], id),
       batchUpdateCells: (updates, id) => editCells("paste", updates, id),
 
-      updateVariableMetadata: (varName, patch, datasetId) =>
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          if (!targetId) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || target.readOnly) return s;
-          return {
-            datasets: s.datasets.map((d) => {
-              if (d.id !== targetId) return d;
-              const ensured = ensureDatasetMetadata(d);
-              const currentVars = ensured.variables ? { ...ensured.variables } : {};
-              if (!currentVars[varName]) {
-                currentVars[varName] = {
-                  name: varName,
-                  type: "string",
-                  label: varName,
-                  measure: "nominal",
-                  decimals: 0,
-                  align: "left",
-                  missingValues: [],
-                  ...patch,
-                };
-              } else {
-                currentVars[varName] = {
-                  ...currentVars[varName],
-                  ...patch,
-                };
-              }
-              if (
-                currentVars[varName].type === "string" &&
-                currentVars[varName].measure === "scale"
-              ) {
-                currentVars[varName].measure = "nominal";
-              }
-              return {
-                ...d,
-                variables: currentVars,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
-          };
-        }),
+      updateVariableMetadata: (varName, patch, id) => editSchema(id, (dataset) => {
+        if (!dataset.columnNames.includes(varName) || (patch.name !== undefined && patch.name !== varName)) return;
+        const variables = ensureDatasetMetadata(dataset).variables!;
+        const previous = variables[varName];
+        const updated = { ...previous, ...patch };
+        if (updated.type === "string" && updated.measure === "scale") updated.measure = "nominal";
+        if (sameContent(previous, updated)) return;
+        return {
+          patch: { variables: { ...variables, [varName]: updated } },
+          summary: { action: "metadata", columns: [varName] },
+        };
+      }),
 
-      renameVariable: (oldName, newName, datasetId) =>
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          const trimmedNew = newName.trim();
-          if (!targetId || oldName === trimmedNew || !trimmedNew) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || target.readOnly) return s;
-          return {
-            datasets: s.datasets.map((d) => {
-              if (d.id !== targetId) return d;
-              const colIdx = d.columnNames.indexOf(oldName);
-              if (colIdx === -1) return d;
+      renameVariable: (oldName, newName, id) => editSchema(id, (dataset) => {
+        const name = newName.trim();
+        const column = dataset.columnNames.indexOf(oldName);
+        if (column === -1 || !name || dataset.columnNames.includes(name)) return;
+        const columnNames = [...dataset.columnNames];
+        columnNames[column] = name;
+        const variables = { ...dataset.variables };
+        const oldMetadata = variables[oldName];
+        delete variables[oldName];
+        function renameHeader(matrix: string[][] | undefined) {
+          if (!matrix?.length || (!datasetRowOffset(matrix, dataset) && matrix[0][column] !== oldName)) return matrix;
+          const header = [...matrix[0]];
+          header[column] = name;
+          return [header, ...matrix.slice(1)];
+        }
+        return {
+          patch: {
+            columnNames,
+            variables: oldMetadata ? { ...variables, [name]: { ...oldMetadata, name } } : variables,
+            data: renameHeader(dataset.data),
+            preview: renameHeader(dataset.preview) ?? dataset.preview,
+          },
+          summary: { action: "renameColumn", columns: [oldName, name] },
+          affectedRows: [0, -1],
+        };
+      }),
 
-              const newColumnNames = [...d.columnNames];
-              newColumnNames[colIdx] = trimmedNew;
+      addVariable: (metadata, defaultValues = [], id) => editSchema(id, (dataset) => {
+        const name = metadata.name;
+        if (!name.trim() || dataset.columnNames.includes(name)) return;
+        const columnNames = [...dataset.columnNames, name];
+        function addColumn(matrix: string[][] | undefined) {
+          const offset = datasetRowOffset(matrix, dataset);
+          return matrix?.map((row, index) => [...row, index < offset ? name : defaultValues[index - offset] ?? ""]);
+        }
+        return {
+          patch: {
+            columnNames,
+            columns: columnNames.length,
+            variables: { ...dataset.variables, [name]: metadata },
+            data: addColumn(dataset.data),
+            preview: addColumn(dataset.preview) ?? dataset.preview,
+          },
+          summary: { action: "insertColumn", columns: [name], rowCount: dataset.rows },
+        };
+      }),
 
-              const ensured = ensureDatasetMetadata(d);
-              const newVars = { ...(ensured.variables ?? {}) };
-              if (newVars[oldName]) {
-                const oldMeta = newVars[oldName];
-                delete newVars[oldName];
-                newVars[trimmedNew] = {
-                  ...oldMeta,
-                  name: trimmedNew,
-                };
-              }
-
-              let newData = d.data;
-              if (d.data && d.data.length > 0) {
-                const hasHeader =
-                  d.data.length === d.rows + 1 ||
-                  (d.columnNames && d.data[0][colIdx] === oldName);
-                if (hasHeader) {
-                  const updatedHeaderRow = [...d.data[0]];
-                  updatedHeaderRow[colIdx] = trimmedNew;
-                  newData = [updatedHeaderRow, ...d.data.slice(1)];
-                }
-              }
-
-              let newPreview = d.preview;
-              if (d.preview && d.preview.length > 0) {
-                const hasHeader =
-                  d.preview.length === d.rows + 1 ||
-                  (d.columnNames && d.preview[0][colIdx] === oldName);
-                if (hasHeader) {
-                  const updatedHeaderRow = [...d.preview[0]];
-                  updatedHeaderRow[colIdx] = trimmedNew;
-                  newPreview = [updatedHeaderRow, ...d.preview.slice(1)];
-                }
-              }
-
-              return {
-                ...d,
-                columnNames: newColumnNames,
-                variables: newVars,
-                data: newData,
-                preview: newPreview,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
-          };
-        }),
-
-      addVariable: (metadata, defaultValues = [], datasetId) =>
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          if (!targetId || !metadata.name) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || target.readOnly) return s;
-          return {
-            datasets: s.datasets.map((d) => {
-              if (d.id !== targetId) return d;
-              if (d.columnNames.includes(metadata.name)) return d;
-
-              const newColumnNames = [...d.columnNames, metadata.name];
-              const newVars = {
-                ...d.variables,
-                [metadata.name]: metadata,
-              };
-
-              let newData = d.data;
-              if (d.data && d.data.length > 0) {
-                const hasHeader =
-                  d.data.length === d.rows + 1 ||
-                  (d.columnNames && d.data[0][0] === d.columnNames[0]);
-                newData = d.data.map((row, rIdx) => {
-                  if (hasHeader && rIdx === 0) {
-                    return [...row, metadata.name];
-                  }
-                  const dataRowIdx = hasHeader ? rIdx - 1 : rIdx;
-                  const val = defaultValues[dataRowIdx] ?? "";
-                  return [...row, val];
-                });
-              }
-
-              let newPreview = d.preview;
-              if (d.preview && d.preview.length > 0) {
-                const hasHeader =
-                  d.preview.length === d.rows + 1 ||
-                  (d.columnNames && d.preview[0][0] === d.columnNames[0]);
-                newPreview = d.preview.map((row, rIdx) => {
-                  if (hasHeader && rIdx === 0) {
-                    return [...row, metadata.name];
-                  }
-                  const dataRowIdx = hasHeader ? rIdx - 1 : rIdx;
-                  const val = defaultValues[dataRowIdx] ?? "";
-                  return [...row, val];
-                });
-              }
-
-              return {
-                ...d,
-                columns: newColumnNames.length,
-                columnNames: newColumnNames,
-                variables: newVars,
-                data: newData,
-                preview: newPreview,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
-          };
-        }),
-
-      removeVariable: (varName, datasetId) =>
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          if (!targetId) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || target.readOnly) return s;
-          return {
-            datasets: s.datasets.map((d) => {
-              if (d.id !== targetId) return d;
-              const colIdx = d.columnNames.indexOf(varName);
-              if (colIdx === -1) return d;
-
-              const newColumnNames = d.columnNames.filter((_, i) => i !== colIdx);
-              const newVars = { ...d.variables };
-              delete newVars[varName];
-
-              let newData = d.data;
-              if (d.data) {
-                newData = d.data.map((row) => row.filter((_, i) => i !== colIdx));
-              }
-              let newPreview = d.preview;
-              if (d.preview) {
-                newPreview = d.preview.map((row) => row.filter((_, i) => i !== colIdx));
-              }
-
-              return {
-                ...d,
-                columns: newColumnNames.length,
-                columnNames: newColumnNames,
-                variables: newVars,
-                data: newData,
-                preview: newPreview,
-                updatedAt: new Date().toISOString(),
-              };
-            }),
-          };
-        }),
+      removeVariable: (varName, id) => editSchema(id, (dataset) => {
+        const column = dataset.columnNames.indexOf(varName);
+        if (column === -1) return;
+        const columnNames = dataset.columnNames.filter((_, index) => index !== column);
+        const variables = { ...dataset.variables };
+        delete variables[varName];
+        function removeColumn(matrix: string[][] | undefined) {
+          return matrix?.map((row) => row.filter((_, index) => index !== column));
+        }
+        return {
+          patch: {
+            columnNames,
+            columns: columnNames.length,
+            variables,
+            data: removeColumn(dataset.data),
+            preview: removeColumn(dataset.preview) ?? dataset.preview,
+          },
+          summary: { action: "deleteColumn", columns: [varName], rowCount: dataset.rows },
+        };
+      }),
 
       addRow: (values, atIndex, id) => editRow("insertRow", id, atIndex, values),
       removeRow: (rowIndex, id) => editRow("deleteRow", id, rowIndex),
@@ -427,7 +336,8 @@ export const useDataStore = create<DataState>()(
           if (!targetId) return s;
           const target = s.datasets.find((d) => d.id === targetId);
           if (!target || !target.imputationMeta) return s;
-          if (index < 0 || index > target.imputationMeta.m) return s;
+          if (!Number.isInteger(index) || index < 0 || index > target.imputationMeta.m ||
+            index === target.imputationMeta.activeImputationIndex) return s;
 
           const newRows = reconstructImputedRows(
             target.imputationMeta.originalRows,

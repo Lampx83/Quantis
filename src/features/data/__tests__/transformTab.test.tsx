@@ -1131,7 +1131,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function SameVarHarness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
+        selectedDs: useDataStore.getState().datasets[0],
         setDatasets: useDataStore.getState().setDatasets,
         onSelectDataset: vi.fn(),
         initialAction: "recode",
@@ -1173,5 +1173,9 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const genderIdx = updatedDs.columnNames.indexOf("GENDER");
     expect(updatedDs.data![1][genderIdx]).toBe("Male");
     expect(updatedDs.data![2][genderIdx]).toBe("Female");
+    expect(useDataStore.getState().undoDataset()).toBe(true);
+    expect(useDataStore.getState().datasets[0].data).toEqual(sampleDatasetWithMissing.data);
+    expect(useDataStore.getState().redoDataset()).toBe(true);
+    expect(useDataStore.getState().datasets[0].data).toEqual(updatedDs.data);
   });
 });

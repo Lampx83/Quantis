@@ -1,14 +1,23 @@
 import type { Dataset } from "@/types";
 import { generateId } from "@/utils/helpers";
 
+export type TransformOperation =
+  | "drop_missing" | "fill_mean" | "fill_median" | "fill_mode" | "fill_hot_deck" | "fill_mice"
+  | "z_score" | "min_max" | "filter" | "sort" | "recode"
+  | "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
+
 export interface DatasetChangeSummary {
-  action: "cell" | "paste" | "insertRow" | "deleteRow";
+  action: "cell" | "paste" | "insertRow" | "deleteRow" | "metadata" | "renameColumn" | "insertColumn" | "deleteColumn" | "transform";
   columns?: string[];
   firstRow?: number;
   lastRow?: number;
   cellCount?: number;
   rowCount?: number;
+  operation?: TransformOperation;
+  formula?: string;
 }
+
+export type TransformChangeSummary = DatasetChangeSummary & { action: "transform"; operation: TransformOperation };
 
 export interface DatasetChange extends DatasetChangeSummary {
   id: string;
@@ -19,7 +28,7 @@ export interface DatasetChange extends DatasetChangeSummary {
 }
 
 export type DatasetContentPatch = Partial<Pick<Dataset,
-  "data" | "preview" | "variables" | "columnNames" | "rows" | "columns" | "readOnly" | "imputationMeta"
+  "name" | "data" | "preview" | "variables" | "columnNames" | "rows" | "columns" | "readOnly" | "imputationMeta"
 >>;
 
 export interface HistoryStep {
@@ -131,6 +140,16 @@ export function datasetRowOffset(matrix: string[][] | undefined, dataset: Datase
   return matrix?.length && (matrix.length === dataset.rows + 1 || matrix[0][0] === dataset.columnNames[0])
     ? 1
     : 0;
+}
+
+export function sameContent(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length &&
+    a.every((value, index) => sameContent(value, b[index]));
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  return [...new Set([...Object.keys(left), ...Object.keys(right)])].every((key) => sameContent(left[key], right[key]));
 }
 
 export function validCell(dataset: Dataset, row: number, column: number): boolean {

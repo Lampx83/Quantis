@@ -66,21 +66,12 @@ import {
   type RecodeElseAction,
 } from "@/utils/dataPrep";
 
+import { useDataStore } from "@/stores/useDataStore";
+import type { TransformChangeSummary, TransformOperation } from "@/stores/datasetHistory";
+
 type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
 const PREP_ACTIONS: PrepAction[] = ["rename", "coerce_numeric", "coerce_text", "compute", "log", "outlier_iqr", "dedupe"];
-export type TransformAction =
-  | "drop_missing"
-  | "fill_mean"
-  | "fill_median"
-  | "fill_mode"
-  | "fill_hot_deck"
-  | "fill_mice"
-  | "z_score"
-  | "min_max"
-  | "filter"
-  | "sort"
-  | "recode"
-  | PrepAction;
+export type TransformAction = TransformOperation;
 
 export type TransformCategory = "missing" | "scale" | "clean" | "variables";
 
@@ -538,13 +529,13 @@ export function TransformTab({
     initialInvalidateConfirm ? () => () => {} : null
   );
   const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(initialShowChoiceModal);
-  const [lastTransformResult, setLastTransformResult] = useState<{
-    before: string[][];
-    after: string[][];
-    actionLabel: string;
-    stats?: MiceImputationResponse["statistics"];
-    rubinStats?: RubinColumnStatistic[];
+  const [transformResult, setLastTransformResult] = useState<NonNullable<TransformTabProps["initialLastTransformResult"]> & {
+    dataset?: Dataset;
   } | null>(initialLastTransformResult ?? null);
+  const lastTransformResult = transformResult?.dataset && transformResult.dataset !== selectedDs ? null : transformResult;
+  useEffect(() => {
+    setLastTransformResult((result) => result?.dataset && result.dataset !== selectedDs ? null : result);
+  }, [selectedDs]);
   const [isHotDeckLoading, setIsHotDeckLoading] = useState(false);
   const [previewTab, setPreviewTab] = useState<"sideBySide" | "before" | "after">("sideBySide");
 
@@ -725,6 +716,12 @@ export function TransformTab({
   const applyTransform = async (overwriteOriginal: boolean, invalidateBundle = false) => {
     setShowTransformChoiceModal(false);
     if (dataRows.length < 2) return;
+    const store = useDataStore.getState();
+    const revision = store.getDatasetRevision(selectedDs.id);
+    if (!revision || (overwriteOriginal && !store.datasets.includes(selectedDs))) {
+      setPrepNote({ ok: false, text: t("transformTab.staleResult") });
+      return;
+    }
     let newRows: string[][];
     let statsForMice: MiceImputationResponse["statistics"] | undefined = undefined;
     let rubinStatsForMice: RubinColumnStatistic[] | undefined = undefined;
@@ -946,6 +943,11 @@ export function TransformTab({
       }
     }
 
+    if (store.getDatasetRevision(selectedDs.id) !== revision) {
+      setPrepNote({ ok: false, text: t("transformTab.staleResult") });
+      return;
+    }
+
     const now = new Date().toISOString();
     const suffix =
       prepSuffix ??
@@ -964,15 +966,6 @@ export function TransformTab({
         : transformAction === "fill_mice"
         ? ` (MICE m=${clampMiceM(miceM)})`
         : t("transformTab.suffixDefault"));
-
-    const beforeSnapshot = dataRows.map((r) => [...r]);
-    setLastTransformResult({
-      before: beforeSnapshot,
-      after: newRows,
-      actionLabel: suffix,
-      stats: statsForMice,
-      rubinStats: rubinStatsForMice,
-    });
 
     const newHeader = newRows[0];
     let baseVariables = selectedDs.variables ? { ...selectedDs.variables } : undefined;
@@ -1053,8 +1046,23 @@ export function TransformTab({
             ? imputationMetaForMice
             : (invalidateBundle ? undefined : selectedDs.imputationMeta),
       });
-      setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
-      setShowTransformChoiceModal(false);
+      const scopedColumns: Partial<Record<TransformAction, string[]>> = {
+        filter: [filterCol], sort: [sortCol], recode: [recodeCol, recodeTargetMode === "different" ? recodeNewColName.trim() : ""],
+        rename: [renameFrom, renameTo.trim()], compute: [computeName.trim()],
+      };
+      const summary: TransformChangeSummary = {
+        action: "transform",
+        operation: transformAction,
+        columns: (scopedColumns[transformAction] ?? (transformColsMultiple.length ? transformColsMultiple : [transformCol])).filter(Boolean),
+        rowCount: Math.abs(updatedDs.rows - selectedDs.rows) || updatedDs.rows,
+        formula: transformAction === "compute" ? computeFormula.trim() : undefined,
+      };
+      const committed = store.commitDatasetTransform(selectedDs.id, revision, updatedDs, summary);
+      if (!committed) {
+        setPrepNote({ ok: true, text: t("transformTab.unchangedResult") });
+        return;
+      }
+      setLastTransformResult({ dataset: committed, before: dataRows, after: newRows, actionLabel: suffix, stats: statsForMice, rubinStats: rubinStatsForMice });
     } else {
       const id = generateId();
       const newDs: Dataset = ensureDatasetMetadata({
@@ -1073,6 +1081,7 @@ export function TransformTab({
         imputationMeta: transformAction === "fill_mice" ? imputationMetaForMice : undefined,
       });
       setDatasets((prev) => [...prev, newDs]);
+      setLastTransformResult({ dataset: newDs, before: dataRows, after: newRows, actionLabel: suffix, stats: statsForMice, rubinStats: rubinStatsForMice });
       onSelectDataset(id);
       onWorkflowDatasetAdd?.(id);
       setShowTransformChoiceModal(false);

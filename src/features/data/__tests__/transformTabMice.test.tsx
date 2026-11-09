@@ -67,6 +67,46 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     vi.restoreAllMocks();
   });
 
+  it.each(["edit", "undo", "replacement"] as const)("discards MICE overwrite results after a same-ID %s", async (change) => {
+    const store = useDataStore.getState();
+    const id = sampleDatasetWithMissing.id;
+    if (change === "undo") store.updateCell(0, 1, "1020");
+    const source = useDataStore.getState().datasets[0];
+    let resolve!: (value: api.MiceImputationResponse) => void;
+    const pending = new Promise<api.MiceImputationResponse>((done) => { resolve = done; });
+    const analyze = vi.spyOn(api, "analyzeMiceImputation").mockReturnValue(pending);
+    let overwrite!: () => Promise<void>;
+    function Harness() {
+      const result = TransformTab({
+        selectedDs: source,
+        setDatasets: store.setDatasets,
+        onSelectDataset: vi.fn(),
+        initialShowChoiceModal: true,
+        initialColsMultiple: ["INCOME"],
+        initialAction: "fill_mice",
+      });
+      function findButton(node: any) {
+        if (node?.type === "button" && String(node.props.children).includes(t("transformTab.overwriteOriginalButton"))) {
+          overwrite = node.props.onClick;
+        }
+        if (node?.props?.children) [node.props.children].flat().forEach(findButton);
+      }
+      findButton(result);
+      return result;
+    }
+    renderToStaticMarkup(<Harness />);
+    const apply = overwrite();
+    expect(analyze).toHaveBeenCalledOnce();
+    if (change === "edit") store.updateCell(0, 1, "1020", id);
+    if (change === "undo") expect(store.undoDataset(id)).toBe(true);
+    if (change === "replacement") store.addDataset({ ...source, name: "Replaced" });
+    const current = useDataStore.getState();
+    resolve({ rows: source.data!, m: 2, iterations: 5, imputedColumns: ["INCOME"], statistics: [] });
+    await apply;
+    expect(useDataStore.getState().datasets).toBe(current.datasets);
+    expect(useDataStore.getState().historyByDataset).toBe(current.historyByDataset);
+  });
+
   it("1. renders number of datasets (m) input with default 5 and range 2 to 20 when fill_mice is selected", () => {
     const html = renderToStaticMarkup(
       <TransformTab

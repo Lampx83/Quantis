@@ -68,6 +68,41 @@ describe("DataStore & UIStore Expansion", () => {
   });
 
   describe("useDataStore Actions", () => {
+    it("reverses variable metadata and schema edits without disturbing row values", () => {
+      const store = useDataStore.getState();
+      const before = useDataStore.getState().datasets[0];
+      store.renameVariable("SCORE", "TOTAL");
+      store.updateVariableMetadata("TOTAL", { missingValues: ["99"], valueLabels: { "85": "Pass" } });
+      store.removeVariable("GENDER");
+      const after = useDataStore.getState().datasets[0];
+      expect(after.columnNames).toEqual(["ID", "TOTAL"]);
+      expect(after.data?.[1]).toEqual(["1", "85"]);
+      expect(store.undoDataset()).toBe(true);
+      expect(store.undoDataset()).toBe(true);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0]).toMatchObject({
+        columnNames: before.columnNames, variables: before.variables, data: before.data, preview: before.preview,
+      });
+      store.renameVariable("SCORE", "ID");
+      store.updateVariableMetadata("UNKNOWN", { label: "Unknown" });
+      store.updateVariableMetadata("SCORE", { label: "Exam Score" });
+      expect(store.redoDataset()).toBe(true);
+      expect(store.redoDataset()).toBe(true);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].variables).toEqual(after.variables);
+    });
+
+    it("restores a newly added column including its values and metadata", () => {
+      const store = useDataStore.getState();
+      const metadata: VariableMetadata = { ...mockDataset.variables!.SCORE, name: "TOTAL" };
+      store.addVariable(metadata, ["10", "20", "30"]);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].columns).toBe(3);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[2]).toEqual(["2", "2", "90", "20"]);
+      expect(useDataStore.getState().datasets[0].variables?.TOTAL).toEqual(metadata);
+    });
+
     it("reverses a whole paste and ignores invalid or unchanged batches", () => {
       const store = useDataStore.getState();
       store.batchUpdateCells([
