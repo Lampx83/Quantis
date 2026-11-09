@@ -2,33 +2,24 @@ import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import type { Dataset, DatasetChange } from "@/types";
 import { t, useLocale } from "@/i18n";
-import { transformActionLabel } from "./TransformTab";
+import { getCategoryForAction, transformActionLabel, type TransformCategory } from "./TransformTab";
 
-function describeChange(change: DatasetChange, number: Intl.NumberFormat): string {
-  const { action, operation, columns = [], formula, firstRow, lastRow, rowCount, cellCount } = change;
-  const parts: string[] = [];
-  if (change.kind === "undo" || change.kind === "redo") parts.push(t(`datasetHistory.${change.kind}`));
-  if (operation === "compute" && columns[0] && formula) {
-    parts.push(`${t("datasetHistory.computed")} ${columns[0]} = ${formula}`);
-  } else {
-    parts.push(operation ? transformActionLabel(operation) : t(`datasetHistory.action.${action}`));
-    if (columns.length) parts.push(columns.join(action === "renameColumn" || operation === "rename" ? " → " : ", "));
-  }
-  if (change.columnCount && change.columnCount > columns.length) {
-    parts.push(t("datasetHistory.moreVariables", { n: number.format(change.columnCount - columns.length) }));
-  }
-  if (firstRow !== undefined) {
-    parts.push(lastRow !== undefined && lastRow !== firstRow
-      ? t("datasetHistory.rowRange", { first: number.format(firstRow), last: number.format(lastRow) })
-      : t("datasetHistory.row", { n: number.format(firstRow) }));
-  }
-  if (rowCount !== undefined && (firstRow === undefined || rowCount < (lastRow ?? firstRow) - firstRow + 1)) {
-    parts.push(t(rowCount === 1 ? "datasetHistory.oneRow" : "datasetHistory.rows", { n: number.format(rowCount) }));
-  }
-  if (cellCount !== undefined) {
-    parts.push(t(cellCount === 1 ? "datasetHistory.oneCell" : "datasetHistory.cells", { n: number.format(cellCount) }));
-  }
-  return parts.join(" · ");
+const VISIBLE_VARIABLES = 4;
+const categoryDot: Record<TransformCategory, string> = {
+  missing: "bg-violet-500 dark:bg-violet-400",
+  scale: "bg-amber-500 dark:bg-amber-400",
+  clean: "bg-sky-500 dark:bg-sky-400",
+  variables: "bg-emerald-500 dark:bg-emerald-400",
+};
+const editCategory: Partial<Record<DatasetChange["action"], TransformCategory>> = {
+  insertRow: "clean",
+  deleteRow: "clean",
+  extractImputation: "missing",
+};
+
+function formatTimestamp(timestamp: string, formatter: Intl.DateTimeFormat): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : formatter.format(date);
 }
 
 export function TransformationHistory({ dataset, onClose }: { dataset: Dataset; onClose: () => void }) {
@@ -36,54 +27,109 @@ export function TransformationHistory({ dataset, onClose }: { dataset: Dataset; 
   const titleId = useId();
   const locale = useLocale();
   const number = new Intl.NumberFormat(locale);
-  const date = new Intl.DateTimeFormat(locale, {
-    year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-  });
+  const clock = new Intl.DateTimeFormat(locale, { timeStyle: "short" });
+  const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   const entries = dataset.audit?.entries ?? [];
   const cutoff = dataset.audit?.cutoffAt;
-  const formatTime = (value: string) => {
-    const time = Date.parse(value);
-    return Number.isNaN(time) ? value : date.format(time);
-  };
+  const count = { n: number.format(entries.length) };
+  const plural = entries.length === 1 ? "one" : "many";
 
   useEffect(() => {
     if (ref.current && !ref.current.open) ref.current.showModal();
   }, []);
 
   return (
-    <dialog ref={ref} aria-labelledby={titleId} onCancel={onClose}
-      className="fixed inset-0 m-auto w-[calc(100%_-_2rem)] max-w-2xl max-h-[80dvh] overflow-y-auto rounded-lg border border-neutral-200 bg-white text-neutral-800 shadow-xl backdrop:bg-black/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
-      <header className="sticky top-0 flex items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900">
-        <h2 id={titleId} className="break-words text-base font-semibold">{t("datasetHistory.title", { name: dataset.name })}</h2>
-        <button type="button" aria-label={t("datasetHistory.close")} className="shrink-0 rounded p-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"
-          onClick={() => { ref.current?.close(); onClose(); }}>
-          <X className="h-5 w-5" />
-        </button>
-      </header>
-      {cutoff && <p className="bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-        {t("datasetHistory.cutoff", { time: formatTime(cutoff) })}
-      </p>}
-      {entries.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-neutral-600 dark:text-neutral-400">{t("datasetHistory.empty")}</p>
-      ) : (
-        <ol className="divide-y divide-neutral-100 px-4 dark:divide-neutral-800">
-          {entries.map((change) => (
-            <li key={change.id} className="break-words py-2.5 text-sm">
-              <time className="text-neutral-500 dark:text-neutral-400" dateTime={change.timestamp}>{formatTime(change.timestamp)}</time>
-              {" · "}{describeChange(change, number)}
-              {change.kind === "derive" && (
-                <span title={change.source.datasetId}>
-                  {" · "}{t("datasetHistory.source", { name: change.source.name })}
-                  {change.source.member !== undefined && (
-                    <>{" · "}{change.source.member === 0 ? t("dataGrid.bundleOriginal") :
-                      t("datasetHistory.member", { n: number.format(change.source.member) })}</>
-                  )}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+    <dialog ref={ref} aria-labelledby={titleId} aria-describedby={`${titleId}-dataset`} onCancel={onClose}
+      className="fixed inset-0 m-auto w-[calc(100%_-_2rem)] max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-2xl backdrop:bg-slate-950/45 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+      <div className="flex max-h-[min(84dvh,34rem)] flex-col">
+        <header className="shrink-0 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-2">
+            <h2 id={titleId} className="text-base font-semibold">{t("datasetHistory.open")}</h2>
+            <button type="button" aria-label={t("datasetHistory.close")}
+              className="-mr-1 grid size-8 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-brand dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+              onClick={() => { ref.current?.close(); onClose(); }}>
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <span id={`${titleId}-dataset`} title={dataset.name} className="min-w-0 truncate rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">{dataset.name}</span>
+            <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+              {t(dataset.rows === 1 ? "datasetHistory.oneRow" : "datasetHistory.rows", { n: number.format(dataset.rows) })}
+            </span>
+          </div>
+        </header>
+
+        <div className="min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:thin] dark:[color-scheme:dark]">
+          {cutoff && <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-200">
+            {t("datasetHistory.cutoff", { time: formatTimestamp(cutoff, new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" })) })}
+          </p>}
+          {entries.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">{t("datasetHistory.empty")}</p>
+          ) : (
+            <ol reversed className="divide-y divide-slate-100 dark:divide-slate-800">
+              {[...entries].reverse().map((change) => {
+                const { action, operation, columns = [], formula, firstRow, lastRow, cellCount, timestamp } = change;
+                const category = operation ? getCategoryForAction(operation) : editCategory[action] ?? "variables";
+                const computed = operation === "compute" && columns[0] && formula;
+                const label = computed ? t("datasetHistory.computed") : operation ? transformActionLabel(operation) : t(`datasetHistory.action.${action}`);
+                const shown = columns.slice(0, VISIBLE_VARIABLES);
+                const overflow = (change.columnCount ?? columns.length) - shown.length;
+                const overflowTitle = [columns.slice(VISIBLE_VARIABLES).join(", "),
+                  (change.columnCount ?? 0) > columns.length ? t("datasetHistory.unlistedVariables") : "",
+                ].filter(Boolean).join("\n");
+                return (
+                  <li key={change.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-2">
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${categoryDot[category]}`} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className={`break-words text-sm font-semibold leading-5 ${locale === "en" ? "capitalize" : ""}`}>{label}</span>
+                          {(change.kind === "undo" || change.kind === "redo") && (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs leading-none text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t(`datasetHistory.${change.kind}`)}</span>
+                          )}
+                        </div>
+                        {(shown.length > 0 || overflow > 0) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {shown.map((column, index) => (
+                              <span key={index} className="inline-flex min-w-0 max-w-full items-center gap-1">
+                                {index === 1 && (action === "renameColumn" || operation === "rename") && <span className="text-xs text-slate-500 dark:text-slate-400">→</span>}
+                                <code title={column} className="min-w-0 truncate rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[11px] leading-4 text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">{column}</code>
+                              </span>
+                            ))}
+                            {overflow > 0 && <span title={overflowTitle} className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[11px] leading-4 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                              {t("datasetHistory.moreVariables", { n: number.format(overflow) })}
+                            </span>}
+                          </div>
+                        )}
+                        {computed && <code className="mt-1 block break-words font-mono text-xs text-slate-500 dark:text-slate-400">{columns[0]} = {formula}</code>}
+                        {(firstRow !== undefined || cellCount !== undefined || change.kind === "derive") && (
+                          <div className="mt-1 flex flex-wrap gap-x-2 text-xs text-slate-500 dark:text-slate-400">
+                            {firstRow !== undefined && <span>{lastRow !== undefined && lastRow !== firstRow
+                              ? t("datasetHistory.rowRange", { first: number.format(firstRow), last: number.format(lastRow) })
+                              : t("datasetHistory.row", { n: number.format(firstRow) })}</span>}
+                            {cellCount !== undefined && <span>{t(cellCount === 1 ? "datasetHistory.oneCell" : "datasetHistory.cells", { n: number.format(cellCount) })}</span>}
+                            {change.kind === "derive" && <>
+                              <span className="break-all" title={change.source.datasetId}>{t("datasetHistory.source", { name: change.source.name })}</span>
+                              {change.source.member !== undefined && <span>{change.source.member === 0 ? t("dataGrid.bundleOriginal") :
+                                t("datasetHistory.member", { n: number.format(change.source.member) })}</span>}
+                            </>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <time className="max-w-24 break-all text-right font-mono text-xs leading-5 text-slate-500 dark:text-slate-400"
+                      dateTime={timestamp} title={formatTimestamp(timestamp, date)}>{formatTimestamp(timestamp, clock)}</time>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+
+        <footer className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
+          {t(`datasetHistory.total.${plural}`, count)}
+        </footer>
+      </div>
     </dialog>
   );
 }

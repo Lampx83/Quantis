@@ -15,9 +15,9 @@ const compute: DatasetChange = {
 
 describe("dataset History", () => {
   it.each([
-    ["en", "Computed", "Undo", "Redo", "350 rows"],
-    ["vi", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng"],
-  ] as const)("localizes the same chronological changes and reversal context in %s", (locale, computed, undo, redo, rows) => {
+    ["en", "History", "Computed", "Undo", "Redo", "350 rows", "Total: 3 steps"],
+    ["vi", "Lịch sử", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng", "Tổng: 3 bước"],
+  ] as const)("shows the latest changes first and counts rows once in %s", (locale, title, computed, undo, redo, rows, total) => {
     setLocale(locale);
     const html = renderToStaticMarkup(<TransformationHistory dataset={{
       ...dataset,
@@ -27,12 +27,33 @@ describe("dataset History", () => {
         { ...compute, id: "redo-1", kind: "redo", originalChangeId: compute.id },
       ] },
     }} onClose={vi.fn()} />);
-    expect(html).toContain(computed);
+    expect(html).toMatch(new RegExp(`<h2[^>]*>${title}</h2>`));
+    expect(html).toContain(">Survey</span>");
+    expect(html).toContain(total);
     expect(html).toContain("TOTAL = MEAN(Q1, Q2, Q3)");
-    expect(html).toContain(rows);
-    expect(html).toContain(`dateTime="${compute.timestamp}"`);
-    expect(html.indexOf(undo)).toBeGreaterThan(html.indexOf(computed));
-    expect(html.indexOf(redo)).toBeGreaterThan(html.indexOf(undo));
+    expect(html.match(new RegExp(rows, "g"))).toHaveLength(1);
+    const date = new Date(compute.timestamp);
+    const clock = new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(date);
+    const fullDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
+    expect(html).toContain(`dateTime="${compute.timestamp}" title="${fullDate}">${clock}</time>`);
+    expect(html.indexOf(redo)).toBeLessThan(html.indexOf(undo));
+    expect(html.lastIndexOf(undo)).toBeLessThan(html.lastIndexOf(computed));
+  });
+
+  it("shows four variable chips and counts all other variables, including names omitted by retention", () => {
+    setLocale("en");
+    const html = renderToStaticMarkup(<TransformationHistory dataset={{
+      ...dataset,
+      audit: { entries: [{
+        ...compute, operation: "fill_mice", formula: undefined,
+        columns: ["ma_nguoi_tra_loi", "TS1", "TS2", "TS3", "TS4", "TS5", "TS6", "TS7"], columnCount: 21,
+      }] },
+    }} onClose={vi.fn()} />);
+    expect(html.match(/<code[^>]*>[^<]+<\/code>/g)).toHaveLength(4);
+    expect(html).toContain(">ma_nguoi_tra_loi</code>");
+    expect(html).toContain("+17 variables");
+    expect(html).toContain('title="TS4, TS5, TS6, TS7');
+    expect(html).not.toContain(">TS4</code>");
   });
 
   it("shows distinct empty and cutoff states for the selected dataset", () => {
