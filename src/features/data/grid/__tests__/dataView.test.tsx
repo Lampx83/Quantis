@@ -77,7 +77,6 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
       <DataView
         tab="preview"
         datasets={[]}
-        setDatasets={vi.fn()}
         selectedDatasetId={null}
         onSelectDataset={vi.fn()}
       />
@@ -95,7 +94,6 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
       <DataView
         tab="preview"
         datasets={[ds]}
-        setDatasets={vi.fn()}
         selectedDatasetId="ds_workspace"
         onSelectDataset={vi.fn()}
       />
@@ -112,7 +110,6 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
       <DataView
         tab="preview"
         datasets={[ds]}
-        setDatasets={vi.fn()}
         selectedDatasetId="ds_workspace"
         onSelectDataset={vi.fn()}
       />
@@ -138,7 +135,6 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
       <DataView
         tab="preview"
         datasets={[updatedDs]}
-        setDatasets={vi.fn()}
         selectedDatasetId="ds_workspace"
         onSelectDataset={vi.fn()}
       />
@@ -154,7 +150,6 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
       <DataView
         tab="preview"
         datasets={[updatedDs]}
-        setDatasets={vi.fn()}
         selectedDatasetId="ds_workspace"
         onSelectDataset={vi.fn()}
       />
@@ -170,7 +165,6 @@ describe("Task 7: DataView Integration & Bottom Tab Strip Switcher", () => {
       <DataView
         tab="preview"
         datasets={[dsWithDecimals]}
-        setDatasets={vi.fn()}
         selectedDatasetId="ds_workspace"
         onSelectDataset={vi.fn()}
       />

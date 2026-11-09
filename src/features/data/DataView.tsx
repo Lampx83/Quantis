@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from "react";
 import { Table2, SlidersHorizontal } from "lucide-react";
 import type { Dataset } from "@/types";
 import { useUIStore, type DataTab } from "@/stores";
@@ -16,7 +15,6 @@ import { useDatasetHistoryShortcuts } from "./useDatasetHistoryShortcuts";
 export interface DataViewProps {
   tab: DataTab;
   datasets: Dataset[];
-  setDatasets: Dispatch<SetStateAction<Dataset[]>>;
   selectedDatasetId: string | null;
   onSelectDataset: (id: string | null) => void;
   showToast?: (msg: string) => void;
@@ -106,7 +104,6 @@ function DualViewWorkspace({
 export function DataView({
   tab,
   datasets,
-  setDatasets,
   selectedDatasetId,
   onSelectDataset,
   showToast,
@@ -227,7 +224,6 @@ export function DataView({
     return (
       <TransformTab
         selectedDs={selectedDs}
-        setDatasets={setDatasets}
         onSelectDataset={onSelectDataset}
         onWorkflowDatasetAdd={onWorkflowDatasetAdd}
       />

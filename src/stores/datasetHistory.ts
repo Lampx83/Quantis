@@ -7,7 +7,7 @@ export type TransformOperation =
   | "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
 
 export interface DatasetChangeSummary {
-  action: "cell" | "paste" | "insertRow" | "deleteRow" | "metadata" | "renameColumn" | "insertColumn" | "deleteColumn" | "transform";
+  action: "cell" | "paste" | "insertRow" | "deleteRow" | "metadata" | "renameColumn" | "insertColumn" | "deleteColumn" | "transform" | "extractImputation";
   columns?: string[];
   firstRow?: number;
   lastRow?: number;
@@ -18,14 +18,18 @@ export interface DatasetChangeSummary {
 }
 
 export type TransformChangeSummary = DatasetChangeSummary & { action: "transform"; operation: TransformOperation };
+export type DerivationSummary = TransformChangeSummary | { action: "extractImputation"; member: number };
 
-export interface DatasetChange extends DatasetChangeSummary {
+type DatasetChangeDetails =
+  | { kind: "commit" }
+  | { kind: "undo" | "redo"; originalChangeId: string }
+  | { kind: "derive"; source: { datasetId: string; name: string; member?: number } };
+
+export type DatasetChange = DatasetChangeSummary & DatasetChangeDetails & {
   id: string;
   datasetId: string;
   timestamp: string;
-  kind: "commit" | "undo" | "redo";
-  originalChangeId?: string;
-}
+};
 
 export type DatasetContentPatch = Partial<Pick<Dataset,
   "name" | "data" | "preview" | "variables" | "columnNames" | "rows" | "columns" | "readOnly" | "imputationMeta"
@@ -121,11 +125,10 @@ export function retainHistoryStep(histories: ReadonlyMap<string, DatasetHistory>
 
 export function newDatasetChange(
   datasetId: string,
-  kind: DatasetChange["kind"],
   summary: DatasetChangeSummary,
-  originalChangeId?: string,
+  details: DatasetChangeDetails,
 ): DatasetChange {
-  return { ...summary, id: generateId(), datasetId, kind, timestamp: new Date().toISOString(), originalChangeId };
+  return { ...summary, ...details, id: generateId(), datasetId, timestamp: new Date().toISOString() };
 }
 
 export function previousContent(dataset: Dataset, patch: DatasetContentPatch): DatasetContentPatch {

@@ -210,7 +210,6 @@ describe("Task 5: Bundle Navigation Bar & Imputed Cell Highlighting", () => {
   });
 
   it("8. integrates BundleNavigationBar into DataView above grid when dataset has imputationMeta", () => {
-    const setDatasets = vi.fn();
     const onSelectDataset = vi.fn();
     const datasets = useDataStore.getState().datasets;
 
@@ -218,7 +217,6 @@ describe("Task 5: Bundle Navigation Bar & Imputed Cell Highlighting", () => {
       <DataView
         tab="preview"
         datasets={datasets}
-        setDatasets={setDatasets}
         selectedDatasetId="ds_mice_bundle_test"
         onSelectDataset={onSelectDataset}
       />

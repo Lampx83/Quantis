@@ -67,7 +67,7 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     vi.restoreAllMocks();
   });
 
-  it.each(["edit", "undo", "replacement"] as const)("discards MICE overwrite results after a same-ID %s", async (change) => {
+  it.each(["edit", "undo", "replacement", "deletion during derivation"] as const)("discards MICE results after %s", async (change) => {
     const store = useDataStore.getState();
     const id = sampleDatasetWithMissing.id;
     if (change === "undo") store.updateCell(0, 1, "1020");
@@ -75,18 +75,22 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     let resolve!: (value: api.MiceImputationResponse) => void;
     const pending = new Promise<api.MiceImputationResponse>((done) => { resolve = done; });
     const analyze = vi.spyOn(api, "analyzeMiceImputation").mockReturnValue(pending);
+    const attach = vi.fn();
+    const select = vi.fn();
+    const derive = change === "deletion during derivation";
+    const buttonLabel = t(derive ? "transformTab.createNewButton" : "transformTab.overwriteOriginalButton");
     let overwrite!: () => Promise<void>;
     function Harness() {
       const result = TransformTab({
         selectedDs: source,
-        setDatasets: store.setDatasets,
-        onSelectDataset: vi.fn(),
+        onSelectDataset: select,
+        onWorkflowDatasetAdd: attach,
         initialShowChoiceModal: true,
         initialColsMultiple: ["INCOME"],
         initialAction: "fill_mice",
       });
       function findButton(node: any) {
-        if (node?.type === "button" && String(node.props.children).includes(t("transformTab.overwriteOriginalButton"))) {
+        if (node?.type === "button" && String(node.props.children).includes(buttonLabel)) {
           overwrite = node.props.onClick;
         }
         if (node?.props?.children) [node.props.children].flat().forEach(findButton);
@@ -100,18 +104,20 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     if (change === "edit") store.updateCell(0, 1, "1020", id);
     if (change === "undo") expect(store.undoDataset(id)).toBe(true);
     if (change === "replacement") store.addDataset({ ...source, name: "Replaced" });
+    if (derive) store.removeDataset(id);
     const current = useDataStore.getState();
     resolve({ rows: source.data!, m: 2, iterations: 5, imputedColumns: ["INCOME"], statistics: [] });
     await apply;
     expect(useDataStore.getState().datasets).toBe(current.datasets);
     expect(useDataStore.getState().historyByDataset).toBe(current.historyByDataset);
+    expect(attach).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
   });
 
   it("1. renders number of datasets (m) input with default 5 and range 2 to 20 when fill_mice is selected", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialAction="fill_mice"
         initialColsMultiple={["INCOME"]}
@@ -266,8 +272,7 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     let rendered: any = null;
     function Harness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialShowChoiceModal: true,
         initialColsMultiple: ["INCOME"],
@@ -326,7 +331,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     const htmlVi = renderToStaticMarkup(
       <TransformTab
         selectedDs={bundleDs}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialLastTransformResult={{
           before: sampleDatasetWithMissing.data!,
@@ -362,7 +366,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     const htmlEn = renderToStaticMarkup(
       <TransformTab
         selectedDs={bundleDs}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialLastTransformResult={{
           before: sampleDatasetWithMissing.data!,
@@ -399,7 +402,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={previewOnlyDs}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialAction="fill_mice"
         initialColsMultiple={["INCOME"]}
@@ -434,7 +436,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     function Harness() {
       rendered = TransformTab({
         selectedDs: noMissingDs,
-        setDatasets: useDataStore.getState().setDatasets,
         onSelectDataset: vi.fn(),
         initialAction: "fill_mice",
         initialColsMultiple: ["INCOME"],
@@ -478,7 +479,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={bundleDs}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialAction="fill_mice"
         initialColsMultiple={["INCOME"]}
@@ -507,7 +507,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={bundleDs}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialAction="drop_missing"
         initialColsMultiple={["INCOME"]}
@@ -524,7 +523,6 @@ describe("Task 4: MICE Multiple Imputation & Rubin Descriptive Pooling Report", 
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={useDataStore.getState().setDatasets}
         onSelectDataset={vi.fn()}
         initialAction="fill_mice"
         initialColsMultiple={["INCOME"]}

@@ -21,6 +21,7 @@ import {
   type DatasetContentPatch,
   type DatasetHistory,
   type TransformChangeSummary,
+  type DerivationSummary,
 } from "./datasetHistory";
 
 export interface DataState {
@@ -41,6 +42,12 @@ export interface DataState {
   hydrateFromServer: (datasets: Dataset[]) => void;
   getDatasetRevision: (id: string) => symbol | undefined;
   commitDatasetTransform: (id: string, revision: symbol, result: Dataset, summary: TransformChangeSummary) => Dataset | undefined;
+  deriveDataset: (
+    sourceId: string,
+    result: Omit<Dataset, "id" | "createdAt" | "updatedAt">,
+    summary: DerivationSummary,
+    revision?: symbol,
+  ) => Dataset | undefined;
 
   // --- Cell & Row & Column Editing Actions ---
   updateCell: (rowIndex: number, colIndex: number, value: string, datasetId?: string) => void;
@@ -83,6 +90,14 @@ function replaceDatasets(state: DataState, datasets: Dataset[], invalidateAll = 
   return { datasets, historyByDataset, historyLimitDatasetId };
 }
 
+function bundleMember(dataset: Dataset, index: number) {
+  const meta = dataset.imputationMeta;
+  if (!meta || !Number.isInteger(index) || index < 0 || index > meta.m) return;
+  const data = reconstructImputedRows(meta.originalRows, dataset.columnNames, meta.sparsePatches, index, dataset.rows);
+  const preview = data.slice(0, dataset.preview?.length || data.length).map((row) => [...row]);
+  return { data, preview };
+}
+
 function commitDatasetChange(
   state: DataState,
   dataset: Dataset,
@@ -90,7 +105,7 @@ function commitDatasetChange(
   summary: DatasetChangeSummary,
   affectedRows?: readonly number[],
 ) {
-  const change = newDatasetChange(dataset.id, "commit", summary);
+  const change = newDatasetChange(dataset.id, summary, { kind: "commit" });
   const step = createHistoryStep(dataset, patch, change, affectedRows);
   return {
     datasets: state.datasets.map((d) => d === dataset ? applyDatasetChange(d, patch, change) : d),
@@ -112,7 +127,7 @@ function reverseDatasetChange(state: DataState, direction: "undo" | "redo", data
   historyByDataset.set(dataset.id, direction === "undo"
     ? { undo: history.undo.slice(0, -1), redo: [...history.redo, step] }
     : { undo: [...history.undo, step], redo: history.redo.slice(0, -1) });
-  const change = newDatasetChange(dataset.id, direction, step.change, step.change.id);
+  const change = newDatasetChange(dataset.id, step.change, { kind: direction, originalChangeId: step.change.id });
   const patch = direction === "undo" ? step.before : step.after;
   return {
     datasets: state.datasets.map((d) => d === dataset ? applyDatasetChange(d, patch, change) : d),
@@ -216,6 +231,22 @@ export const useDataStore = create<DataState>()(
         }, summary);
         set(next);
         return next.datasets.find((d) => d.id === id);
+      },
+      deriveDataset: (sourceId, result, summary, revision) => {
+        const state = get();
+        const source = state.datasets.find((d) => d.id === sourceId);
+        if (!source || (revision !== undefined && revisionOf(source) !== revision)) return;
+        const id = generateId();
+        const extraction = summary.action === "extractImputation";
+        const change = newDatasetChange(id, extraction ? { action: summary.action, rowCount: result.rows } : summary, {
+          kind: "derive",
+          source: { datasetId: sourceId, name: source.name, member: extraction ? summary.member : undefined },
+        });
+        const child = applyDatasetChange(ensureDatasetMetadata({
+          ...result, id, createdAt: change.timestamp, updatedAt: change.timestamp,
+        }), {}, change);
+        set({ datasets: [...state.datasets, child] });
+        return child;
       },
 
       setDatasets: (datasets) =>
@@ -330,95 +361,37 @@ export const useDataStore = create<DataState>()(
       addRow: (values, atIndex, id) => editRow("insertRow", id, atIndex, values),
       removeRow: (rowIndex, id) => editRow("deleteRow", id, rowIndex),
 
-      setActiveImputationIndex: (datasetId, index) =>
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          if (!targetId) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || !target.imputationMeta) return s;
-          if (!Number.isInteger(index) || index < 0 || index > target.imputationMeta.m ||
-            index === target.imputationMeta.activeImputationIndex) return s;
-
-          const newRows = reconstructImputedRows(
-            target.imputationMeta.originalRows,
-            target.columnNames,
-            target.imputationMeta.sparsePatches,
-            index,
-            target.rows
-          );
-
-          const previewLength =
-            target.preview && target.preview.length < newRows.length && target.preview.length > 0
-              ? target.preview.length
-              : newRows.length;
-          const newPreview = newRows.slice(0, previewLength).map((r) => [...r]);
-
-          return {
-            datasets: s.datasets.map((d) => {
-              if (d.id !== targetId) return d;
-              return {
-                ...d,
-                data: newRows,
-                preview: newPreview,
-                imputationMeta: {
-                  ...d.imputationMeta!,
-                  activeImputationIndex: index,
-                },
-                updatedAt: new Date().toISOString(),
-              };
-            }),
+      setActiveImputationIndex: (id, index) =>
+        set((state) => {
+          const dataset = state.datasets.find((d) => d.id === id);
+          if (!dataset?.imputationMeta || index === dataset.imputationMeta.activeImputationIndex) return state;
+          const member = bundleMember(dataset, index);
+          if (!member) return state;
+          const updated = {
+            ...dataset,
+            ...member,
+            imputationMeta: { ...dataset.imputationMeta, activeImputationIndex: index },
+            updatedAt: new Date().toISOString(),
           };
+          return { datasets: state.datasets.map((d) => d === dataset ? updated : d) };
         }),
 
-      cloneBundleAsStandardDataset: (datasetId, index) => {
-        let created: Dataset | undefined;
-        set((s) => {
-          const targetId = datasetId ?? s.selectedDatasetId;
-          if (!targetId) return s;
-          const target = s.datasets.find((d) => d.id === targetId);
-          if (!target || !target.imputationMeta) return s;
-          if (index < 0 || index > target.imputationMeta.m) return s;
-
-          const reconstructedRows = reconstructImputedRows(
-            target.imputationMeta.originalRows,
-            target.columnNames,
-            target.imputationMeta.sparsePatches,
-            index,
-            target.rows
-          );
-
-          const previewLength =
-            target.preview &&
-            target.preview.length < reconstructedRows.length &&
-            target.preview.length > 0
-              ? target.preview.length
-              : reconstructedRows.length;
-          const newPreview = reconstructedRows.slice(0, previewLength).map((r) => [...r]);
-
-          const now = new Date().toISOString();
-          const cloned: Dataset = ensureDatasetMetadata({
-            id: generateId(),
-            name: `${target.name} (Imp ${index})`,
-            rows: target.rows,
-            columns: target.columns,
-            columnNames: [...target.columnNames],
-            preview: newPreview,
-            data: reconstructedRows,
-            variables: target.variables ? JSON.parse(JSON.stringify(target.variables)) : undefined,
-            sourceFormat: target.sourceFormat || "csv",
-            readOnly: false,
-            createdAt: now,
-            updatedAt: now,
-          });
-
-          delete (cloned as any).imputationMeta;
-          created = cloned;
-
-          return {
-            datasets: [...s.datasets, cloned],
-          };
-        });
-        return created;
+      cloneBundleAsStandardDataset: (id, index) => {
+        const state = get();
+        const source = state.datasets.find((d) => d.id === id);
+        if (!source) return;
+        const member = bundleMember(source, index);
+        if (!member) return;
+        return state.deriveDataset(id, {
+          ...member,
+          name: `${source.name} (Imp ${index})`,
+          rows: source.rows,
+          columns: source.columns,
+          columnNames: source.columnNames,
+          variables: source.variables,
+          sourceFormat: source.sourceFormat || "csv",
+          readOnly: false,
+        }, { action: "extractImputation", member: index });
       },
       };
     },

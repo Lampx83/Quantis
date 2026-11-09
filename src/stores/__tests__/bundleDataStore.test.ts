@@ -136,6 +136,23 @@ describe("Imputed Dataset Bundle Store Actions & Guards", () => {
     });
   });
 
+  it("extracts an independent member and rejects a derivation from a stale revision", () => {
+    const store = useDataStore.getState();
+    const bundle = createMockBundleDataset();
+    store.hydrateFromServer([{ ...bundle, imputationMeta: undefined, readOnly: false }]);
+    const stale = store.getDatasetRevision(bundle.id)!;
+    store.commitDatasetTransform(bundle.id, stale, bundle, { action: "transform", operation: "fill_mice" });
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...content } = bundle;
+    expect(store.deriveDataset(bundle.id, content, { action: "extractImputation", member: 2 }, stale)).toBeUndefined();
+    expect(useDataStore.getState().datasets).toHaveLength(1);
+    const child = store.cloneBundleAsStandardDataset(bundle.id, 2)!;
+    expect(child.readOnly).toBe(false);
+    expect(child.data?.[1][1]).toBe("4600");
+    expect(store.undoDataset(child.id)).toBe(false);
+    expect(store.undoDataset(bundle.id)).toBe(true);
+    expect(useDataStore.getState().datasets[1]).toBe(child);
+  });
+
   it("preserves redo when a transform produces the same data and schema", () => {
     const store = useDataStore.getState();
     const bundle = createMockBundleDataset();

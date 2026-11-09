@@ -29,7 +29,7 @@ export function MainContent() {
     showToast,
   } = useUIStore();
 
-  const { datasets, setDatasets, selectedDatasetId, setSelectedDatasetId } = useDataStore();
+  const { datasets, selectedDatasetId, setSelectedDatasetId } = useDataStore();
 
   const {
     workflows,
@@ -82,7 +82,6 @@ export function MainContent() {
           <DataView
             tab={dataTab}
             datasets={datasets}
-            setDatasets={setDatasets}
             selectedDatasetId={selectedDatasetId}
             onSelectDataset={setSelectedDatasetId}
             showToast={showToast}
