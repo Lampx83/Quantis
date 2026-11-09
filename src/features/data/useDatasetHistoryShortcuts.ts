@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useDataStore } from "@/stores/useDataStore";
+import { useUIStore } from "@/stores/useUIStore";
 
 type HistoryKeyEvent = Pick<KeyboardEvent,
   "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey" | "isComposing" | "defaultPrevented" | "preventDefault"
@@ -15,7 +16,8 @@ export function handleDatasetHistoryShortcut(
   if (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return;
   const key = event.key.toLowerCase();
   const redo = (key === "z" && event.shiftKey) || (!mac && key === "y" && !event.shiftKey);
-  if ((key === "z" || redo) && run(redo ? "redo" : "undo")) event.preventDefault();
+  if (key !== "z" && !redo) return;
+  if (!useUIStore.getState().confirmDialog && run(redo ? "redo" : "undo")) event.preventDefault();
 }
 
 export function useDatasetHistoryShortcuts(datasetId: string | null): void {

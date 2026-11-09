@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { useUIStore } from "@/stores/useUIStore";
 import { handleDatasetHistoryShortcut } from "../useDatasetHistoryShortcuts";
 
 describe("dataset history shortcuts", () => {
@@ -24,6 +25,22 @@ describe("dataset history shortcuts", () => {
     handleDatasetHistoryShortcut(event, false, false, run);
     expect(run).toHaveBeenCalledWith("undo");
     expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("leaves rows alone while their deletion is awaiting confirmation", () => {
+    const { setConfirmDialog } = useUIStore.getState();
+    const event = { ...new KeyboardEventStub(), ctrlKey: true, key: "z" };
+    const undo = vi.fn(() => true);
+    setConfirmDialog({ message: "Delete row 3?", onConfirm: vi.fn() });
+    try {
+      handleDatasetHistoryShortcut(event, false, false, undo);
+      expect(undo).not.toHaveBeenCalled();
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    } finally {
+      setConfirmDialog(null);
+    }
+    handleDatasetHistoryShortcut(event, false, false, undo);
+    expect(undo).toHaveBeenCalledExactlyOnceWith("undo");
   });
 });
 
