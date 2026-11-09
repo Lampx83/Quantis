@@ -15,9 +15,9 @@ const compute: DatasetChange = {
 
 describe("dataset History", () => {
   it.each([
-    ["en", "History", "Computed", "Undo", "Redo", "350 rows", "Total: 3 steps"],
-    ["vi", "Lịch sử", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng", "Tổng: 3 bước"],
-  ] as const)("shows the latest changes first and counts rows once in %s", (locale, title, computed, undo, redo, rows, total) => {
+    ["en", "History", "Computed", "Undo", "Redo", "350 rows", "350 rows affected", "Total: 3 steps"],
+    ["vi", "Lịch sử", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng", "350 dòng bị ảnh hưởng", "Tổng: 3 bước"],
+  ] as const)("shows the latest changes first and localizes affected rows in %s", (locale, title, computed, undo, redo, rows, affected, total) => {
     setLocale(locale);
     const html = renderToStaticMarkup(<TransformationHistory dataset={{
       ...dataset,
@@ -31,7 +31,8 @@ describe("dataset History", () => {
     expect(html).toContain(">Survey</span>");
     expect(html).toContain(total);
     expect(html).toContain("TOTAL = MEAN(Q1, Q2, Q3)");
-    expect(html.match(new RegExp(rows, "g"))).toHaveLength(1);
+    expect(html.match(new RegExp(`>${rows}</span>`, "g"))).toHaveLength(1);
+    expect(html.match(new RegExp(`>${affected}</span>`, "g"))).toHaveLength(3);
     const date = new Date(compute.timestamp);
     const clock = new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(date);
     const fullDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
