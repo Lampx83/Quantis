@@ -1,9 +1,10 @@
 import { PanelLeftClose, PanelLeftOpen, User } from "lucide-react";
 import { useUIStore, useDataStore, useWorkflowStore, useSyncStore } from "@/stores";
 import * as quantisApi from "@/api";
-import { t } from "@/i18n";
+import { t, useLocale } from "@/i18n";
 
 export function AppStatusBar() {
+  useLocale();
   const {
     sidebarOpen,
     setSidebarOpen,
@@ -14,7 +15,7 @@ export function AppStatusBar() {
 
   const { datasets, selectedDatasetId, historyLimitDatasetId } = useDataStore();
   const { workflows, selectedWorkflowId, selectedWorkflowStepId } = useWorkflowStore();
-  const { useBackend, authConfig, authUser, authLoading } = useSyncStore();
+  const { useBackend, authConfig, authUser, authLoading, localSaveFailures } = useSyncStore();
 
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
   const selectedWorkflow = selectedWorkflowId ? workflows.find((w) => w.id === selectedWorkflowId) : null;
@@ -73,6 +74,9 @@ export function AppStatusBar() {
       </span>
       {selectedDataset && selectedDataset.id === historyLimitDatasetId && (
         <span role="status" className="text-amber-800 dark:text-amber-300">{t("datasetHistory.limit")}</span>
+      )}
+      {(localSaveFailures.datasets || localSaveFailures.workflows) && (
+        <span role="status" className="text-amber-800 dark:text-amber-300">{t("workspaceSave.localFailed")}</span>
       )}
       <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1.5 border-l border-neutral-200 pl-2 dark:border-neutral-600 sm:gap-2">
         {quantisApi.isPortalEmbed() && authLoading && !authUser && (

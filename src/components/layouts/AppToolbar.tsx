@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Table2,
   ScanSearch,
@@ -22,11 +23,16 @@ import {
   Gauge,
   Undo2,
   Redo2,
+  History,
 } from "lucide-react";
 import { useDataStore, useUIStore, useWorkflowStore } from "@/stores";
-import { t } from "@/i18n";
+import { t, useLocale } from "@/i18n";
+import { TransformationHistory } from "@/features/data/TransformationHistory";
 
 function DatasetHistoryControls() {
+  useLocale();
+  const [open, setOpen] = useState(false);
+  const dataset = useDataStore((state) => state.datasets.find((d) => d.id === state.selectedDatasetId));
   const history = useDataStore((state) =>
     state.selectedDatasetId ? state.historyByDataset.get(state.selectedDatasetId) : undefined,
   );
@@ -41,6 +47,11 @@ function DatasetHistoryControls() {
         onClick={() => useDataStore.getState().redoDataset()}>
         <Redo2 className="w-4 h-4" /> {t("datasetHistory.redo")}
       </button>
+      <button type="button" className={buttonClass} disabled={!dataset} aria-haspopup="dialog"
+        onClick={() => setOpen(true)}>
+        <History className="w-4 h-4" /> {t("datasetHistory.open")}
+      </button>
+      {open && dataset && <TransformationHistory dataset={dataset} onClose={() => setOpen(false)} />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Dataset, VariableMetadata } from "@/types";
+import type { Dataset, DatasetChangeSummary, DerivationSummary, TransformChangeSummary, VariableMetadata } from "@/types";
 import { ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
@@ -17,11 +17,8 @@ import {
   sameContent,
   validCell,
   type CellEdit,
-  type DatasetChangeSummary,
   type DatasetContentPatch,
   type DatasetHistory,
-  type TransformChangeSummary,
-  type DerivationSummary,
 } from "./datasetHistory";
 
 export interface DataState {
@@ -44,7 +41,7 @@ export interface DataState {
   commitDatasetTransform: (id: string, revision: symbol, result: Dataset, summary: TransformChangeSummary) => Dataset | undefined;
   deriveDataset: (
     sourceId: string,
-    result: Omit<Dataset, "id" | "createdAt" | "updatedAt">,
+    result: Omit<Dataset, "id" | "createdAt" | "updatedAt" | "audit">,
     summary: DerivationSummary,
     revision?: symbol,
   ) => Dataset | undefined;
@@ -243,7 +240,7 @@ export const useDataStore = create<DataState>()(
           source: { datasetId: sourceId, name: source.name, member: extraction ? summary.member : undefined },
         });
         const child = applyDatasetChange(ensureDatasetMetadata({
-          ...result, id, createdAt: change.timestamp, updatedAt: change.timestamp,
+          ...result, id, audit: undefined, createdAt: change.timestamp, updatedAt: change.timestamp,
         }), {}, change);
         set({ datasets: [...state.datasets, child] });
         return child;
@@ -452,9 +449,11 @@ export const useDataStore = create<DataState>()(
           return null;
         },
         setItem: (name, value) => {
-          if (switchingOwner) return;
+          if (switchingOwner || (typeof window === "undefined" && typeof localStorage === "undefined")) return;
+          const sync = useSyncStore.getState();
+          const local = persistsWorkspaceLocally(sync);
           try {
-            if (!persistsWorkspaceLocally(useSyncStore.getState())) {
+            if (!local) {
               // Khi online và kết nối server: Server/DB là nguồn chính, chỉ lưu selectedDatasetId xuống localStorage để giữ ngữ cảnh
               const lightweightValue = {
                 ...value,
@@ -467,8 +466,9 @@ export const useDataStore = create<DataState>()(
               return;
             }
             localStorage.setItem(name, JSON.stringify(value));
+            sync.setLocalSaveFailure("datasets", false);
           } catch {
-            /* ignore QuotaExceededError giống bản cũ */
+            if (local) sync.setLocalSaveFailure("datasets", true);
           }
         },
         removeItem: (name) => {

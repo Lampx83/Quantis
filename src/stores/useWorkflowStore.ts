@@ -202,9 +202,11 @@ export const useWorkflowStore = create<WorkflowState>()(
           return null;
         },
         setItem: (name, value) => {
-          if (switchingOwner) return;
+          if (switchingOwner || (typeof window === "undefined" && typeof localStorage === "undefined")) return;
+          const sync = useSyncStore.getState();
+          const local = persistsWorkspaceLocally(sync);
           try {
-            if (!persistsWorkspaceLocally(useSyncStore.getState())) {
+            if (!local) {
               const lightweightValue = {
                 ...value,
                 state: {
@@ -216,8 +218,9 @@ export const useWorkflowStore = create<WorkflowState>()(
               return;
             }
             localStorage.setItem(name, JSON.stringify(value));
+            sync.setLocalSaveFailure("workflows", false);
           } catch {
-            /* ignore QuotaExceededError giống bản cũ */
+            if (local) sync.setLocalSaveFailure("workflows", true);
           }
         },
         removeItem: (name) => {

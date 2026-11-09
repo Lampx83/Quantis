@@ -3,6 +3,8 @@ import type { AuthConfig, AuthUser, SampleDatasetListItem } from "@/api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
 import * as quantisApi from "@/api";
 
+type LocalSaveScope = "datasets" | "workflows";
+
 export interface SyncState {
   // Connection
   isOnline: boolean;
@@ -22,6 +24,7 @@ export interface SyncState {
   // Sync status
   workspacePullLoading: boolean;
   workspaceEpoch: number;
+  localSaveFailures: Record<LocalSaveScope, boolean>;
   sidebarImportBusy: boolean;
   embedConfigGeneration: number;
 
@@ -48,6 +51,7 @@ export interface SyncState {
   setSampleDatasetsLoading: (loading: boolean) => void;
   refreshSampleDatasets: () => Promise<void>;
   setWorkspacePullLoading: (loading: boolean) => void;
+  setLocalSaveFailure: (scope: LocalSaveScope, failed: boolean) => void;
   setSidebarImportBusy: (busy: boolean) => void;
   setEmbedConfigGeneration: (gen: number | ((prev: number) => number)) => void;
 
@@ -77,6 +81,7 @@ export const useSyncStore = create<SyncState>((set) => ({
 
   workspacePullLoading: false,
   workspaceEpoch: 0,
+  localSaveFailures: { datasets: false, workflows: false },
   sidebarImportBusy: false,
   embedConfigGeneration: 0,
 
@@ -94,12 +99,10 @@ export const useSyncStore = create<SyncState>((set) => ({
   setUseBackend: (useBackend) => set({ useBackend }),
   setAnalysisBackendAvailable: (analysisBackendAvailable) => set({ analysisBackendAvailable }),
   setAuthConfig: (authConfig) => set({ authConfig }),
-  setAuthUser: (authUser) => set((state) => ({
-    authUser,
-    workspaceEpoch: workspaceOwner(authUser) === workspaceOwner(state.authUser)
-      ? state.workspaceEpoch
-      : state.workspaceEpoch + 1,
-  })),
+  setAuthUser: (authUser) => set((state) =>
+    workspaceOwner(authUser) === workspaceOwner(state.authUser)
+      ? { authUser }
+      : { authUser, workspaceEpoch: state.workspaceEpoch + 1, localSaveFailures: { datasets: false, workflows: false } }),
   setAuthLoading: (authLoading) => set({ authLoading }),
   setIsPortalAdmin: (isPortalAdmin) => set({ isPortalAdmin }),
   setSampleDatasetsList: (sampleDatasetsList) => set({ sampleDatasetsList }),
@@ -115,6 +118,8 @@ export const useSyncStore = create<SyncState>((set) => ({
     }
   },
   setWorkspacePullLoading: (workspacePullLoading) => set({ workspacePullLoading }),
+  setLocalSaveFailure: (scope, failed) => set((state) =>
+    state.localSaveFailures[scope] === failed ? state : { localSaveFailures: { ...state.localSaveFailures, [scope]: failed } }),
   setSidebarImportBusy: (sidebarImportBusy) => set({ sidebarImportBusy }),
   setEmbedConfigGeneration: (embedConfigGeneration) =>
     set((s) => ({
@@ -164,7 +169,7 @@ export function isPortalGuestUser(u: { id?: string; email?: string } | null | un
 }
 
 export function workspaceOwner(user: AuthUser | null): string {
-  return user?.id && !isPortalGuestUser(user) ? `user:${user.id}` : "local";
+  return user?.id && !(quantisApi.isPortalEmbed() && isPortalGuestUser(user)) ? `user:${user.id}` : "local";
 }
 
 /**

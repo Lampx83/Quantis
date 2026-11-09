@@ -5,6 +5,7 @@
  */
 
 import { EXTRA_EN, EXTRA_VI } from "./i18n-extra"
+import { useSyncExternalStore } from "react"
 
 export type Locale = "en" | "vi"
 
@@ -62,12 +63,19 @@ export function setLocale(locale: Locale): void {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(STORAGE_KEY, locale)
     }
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("quantis-locale-change"))
-    }
   } catch {
     /* ignore */
   }
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("quantis-locale-change"))
+}
+
+function subscribeLocale(onChange: () => void): () => void {
+  window.addEventListener("quantis-locale-change", onChange)
+  return () => window.removeEventListener("quantis-locale-change", onChange)
+}
+
+export function useLocale(): Locale {
+  return useSyncExternalStore(subscribeLocale, getLocale, getLocale)
 }
 
 if (typeof window !== "undefined") {
@@ -297,6 +305,32 @@ const messages: Record<Locale, Record<string, string>> = {
   "datasetHistory.undo": "Undo",
   "datasetHistory.redo": "Redo",
   "datasetHistory.limit": "Edit applied. Undo history cleared because the edit exceeded the memory limit.",
+  "datasetHistory.open": "History",
+  "datasetHistory.title": "History · {name}",
+  "datasetHistory.close": "Close history",
+  "datasetHistory.empty": "No changes recorded yet.",
+  "datasetHistory.cutoff": "Earlier changes through {time} were removed by the history limit.",
+  "datasetHistory.action.cell": "Edit cell",
+  "datasetHistory.action.paste": "Paste cells",
+  "datasetHistory.action.insertRow": "Insert row",
+  "datasetHistory.action.deleteRow": "Delete row",
+  "datasetHistory.action.metadata": "Edit variable metadata",
+  "datasetHistory.action.renameColumn": "Rename variable",
+  "datasetHistory.action.insertColumn": "Insert variable",
+  "datasetHistory.action.deleteColumn": "Delete variable",
+  "datasetHistory.action.transform": "Transform dataset",
+  "datasetHistory.action.extractImputation": "Extract imputation",
+  "datasetHistory.computed": "Computed",
+  "datasetHistory.row": "Row {n}",
+  "datasetHistory.rowRange": "Rows {first}–{last}",
+  "datasetHistory.oneRow": "{n} row",
+  "datasetHistory.rows": "{n} rows",
+  "datasetHistory.oneCell": "{n} cell",
+  "datasetHistory.cells": "{n} cells",
+  "datasetHistory.moreVariables": "+{n} variables",
+  "datasetHistory.source": "From {name}",
+  "datasetHistory.member": "Imputation {n}",
+  "workspaceSave.localFailed": "Could not save the workspace on this device.",
   "transformTab.staleResult": "The dataset changed while this transformation was running. Apply it again to the current data.",
   "transformTab.unchangedResult": "This transformation made no changes to the dataset.",
   "app.dataTab.profiling": "Profiling",
@@ -2289,6 +2323,32 @@ const messages: Record<Locale, Record<string, string>> = {
   "datasetHistory.undo": "Hoàn tác",
   "datasetHistory.redo": "Làm lại",
   "datasetHistory.limit": "Đã áp dụng thay đổi. Lịch sử hoàn tác đã bị xóa vì thay đổi vượt giới hạn bộ nhớ.",
+  "datasetHistory.open": "Lịch sử",
+  "datasetHistory.title": "Lịch sử · {name}",
+  "datasetHistory.close": "Đóng lịch sử",
+  "datasetHistory.empty": "Chưa ghi nhận thay đổi nào.",
+  "datasetHistory.cutoff": "Các thay đổi đến {time} đã bị xóa do giới hạn lưu lịch sử.",
+  "datasetHistory.action.cell": "Sửa ô",
+  "datasetHistory.action.paste": "Dán ô",
+  "datasetHistory.action.insertRow": "Chèn dòng",
+  "datasetHistory.action.deleteRow": "Xóa dòng",
+  "datasetHistory.action.metadata": "Sửa thông tin biến",
+  "datasetHistory.action.renameColumn": "Đổi tên biến",
+  "datasetHistory.action.insertColumn": "Chèn biến",
+  "datasetHistory.action.deleteColumn": "Xóa biến",
+  "datasetHistory.action.transform": "Biến đổi dataset",
+  "datasetHistory.action.extractImputation": "Tách bộ nội suy",
+  "datasetHistory.computed": "Đã tính",
+  "datasetHistory.row": "Dòng {n}",
+  "datasetHistory.rowRange": "Dòng {first}–{last}",
+  "datasetHistory.oneRow": "{n} dòng",
+  "datasetHistory.rows": "{n} dòng",
+  "datasetHistory.oneCell": "{n} ô",
+  "datasetHistory.cells": "{n} ô",
+  "datasetHistory.moreVariables": "+{n} biến",
+  "datasetHistory.source": "Từ {name}",
+  "datasetHistory.member": "Bộ nội suy {n}",
+  "workspaceSave.localFailed": "Không thể lưu workspace trên thiết bị này.",
   "transformTab.staleResult": "Dataset đã thay đổi trong lúc biến đổi. Hãy áp dụng lại trên dữ liệu hiện tại.",
   "transformTab.unchangedResult": "Phép biến đổi này không thay đổi dataset.",
   "app.dataTab.profiling": "Sơ bộ",

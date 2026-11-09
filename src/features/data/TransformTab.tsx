@@ -67,13 +67,17 @@ import {
 } from "@/utils/dataPrep";
 
 import { useDataStore } from "@/stores/useDataStore";
-import type { TransformChangeSummary, TransformOperation } from "@/stores/datasetHistory";
+import type { TransformChangeSummary, TransformOperation } from "@/types";
 
 type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
 const PREP_ACTIONS: PrepAction[] = ["rename", "coerce_numeric", "coerce_text", "compute", "log", "outlier_iqr", "dedupe"];
 export type TransformAction = TransformOperation;
 
 export type TransformCategory = "missing" | "scale" | "clean" | "variables";
+
+export function transformActionLabel(action: TransformOperation): string {
+  return t(ACTION_DEFINITIONS.find((definition) => definition.id === action)?.shortTitleKey ?? "datasetHistory.action.transform");
+}
 
 interface ActionDefinition {
   id: TransformAction;

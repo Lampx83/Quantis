@@ -1,35 +1,6 @@
-import type { Dataset } from "@/types";
+import type { Dataset, DatasetChange, DatasetChangeDetails, DatasetChangeSummary } from "@/types";
 import { generateId } from "@/utils/helpers";
-
-export type TransformOperation =
-  | "drop_missing" | "fill_mean" | "fill_median" | "fill_mode" | "fill_hot_deck" | "fill_mice"
-  | "z_score" | "min_max" | "filter" | "sort" | "recode"
-  | "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
-
-export interface DatasetChangeSummary {
-  action: "cell" | "paste" | "insertRow" | "deleteRow" | "metadata" | "renameColumn" | "insertColumn" | "deleteColumn" | "transform" | "extractImputation";
-  columns?: string[];
-  firstRow?: number;
-  lastRow?: number;
-  cellCount?: number;
-  rowCount?: number;
-  operation?: TransformOperation;
-  formula?: string;
-}
-
-export type TransformChangeSummary = DatasetChangeSummary & { action: "transform"; operation: TransformOperation };
-export type DerivationSummary = TransformChangeSummary | { action: "extractImputation"; member: number };
-
-type DatasetChangeDetails =
-  | { kind: "commit" }
-  | { kind: "undo" | "redo"; originalChangeId: string }
-  | { kind: "derive"; source: { datasetId: string; name: string; member?: number } };
-
-export type DatasetChange = DatasetChangeSummary & DatasetChangeDetails & {
-  id: string;
-  datasetId: string;
-  timestamp: string;
-};
+import { appendDatasetAudit } from "./transformationAudit";
 
 export type DatasetContentPatch = Partial<Pick<Dataset,
   "name" | "data" | "preview" | "variables" | "columnNames" | "rows" | "columns" | "readOnly" | "imputationMeta"
@@ -136,7 +107,12 @@ export function previousContent(dataset: Dataset, patch: DatasetContentPatch): D
 }
 
 export function applyDatasetChange(dataset: Dataset, patch: DatasetContentPatch, change: DatasetChange): Dataset {
-  return { ...dataset, ...patch, updatedAt: change.timestamp };
+  return {
+    ...dataset,
+    ...patch,
+    updatedAt: change.timestamp,
+    audit: appendDatasetAudit(dataset.audit, change),
+  };
 }
 
 export function datasetRowOffset(matrix: string[][] | undefined, dataset: Dataset): number {
