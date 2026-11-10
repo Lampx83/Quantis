@@ -2,6 +2,29 @@ import { create } from "zustand";
 import type { AuthConfig, AuthUser, SampleDatasetListItem } from "@/api";
 import type { ArchiveSearchItem, ArchiveFileItem } from "@/archive-api";
 import * as quantisApi from "@/api";
+import type { WorkspaceChanges } from "./workspaceCache";
+
+type LocalSaveScope = "datasets" | "workflows";
+type WorkspaceSaveStatus = "idle" | "pending" | "saved" | "failed";
+const LAST_STANDALONE_OWNER = "quantis_last_standalone_workspace_owner";
+
+function readStandaloneOwner(): string | null {
+  try {
+    const owner = localStorage.getItem(LAST_STANDALONE_OWNER);
+    return owner?.startsWith("user:") && owner.length > 5 ? owner : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberStandaloneOwner(owner: string) {
+  try {
+    if (owner === "local") localStorage.removeItem(LAST_STANDALONE_OWNER);
+    else localStorage.setItem(LAST_STANDALONE_OWNER, owner);
+  } catch {
+    // Workspace storage can be unavailable.
+  }
+}
 
 export interface SyncState {
   // Connection
@@ -21,6 +44,12 @@ export interface SyncState {
 
   // Sync status
   workspacePullLoading: boolean;
+  workspaceOwner: string;
+  workspaceEpoch: number;
+  workspaceSessionVerified: boolean;
+  workspaceChanges: WorkspaceChanges;
+  localSaveFailures: Record<LocalSaveScope, boolean>;
+  workspaceSaveStatus: WorkspaceSaveStatus;
   sidebarImportBusy: boolean;
   embedConfigGeneration: number;
 
@@ -47,6 +76,8 @@ export interface SyncState {
   setSampleDatasetsLoading: (loading: boolean) => void;
   refreshSampleDatasets: () => Promise<void>;
   setWorkspacePullLoading: (loading: boolean) => void;
+  setLocalSaveFailure: (scope: LocalSaveScope, failed: boolean) => void;
+  setWorkspaceSaveStatus: (status: WorkspaceSaveStatus) => void;
   setSidebarImportBusy: (busy: boolean) => void;
   setEmbedConfigGeneration: (gen: number | ((prev: number) => number)) => void;
 
@@ -59,6 +90,17 @@ export interface SyncState {
   setArchiveFiles: (files: ArchiveFileItem[] | ((prev: ArchiveFileItem[]) => ArchiveFileItem[])) => void;
   setArchiveFilesLoading: (loading: boolean) => void;
   setArchiveDownloadingFileId: (id: string | null) => void;
+}
+
+function switchWorkspaceOwner(state: SyncState, workspaceOwner: string): Partial<SyncState> {
+  if (workspaceOwner === state.workspaceOwner) return {};
+  return {
+    workspaceOwner,
+    workspaceEpoch: state.workspaceEpoch + 1,
+    workspaceChanges: { datasets: {}, workflows: {} },
+    localSaveFailures: { datasets: false, workflows: false },
+    workspaceSaveStatus: "idle",
+  };
 }
 
 export const useSyncStore = create<SyncState>((set) => ({
@@ -75,6 +117,12 @@ export const useSyncStore = create<SyncState>((set) => ({
   sampleDatasetsLoading: false,
 
   workspacePullLoading: false,
+  workspaceOwner: "local",
+  workspaceEpoch: 0,
+  workspaceSessionVerified: false,
+  workspaceChanges: { datasets: {}, workflows: {} },
+  localSaveFailures: { datasets: false, workflows: false },
+  workspaceSaveStatus: "idle",
   sidebarImportBusy: false,
   embedConfigGeneration: 0,
 
@@ -88,11 +136,28 @@ export const useSyncStore = create<SyncState>((set) => ({
   archiveFilesLoading: false,
   archiveDownloadingFileId: null,
 
-  setIsOnline: (isOnline) => set({ isOnline }),
-  setUseBackend: (useBackend) => set({ useBackend }),
+  setIsOnline: (isOnline) => set((state) => ({
+    isOnline,
+    workspaceSessionVerified: isOnline && state.workspaceSessionVerified,
+  })),
+  setUseBackend: (useBackend) => set((state) => {
+    const owner = !useBackend && state.workspaceEpoch === 0 && !state.authUser && !quantisApi.isPortalEmbed()
+      ? readStandaloneOwner()
+      : null;
+    return {
+      useBackend,
+      workspaceSessionVerified: useBackend && state.workspaceSessionVerified,
+      ...switchWorkspaceOwner(state, owner ?? state.workspaceOwner),
+    };
+  }),
   setAnalysisBackendAvailable: (analysisBackendAvailable) => set({ analysisBackendAvailable }),
   setAuthConfig: (authConfig) => set({ authConfig }),
-  setAuthUser: (authUser) => set({ authUser }),
+  setAuthUser: (authUser) => {
+    const portal = quantisApi.isPortalEmbed();
+    const owner = authUser?.id && !(portal && isPortalGuestUser(authUser)) ? `user:${authUser.id}` : "local";
+    if (!portal) rememberStandaloneOwner(owner);
+    set((state) => ({ authUser, ...switchWorkspaceOwner(state, owner) }));
+  },
   setAuthLoading: (authLoading) => set({ authLoading }),
   setIsPortalAdmin: (isPortalAdmin) => set({ isPortalAdmin }),
   setSampleDatasetsList: (sampleDatasetsList) => set({ sampleDatasetsList }),
@@ -108,6 +173,10 @@ export const useSyncStore = create<SyncState>((set) => ({
     }
   },
   setWorkspacePullLoading: (workspacePullLoading) => set({ workspacePullLoading }),
+  setLocalSaveFailure: (scope, failed) => set((state) =>
+    state.localSaveFailures[scope] === failed ? state : { localSaveFailures: { ...state.localSaveFailures, [scope]: failed } }),
+  setWorkspaceSaveStatus: (workspaceSaveStatus) => set((state) =>
+    state.workspaceSaveStatus === workspaceSaveStatus ? state : { workspaceSaveStatus }),
   setSidebarImportBusy: (sidebarImportBusy) => set({ sidebarImportBusy }),
   setEmbedConfigGeneration: (embedConfigGeneration) =>
     set((s) => ({
@@ -166,13 +235,20 @@ export function canSyncToServer(syncState: {
   useBackend: boolean;
   authConfig: AuthConfig | null;
   authUser: AuthUser | null;
+  workspaceOwner?: string;
 }): boolean {
   if (!syncState.useBackend) return false;
   if (quantisApi.isPortalEmbed()) {
     const email = (syncState.authUser?.email ?? "").trim().toLowerCase();
     return !!syncState.authUser && !!email && !isPortalGuestUser(syncState.authUser);
   }
+  if (syncState.workspaceOwner?.startsWith("user:") && !syncState.authUser) return false;
   return !syncState.authConfig?.authEnabled || !!syncState.authUser;
+}
+
+export function canSyncWorkspace(state: SyncState): boolean {
+  return state.isOnline && canSyncToServer(state) &&
+    (quantisApi.isPortalEmbed() || state.workspaceSessionVerified);
 }
 
 /** true khi workspace phải được lưu đầy đủ ở localStorage (không đồng bộ server hoặc đang offline). */
@@ -180,7 +256,15 @@ export function persistsWorkspaceLocally(s: {
   useBackend: boolean;
   authConfig: AuthConfig | null;
   authUser: AuthUser | null;
+  workspaceOwner?: string;
   isOnline: boolean;
+  workspaceSaveStatus?: WorkspaceSaveStatus;
 }): boolean {
-  return !canSyncToServer(s) || !s.isOnline;
+  return !canSyncToServer(s) || !s.isOnline || s.workspaceSaveStatus === "pending" || s.workspaceSaveStatus === "failed";
+}
+
+export function shouldWriteWorkspaceCache(state: SyncState, previous: SyncState): boolean {
+  const local = persistsWorkspaceLocally(state);
+  const wasLocal = persistsWorkspaceLocally(previous);
+  return local !== wasLocal && (local || state.workspaceSaveStatus === "saved");
 }

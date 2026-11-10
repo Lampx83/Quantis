@@ -117,6 +117,56 @@ describe("Imputed Dataset Bundle Store Actions & Guards", () => {
     });
   });
 
+  it("reverses creation of a read-only bundle and restores the committed member on redo", () => {
+    const store = useDataStore.getState();
+    const bundle = createMockBundleDataset();
+    const standard = { ...bundle, imputationMeta: undefined, readOnly: false };
+    store.hydrateFromServer([standard]);
+    const revision = store.getDatasetRevision(bundle.id)!;
+    expect(store.commitDatasetTransform(bundle.id, revision, bundle, { action: "transform", operation: "fill_mice" })).toBeTruthy();
+    store.setActiveImputationIndex(bundle.id, 2);
+    expect(useDataStore.getState().datasets[0].imputationMeta?.activeImputationIndex).toBe(2);
+    expect(store.undoDataset()).toBe(true);
+    expect(useDataStore.getState().datasets[0].imputationMeta).toBeUndefined();
+    expect(useDataStore.getState().datasets[0].readOnly).toBe(false);
+    expect(store.undoDataset()).toBe(false);
+    expect(store.redoDataset()).toBe(true);
+    expect(useDataStore.getState().datasets[0]).toMatchObject({
+      data: bundle.data, preview: bundle.preview, readOnly: true, imputationMeta: bundle.imputationMeta,
+    });
+  });
+
+  it("extracts an independent member and rejects a derivation from a stale revision", () => {
+    const store = useDataStore.getState();
+    const bundle = createMockBundleDataset();
+    store.hydrateFromServer([{ ...bundle, imputationMeta: undefined, readOnly: false }]);
+    const stale = store.getDatasetRevision(bundle.id)!;
+    store.commitDatasetTransform(bundle.id, stale, bundle, { action: "transform", operation: "fill_mice" });
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...content } = bundle;
+    expect(store.deriveDataset(bundle.id, content, { action: "extractImputation", member: 2 }, stale)).toBeUndefined();
+    expect(useDataStore.getState().datasets).toHaveLength(1);
+    const child = store.cloneBundleAsStandardDataset(bundle.id, 2)!;
+    expect(child.readOnly).toBe(false);
+    expect(child.data?.[1][1]).toBe("4600");
+    expect(store.undoDataset(child.id)).toBe(false);
+    expect(store.undoDataset(bundle.id)).toBe(true);
+    expect(useDataStore.getState().datasets[1]).toBe(child);
+  });
+
+  it("preserves redo when a transform produces the same data and schema", () => {
+    const store = useDataStore.getState();
+    const bundle = createMockBundleDataset();
+    const source = { ...bundle, imputationMeta: undefined, readOnly: false };
+    store.hydrateFromServer([source]);
+    store.updateCell(0, 1, "4500");
+    store.undoDataset();
+    const current = useDataStore.getState().datasets[0];
+    expect(store.commitDatasetTransform(current.id, store.getDatasetRevision(current.id)!, {
+      ...current, name: current.name + " (sorted)", data: current.data!.map((row) => [...row]),
+    }, { action: "transform", operation: "sort" })).toBeUndefined();
+    expect(store.redoDataset()).toBe(true);
+  });
+
   it("1. adds a dataset with imputationMeta (Sparse Delta) to useDataStore", () => {
     const ds = useDataStore.getState().datasets.find((d) => d.id === "bundle_ds_1");
     expect(ds).toBeDefined();

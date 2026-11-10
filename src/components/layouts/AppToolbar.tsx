@@ -20,9 +20,31 @@ import {
   CircleDot,
   AreaChart as AreaChartIcon,
   Gauge,
+  Undo2,
+  Redo2,
 } from "lucide-react";
-import { useUIStore, useWorkflowStore } from "@/stores";
-import { t } from "@/i18n";
+import { useDataStore, useUIStore, useWorkflowStore } from "@/stores";
+import { t, useLocale } from "@/i18n";
+
+function DatasetUndoRedoControls() {
+  useLocale();
+  const history = useDataStore((state) =>
+    state.selectedDatasetId ? state.historyByDataset.get(state.selectedDatasetId) : undefined,
+  );
+  const buttonClass = "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm whitespace-nowrap hover:bg-neutral-200 dark:hover:bg-neutral-700 disabled:opacity-40 disabled:pointer-events-none";
+  return (
+    <div className="ml-auto flex items-center gap-1">
+      <button type="button" className={buttonClass} disabled={!history?.undo.length}
+        onClick={() => useDataStore.getState().undoDataset()}>
+        <Undo2 className="w-4 h-4" /> {t("datasetHistory.undo")}
+      </button>
+      <button type="button" className={buttonClass} disabled={!history?.redo.length}
+        onClick={() => useDataStore.getState().redoDataset()}>
+        <Redo2 className="w-4 h-4" /> {t("datasetHistory.redo")}
+      </button>
+    </div>
+  );
+}
 
 export function AppToolbar() {
   const {
@@ -92,6 +114,7 @@ export function AppToolbar() {
           >
             <Shuffle className="w-4 h-4 shrink-0" /> {t("app.dataTab.transform")}
           </button>
+          <DatasetUndoRedoControls />
         </div>
       )}
 
@@ -576,6 +599,7 @@ export function AppToolbar() {
                 {t("app.mainTab.presentation.label")}
               </span>
             )}
+            {["import", "clean", "transform"].includes(selectedStep.type) && <DatasetUndoRedoControls />}
           </div>
         )}
     </>

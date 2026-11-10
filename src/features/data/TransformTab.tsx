@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, type Dispatch, type SetStateAction } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   X,
   Loader2,
@@ -66,23 +66,18 @@ import {
   type RecodeElseAction,
 } from "@/utils/dataPrep";
 
+import { useDataStore } from "@/stores/useDataStore";
+import type { TransformChangeSummary, TransformOperation } from "@/types";
+
 type PrepAction = "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
 const PREP_ACTIONS: PrepAction[] = ["rename", "coerce_numeric", "coerce_text", "compute", "log", "outlier_iqr", "dedupe"];
-export type TransformAction =
-  | "drop_missing"
-  | "fill_mean"
-  | "fill_median"
-  | "fill_mode"
-  | "fill_hot_deck"
-  | "fill_mice"
-  | "z_score"
-  | "min_max"
-  | "filter"
-  | "sort"
-  | "recode"
-  | PrepAction;
+export type TransformAction = TransformOperation;
 
 export type TransformCategory = "missing" | "scale" | "clean" | "variables";
+
+export function transformActionLabel(action: TransformOperation): string {
+  return t(ACTION_DEFINITIONS.find((definition) => definition.id === action)?.shortTitleKey ?? "datasetHistory.action.transform");
+}
 
 interface ActionDefinition {
   id: TransformAction;
@@ -401,7 +396,6 @@ export function convertSparsePatches(
 
 export interface TransformTabProps {
   selectedDs: Dataset | null;
-  setDatasets: Dispatch<SetStateAction<Dataset[]>>;
   onSelectDataset: (id: string | null) => void;
   onWorkflowDatasetAdd?: (id: string) => void;
   initialShowChoiceModal?: boolean;
@@ -432,7 +426,6 @@ export interface TransformTabProps {
 
 export function TransformTab({
   selectedDs,
-  setDatasets,
   onSelectDataset,
   onWorkflowDatasetAdd,
   initialShowChoiceModal = false,
@@ -538,13 +531,13 @@ export function TransformTab({
     initialInvalidateConfirm ? () => () => {} : null
   );
   const [showTransformChoiceModal, setShowTransformChoiceModal] = useState(initialShowChoiceModal);
-  const [lastTransformResult, setLastTransformResult] = useState<{
-    before: string[][];
-    after: string[][];
-    actionLabel: string;
-    stats?: MiceImputationResponse["statistics"];
-    rubinStats?: RubinColumnStatistic[];
+  const [transformResult, setLastTransformResult] = useState<NonNullable<TransformTabProps["initialLastTransformResult"]> & {
+    dataset?: Dataset;
   } | null>(initialLastTransformResult ?? null);
+  const lastTransformResult = transformResult?.dataset && transformResult.dataset !== selectedDs ? null : transformResult;
+  useEffect(() => {
+    setLastTransformResult((result) => result?.dataset && result.dataset !== selectedDs ? null : result);
+  }, [selectedDs]);
   const [isHotDeckLoading, setIsHotDeckLoading] = useState(false);
   const [previewTab, setPreviewTab] = useState<"sideBySide" | "before" | "after">("sideBySide");
 
@@ -725,6 +718,12 @@ export function TransformTab({
   const applyTransform = async (overwriteOriginal: boolean, invalidateBundle = false) => {
     setShowTransformChoiceModal(false);
     if (dataRows.length < 2) return;
+    const store = useDataStore.getState();
+    const revision = store.getDatasetRevision(selectedDs.id);
+    if (!revision || !store.datasets.includes(selectedDs)) {
+      setPrepNote({ ok: false, text: t("transformTab.staleResult") });
+      return;
+    }
     let newRows: string[][];
     let statsForMice: MiceImputationResponse["statistics"] | undefined = undefined;
     let rubinStatsForMice: RubinColumnStatistic[] | undefined = undefined;
@@ -946,7 +945,11 @@ export function TransformTab({
       }
     }
 
-    const now = new Date().toISOString();
+    if (store.getDatasetRevision(selectedDs.id) !== revision) {
+      setPrepNote({ ok: false, text: t("transformTab.staleResult") });
+      return;
+    }
+
     const suffix =
       prepSuffix ??
       (transformAction === "filter"
@@ -964,15 +967,6 @@ export function TransformTab({
         : transformAction === "fill_mice"
         ? ` (MICE m=${clampMiceM(miceM)})`
         : t("transformTab.suffixDefault"));
-
-    const beforeSnapshot = dataRows.map((r) => [...r]);
-    setLastTransformResult({
-      before: beforeSnapshot,
-      after: newRows,
-      actionLabel: suffix,
-      stats: statsForMice,
-      rubinStats: rubinStatsForMice,
-    });
 
     const newHeader = newRows[0];
     let baseVariables = selectedDs.variables ? { ...selectedDs.variables } : undefined;
@@ -1036,46 +1030,48 @@ export function TransformTab({
       }
     }
 
-    if (overwriteOriginal) {
-      const updatedDs: Dataset = ensureDatasetMetadata({
-        ...selectedDs,
-        name: `${selectedDs.name}${suffix}`,
-        rows: newRows.length - 1,
-        columns: newHeader.length,
-        columnNames: newHeader,
-        preview: newRows.slice(0, 6),
-        data: newRows,
-        variables: baseVariables,
-        updatedAt: now,
-        readOnly: transformAction === "fill_mice" ? true : (invalidateBundle ? false : selectedDs.readOnly),
-        imputationMeta:
-          transformAction === "fill_mice" && imputationMetaForMice
-            ? imputationMetaForMice
-            : (invalidateBundle ? undefined : selectedDs.imputationMeta),
-      });
-      setDatasets((prev) => prev.map((d) => (d.id === selectedDs.id ? updatedDs : d)));
-      setShowTransformChoiceModal(false);
-    } else {
-      const id = generateId();
-      const newDs: Dataset = ensureDatasetMetadata({
-        id,
-        name: `${selectedDs.name}${suffix}`,
-        rows: newRows.length - 1,
-        columns: newHeader.length,
-        columnNames: newHeader,
-        preview: newRows.slice(0, 6),
-        data: newRows,
-        variables: baseVariables,
-        sourceFormat: selectedDs.sourceFormat,
-        createdAt: now,
-        updatedAt: now,
-        readOnly: transformAction === "fill_mice" ? true : undefined,
-        imputationMeta: transformAction === "fill_mice" ? imputationMetaForMice : undefined,
-      });
-      setDatasets((prev) => [...prev, newDs]);
-      onSelectDataset(id);
-      onWorkflowDatasetAdd?.(id);
-      setShowTransformChoiceModal(false);
+    const transformed = {
+      name: `${selectedDs.name}${suffix}`,
+      rows: newRows.length - 1,
+      columns: newHeader.length,
+      columnNames: newHeader,
+      preview: newRows.slice(0, 6),
+      data: newRows,
+      variables: baseVariables,
+      sourceFormat: selectedDs.sourceFormat,
+      readOnly: transformAction === "fill_mice" ? true : undefined,
+      imputationMeta: imputationMetaForMice,
+    };
+    const scopedColumns: Partial<Record<TransformAction, string[]>> = {
+      filter: [filterCol], sort: [sortCol], recode: [recodeCol, recodeTargetMode === "different" ? recodeNewColName.trim() : ""],
+      rename: [renameFrom, renameTo.trim()], compute: [computeName.trim()],
+    };
+    const summary: TransformChangeSummary = {
+      action: "transform",
+      operation: transformAction,
+      columns: (scopedColumns[transformAction] ?? (transformColsMultiple.length ? transformColsMultiple : [transformCol])).filter(Boolean),
+      rowCount: Math.abs(transformed.rows - selectedDs.rows) || undefined,
+      formula: transformAction === "compute" ? computeFormula.trim() : undefined,
+    };
+    const committed = overwriteOriginal
+      ? store.commitDatasetTransform(selectedDs.id, revision, ensureDatasetMetadata({
+          ...selectedDs,
+          ...transformed,
+          readOnly: transformed.readOnly ?? (invalidateBundle ? false : selectedDs.readOnly),
+          imputationMeta: transformed.imputationMeta ?? (invalidateBundle ? undefined : selectedDs.imputationMeta),
+        }), summary)
+      : store.deriveDataset(selectedDs.id, transformed, summary, revision);
+    if (!committed) {
+      setPrepNote({ ok: true, text: t("transformTab.unchangedResult") });
+      return;
+    }
+    setLastTransformResult({
+      dataset: committed, before: dataRows, after: newRows, actionLabel: suffix,
+      stats: statsForMice, rubinStats: rubinStatsForMice,
+    });
+    if (!overwriteOriginal) {
+      onSelectDataset(committed.id);
+      onWorkflowDatasetAdd?.(committed.id);
     }
   };
 

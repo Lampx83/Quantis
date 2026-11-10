@@ -58,6 +58,7 @@ describe("DataStore & UIStore Expansion", () => {
   beforeEach(() => {
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(mockDataset))],
+      historyByDataset: new Map(),
       selectedDatasetId: "ds_test",
     });
     useUIStore.setState({
@@ -67,6 +68,201 @@ describe("DataStore & UIStore Expansion", () => {
   });
 
   describe("useDataStore Actions", () => {
+    it("edits the first headerless row even when its value matches the column name", () => {
+      const store = useDataStore.getState();
+      const rows = [["ID", "1", "85"], ["2", "2", "90"], ["3", "1", "78"]];
+      store.setDatasets([{ ...mockDataset, data: rows, preview: rows.slice(0, 2) }]);
+      store.updateCell(0, 2, "99");
+      expect(useDataStore.getState().datasets[0].data).toEqual([
+        ["ID", "1", "99"], rows[1], rows[2],
+      ]);
+      expect(useDataStore.getState().datasets[0].preview).toEqual([["ID", "1", "99"], rows[1]]);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data).toEqual(rows);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[0][2]).toBe("99");
+    });
+
+    it("preserves a truncated preview header when preview length equals the row count", () => {
+      const store = useDataStore.getState();
+      const rows = [...mockDataset.data!, ["4", "1", "80"]];
+      store.setDatasets([{ ...mockDataset, rows: 4, data: rows, preview: rows.slice(0, 4) }]);
+      store.updateCell(0, 2, "99");
+      expect(useDataStore.getState().datasets[0].preview[0]).toEqual(mockDataset.columnNames);
+      expect(useDataStore.getState().datasets[0].preview[1][2]).toBe("99");
+    });
+
+    it("reverses variable metadata and schema edits without disturbing row values", () => {
+      const store = useDataStore.getState();
+      const before = useDataStore.getState().datasets[0];
+      store.renameVariable("SCORE", "TOTAL");
+      store.updateVariableMetadata("TOTAL", { missingValues: ["99"], valueLabels: { "85": "Pass" } });
+      store.removeVariable("GENDER");
+      const after = useDataStore.getState().datasets[0];
+      expect(after.columnNames).toEqual(["ID", "TOTAL"]);
+      expect(after.data?.[1]).toEqual(["1", "85"]);
+      expect(store.undoDataset()).toBe(true);
+      expect(store.undoDataset()).toBe(true);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0]).toMatchObject({
+        columnNames: before.columnNames, variables: before.variables, data: before.data, preview: before.preview,
+      });
+      store.renameVariable("SCORE", "ID");
+      store.updateVariableMetadata("UNKNOWN", { label: "Unknown" });
+      store.updateVariableMetadata("SCORE", { label: "Exam Score" });
+      expect(store.redoDataset()).toBe(true);
+      expect(store.redoDataset()).toBe(true);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].variables).toEqual(after.variables);
+    });
+
+    it("restores a newly added column including its values and metadata", () => {
+      const store = useDataStore.getState();
+      const metadata: VariableMetadata = { ...mockDataset.variables!.SCORE, name: "TOTAL" };
+      store.addVariable(metadata, ["10", "20", "30"]);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].columns).toBe(3);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[2]).toEqual(["2", "2", "90", "20"]);
+      expect(useDataStore.getState().datasets[0].variables?.TOTAL).toEqual(metadata);
+    });
+
+    it("reverses a whole paste and ignores invalid or unchanged batches", () => {
+      const store = useDataStore.getState();
+      store.batchUpdateCells([
+        { rowIndex: 0, colIndex: 2, value: "96" },
+        { rowIndex: 1, colIndex: 2, value: "98" },
+      ]);
+      expect(useDataStore.getState().datasets[0].preview.map((row) => row[2])).toEqual(["SCORE", "96", "98", "78"]);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].preview).toEqual(mockDataset.preview);
+      expect(store.undoDataset()).toBe(false);
+
+      store.batchUpdateCells([
+        { rowIndex: 0, colIndex: 2, value: "temporary" },
+        { rowIndex: 0, colIndex: 2, value: "85" },
+      ]);
+      store.batchUpdateCells([
+        { rowIndex: 0, colIndex: 2, value: "ignored" },
+        { rowIndex: 3, colIndex: 2, value: "invalid" },
+      ]);
+      expect(useDataStore.getState().datasets[0].preview).toEqual(mockDataset.preview);
+      expect(store.redoDataset()).toBe(true);
+    });
+
+    it.each([true, false])("restores row order, preview and counts with a header present: %s", (header) => {
+      const store = useDataStore.getState();
+      const rows = header ? mockDataset.preview : mockDataset.preview.slice(1);
+      store.setDatasets([{ ...mockDataset, data: rows, preview: rows.slice(0, header ? 3 : 2) }]);
+      const before = useDataStore.getState().datasets[0];
+      store.addRow(["7", "1", "99"], 1);
+      const inserted = useDataStore.getState().datasets[0];
+      expect(inserted.rows).toBe(4);
+      expect(inserted.data?.[header ? 2 : 1]).toEqual(["7", "1", "99"]);
+      store.removeRow(0);
+      expect(useDataStore.getState().datasets[0].rows).toBe(3);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].preview).toEqual(inserted.preview);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0]).toMatchObject({ rows: before.rows, preview: before.preview, data: before.data });
+      store.removeRow(-1);
+      expect(store.redoDataset()).toBe(true);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[header ? 1 : 0]).toEqual(["7", "1", "99"]);
+    });
+
+    it("keeps other histories when importing, replacing, or deleting datasets", () => {
+      const store = useDataStore.getState();
+      store.updateCell(0, 2, "92");
+      const first = useDataStore.getState().datasets[0];
+      const revision = store.getDatasetRevision(first.id);
+      store.addDataset({ ...mockDataset, id: "second" });
+      store.setSelectedDatasetId("second");
+      expect(store.getDatasetRevision(first.id)).toBe(revision);
+      store.updateCell(0, 2, "93");
+      store.setDatasets((datasets) => datasets.map((d) => d.id === first.id ? { ...first } : d));
+      expect(store.getDatasetRevision(first.id)).not.toBe(revision);
+      expect(store.undoDataset(first.id)).toBe(false);
+      expect(store.undoDataset()).toBe(true);
+      store.removeDataset(first.id);
+      store.addDataset(first);
+      expect(store.getDatasetRevision(first.id)).not.toBe(revision);
+    });
+
+    it("invalidates histories and revision tokens on hydration even if datasets are reused", async () => {
+      const store = useDataStore.getState();
+      store.updateCell(0, 2, "92");
+      const { datasets } = useDataStore.getState();
+      const revision = store.getDatasetRevision(mockDataset.id);
+      store.hydrateFromServer(datasets);
+      expect(store.getDatasetRevision(mockDataset.id)).not.toBe(revision);
+      expect(store.undoDataset()).toBe(false);
+      store.updateCell(0, 2, "96");
+      await useDataStore.persist.rehydrate();
+      expect(store.undoDataset()).toBe(false);
+      store.setDatasets([]);
+      expect(store.getDatasetRevision(mockDataset.id)).toBeUndefined();
+    });
+
+    it("retains at most 50 undo steps per dataset", () => {
+      const store = useDataStore.getState();
+      for (let i = 0; i < 52; i++) store.updateCell(0, 2, String(i));
+      for (let i = 0; i < 50; i++) expect(store.undoDataset()).toBe(true);
+      expect(store.undoDataset()).toBe(false);
+      expect(useDataStore.getState().datasets[0].data?.[1][2]).toBe("1");
+    });
+
+    it("commits an oversized edit while dropping only that dataset's disconnected history", () => {
+      const store = useDataStore.getState();
+      store.addDataset({ ...mockDataset, id: "second" });
+      store.updateCell(0, 2, "95");
+      store.updateCell(0, 2, "96", "second");
+      const oversized = "x".repeat(9 * 1024 * 1024);
+      store.updateCell(0, 2, oversized);
+      expect(useDataStore.getState().datasets[0].data?.[1][2]).toBe(oversized);
+      expect(useDataStore.getState().historyLimitDatasetId).toBe("ds_test");
+      expect(store.undoDataset()).toBe(false);
+      expect(store.undoDataset("second")).toBe(true);
+    });
+
+    it("drops dependent redos when the workspace budget evicts their prerequisite", () => {
+      const store = useDataStore.getState();
+      const rows = Array.from({ length: 50_000 }, () => ["1", "1", "85"]);
+      store.setDatasets([{ ...mockDataset, rows: rows.length, data: rows, preview: rows.slice(0, 5) }]);
+      store.addDataset({ ...mockDataset, id: "second", rows: rows.length, data: rows });
+      store.updateCell(0, 2, "first");
+      store.updateCell(0, 2, "second");
+      store.undoDataset();
+      store.undoDataset();
+      for (let i = 0; i < 20; i++) store.updateCell(0, 2, String(i), "second");
+      expect(store.redoDataset()).toBe(false);
+      expect(store.undoDataset("second")).toBe(true);
+    });
+
+    it("undoes and redoes only the selected dataset and preserves redo on invalid or unchanged edits", () => {
+      const store = useDataStore.getState();
+      store.addDataset({ ...mockDataset, id: "second" });
+      store.updateCell(0, 2, "95");
+      store.updateCell(0, 2, "99", "second");
+
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets.map((d) => d.preview[1][2])).toEqual(["85", "99"]);
+      expect(useDataStore.getState().datasets[0].data).toEqual(mockDataset.data);
+
+      store.updateCell(0, 2, "85");
+      store.updateCell(-1, 2, "ignored");
+      store.updateCell(0, 3, "ignored");
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[1][2]).toBe("95");
+
+      store.undoDataset();
+      store.updateCell(0, 2, "96");
+      expect(store.redoDataset()).toBe(false);
+      store.setSelectedDatasetId("second");
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets.map((d) => d.preview[1][2])).toEqual(["96", "85"]);
+    });
+
     it("addDataset should add a new dataset and prevent duplicate entries with identical IDs", () => {
       const { addDataset } = useDataStore.getState();
       const newDataset: Dataset = {

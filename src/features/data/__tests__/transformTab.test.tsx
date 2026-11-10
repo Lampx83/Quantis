@@ -80,7 +80,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
       />
     );
@@ -214,7 +213,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(t("transformTab.mice.colImputedStd")).toBe("Std (sau MICE)");
   });
 
-  it("does not duplicate dataset in useDataStore when creating a new dataset from transform", async () => {
+  it.each(["fill_mean", "fill_median", "fill_mode", "drop_missing"] as const)("creates one derived dataset with an accurate row-count summary for %s", async (action) => {
     setLocale("en");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
@@ -224,11 +223,11 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function Harness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialShowChoiceModal: true,
         initialColsMultiple: ["INCOME"],
+        initialAction: action,
       });
       return rendered;
     }
@@ -260,6 +259,10 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(datasets.length).toBe(2);
     expect(datasets[0].id).toBe("ds_transform_test");
     expect(datasets[1].id).not.toBe("ds_transform_test");
+    // Filling selected missing cells does not affect every row in the dataset.
+    const change = datasets[1].audit?.entries.slice(-1)[0];
+    expect(change?.operation).toBe(action);
+    expect(change?.rowCount).toBe(action === "drop_missing" ? 2 : undefined);
 
     // Deleting the newly created dataset should delete ONLY that dataset, leaving the original
     const newDsId = datasets[1].id;
@@ -302,8 +305,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function Harness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialShowChoiceModal: true,
         initialColsMultiple: ["INCOME"],
@@ -372,8 +374,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function Harness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialShowChoiceModal: true,
         initialColsMultiple: ["INCOME"],
@@ -420,7 +421,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlMice = renderToStaticMarkup(
       <TransformTab
         selectedDs={dsWithManyCols}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="fill_mice"
       />
@@ -435,7 +435,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlRename = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="rename"
       />
@@ -449,7 +448,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlCompute = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="compute"
       />
@@ -462,7 +460,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlFilter = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="filter"
       />
@@ -477,7 +474,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlSort = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="sort"
       />
@@ -490,7 +486,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlRecode = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="recode"
       />
@@ -506,7 +501,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlChoice = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialShowChoiceModal={true}
       />
@@ -523,7 +517,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlReplace = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialReplaceConfirm={true}
       />
@@ -539,7 +532,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlInvalidate = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialInvalidateConfirm={true}
       />
@@ -555,7 +547,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
       />
     );
@@ -575,7 +566,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="drop_missing"
       />
@@ -591,7 +581,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="drop_missing"
       />
@@ -604,7 +593,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="drop_missing"
       />
@@ -631,7 +619,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="z_score"
       />
@@ -654,7 +641,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="filter"
       />
@@ -678,7 +664,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="compute"
       />
@@ -703,7 +688,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlScale = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="log"
       />
@@ -713,7 +697,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlClean = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="dedupe"
       />
@@ -723,7 +706,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const htmlVars = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="coerce_text"
       />
@@ -735,7 +717,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="drop_missing"
       />
@@ -762,7 +743,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="drop_missing"
       />
@@ -776,7 +756,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
       />
     );
@@ -844,7 +823,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
       const html = renderToStaticMarkup(
         <TransformTab
           selectedDs={sampleDatasetWithMissing}
-          setDatasets={vi.fn()}
           onSelectDataset={vi.fn()}
           initialAction={act as any}
         />
@@ -861,13 +839,16 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
       datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
       selectedDatasetId: "ds_transform_test",
     });
+    const store = useDataStore.getState();
+    store.updateCell(0, 0, "edited");
+    const attach = vi.fn();
 
     let rendered: any = null;
     function ComputeHarness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
-        onSelectDataset: vi.fn(),
+        selectedDs: useDataStore.getState().datasets[0],
+        onSelectDataset: store.setSelectedDatasetId,
+        onWorkflowDatasetAdd: attach,
         initialAction: "compute",
         initialComputeName: "MEDIAN_INC",
         initialComputeFormula: "MEDIAN([INCOME])",
@@ -899,6 +880,11 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const datasets = useDataStore.getState().datasets;
     expect(datasets.length).toBe(2);
     const newDs = datasets[1];
+    expect(attach).toHaveBeenCalledExactlyOnceWith(newDs.id);
+    expect(useDataStore.getState().selectedDatasetId).toBe(newDs.id);
+    expect(store.undoDataset()).toBe(false);
+    expect(store.undoDataset(sampleDatasetWithMissing.id)).toBe(true);
+    expect(useDataStore.getState().datasets[1]).toBe(newDs);
     expect(newDs.columnNames).toContain("MEDIAN_INC");
     expect(newDs.variables).toBeDefined();
     expect(newDs.variables!["MEDIAN_INC"]).toBeDefined();
@@ -919,8 +905,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function RecodeHarness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialAction: "recode",
         initialShowChoiceModal: true,
@@ -993,8 +978,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function RecodeNumericHarness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialAction: "recode",
         initialShowChoiceModal: true,
@@ -1052,8 +1036,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function RecodeSameStringHarness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialAction: "recode",
         initialShowChoiceModal: true,
@@ -1103,7 +1086,6 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const html = renderToStaticMarkup(
       <TransformTab
         selectedDs={sampleDatasetWithMissing}
-        setDatasets={vi.fn()}
         onSelectDataset={vi.fn()}
         initialAction="recode"
         initialRecodeElseEnabled={true}
@@ -1131,8 +1113,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     let rendered: any = null;
     function SameVarHarness() {
       rendered = TransformTab({
-        selectedDs: sampleDatasetWithMissing,
-        setDatasets: useDataStore.getState().setDatasets,
+        selectedDs: useDataStore.getState().datasets[0],
         onSelectDataset: vi.fn(),
         initialAction: "recode",
         initialShowChoiceModal: true,
@@ -1173,5 +1154,9 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     const genderIdx = updatedDs.columnNames.indexOf("GENDER");
     expect(updatedDs.data![1][genderIdx]).toBe("Male");
     expect(updatedDs.data![2][genderIdx]).toBe("Female");
+    expect(useDataStore.getState().undoDataset()).toBe(true);
+    expect(useDataStore.getState().datasets[0].data).toEqual(sampleDatasetWithMissing.data);
+    expect(useDataStore.getState().redoDataset()).toBe(true);
+    expect(useDataStore.getState().datasets[0].data).toEqual(updatedDs.data);
   });
 });

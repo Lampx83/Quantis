@@ -98,7 +98,7 @@ describe("giao diện: cột «Không phải số» + chú giải", () => {
   const noop = () => undefined;
   const profilingHtml = () =>
     renderToStaticMarkup(
-      <DataView tab="profiling" datasets={[ds()]} setDatasets={noop} selectedDatasetId="d1" onSelectDataset={noop} />
+      <DataView tab="profiling" datasets={[ds()]} selectedDatasetId="d1" onSelectDataset={noop} />
     );
 
   it("Sơ bộ: có cột, số đếm và ghi chú khi có ô sai kiểu", () => {
@@ -122,7 +122,7 @@ describe("giao diện: cột «Không phải số» + chú giải", () => {
     const clean = ds();
     clean.data = data.filter((r) => !["bốn", "N/A", "3,5"].includes(r[1]));
     const html = renderToStaticMarkup(
-      <DataView tab="profiling" datasets={[clean]} setDatasets={noop} selectedDatasetId="d1" onSelectDataset={noop} />
+      <DataView tab="profiling" datasets={[clean]} selectedDatasetId="d1" onSelectDataset={noop} />
     );
     expect(html).not.toContain('data-testid="nonnumeric-note"');
   });

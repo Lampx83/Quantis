@@ -71,6 +71,44 @@ export interface ImputationMeta {
   originalRows: string[][];
 }
 
+export type TransformOperation =
+  | "drop_missing" | "fill_mean" | "fill_median" | "fill_mode" | "fill_hot_deck" | "fill_mice"
+  | "z_score" | "min_max" | "filter" | "sort" | "recode"
+  | "rename" | "coerce_numeric" | "coerce_text" | "compute" | "log" | "outlier_iqr" | "dedupe";
+
+export interface DatasetChangeSummary {
+  action: "cell" | "paste" | "insertRow" | "deleteRow" | "metadata" | "renameColumn"
+    | "insertColumn" | "deleteColumn" | "transform" | "extractImputation";
+  columns?: string[];
+  columnCount?: number;
+  firstRow?: number;
+  lastRow?: number;
+  cellCount?: number;
+  rowCount?: number;
+  operation?: TransformOperation;
+  formula?: string;
+}
+
+export type TransformChangeSummary = DatasetChangeSummary & { action: "transform"; operation: TransformOperation };
+export type DerivationSummary = TransformChangeSummary | { action: "extractImputation"; member: number };
+
+export type DatasetChangeDetails =
+  | { kind: "commit" }
+  | { kind: "undo" | "redo"; originalChangeId: string }
+  | { kind: "derive"; source: { datasetId: string; name: string; member?: number } };
+
+export type DatasetChange = DatasetChangeSummary & DatasetChangeDetails & {
+  id: string;
+  datasetId: string;
+  timestamp: string;
+};
+
+export interface DatasetAuditLog {
+  entries: DatasetChange[];
+  /** Timestamp of the most recent entry removed by retention. */
+  cutoffAt?: string;
+}
+
 /** Dataset: bảng dữ liệu đã import (CSV, Excel, SPSS, …) */
 export interface Dataset {
   id: string;
@@ -96,6 +134,7 @@ export interface Dataset {
   imputationMeta?: ImputationMeta;
   /** Khóa chỉnh sửa nếu là bundle chỉ đọc */
   readOnly?: boolean;
+  audit?: DatasetAuditLog;
 }
 
 // ---------------------------------------------------------------------------

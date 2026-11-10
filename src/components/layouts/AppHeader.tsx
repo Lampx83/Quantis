@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sigma,
   Sun,
@@ -8,6 +8,7 @@ import {
   BookOpen,
   Download,
   GitBranch,
+  History,
   FileText,
   Server,
   ThumbsUp,
@@ -16,13 +17,17 @@ import {
   LineChart as LineChartIcon,
   Sparkles,
 } from "lucide-react";
-import { useUIStore, useWorkflowStore, useSyncStore } from "@/stores";
+import { useDataStore, useUIStore, useWorkflowStore, useSyncStore } from "@/stores";
 import type { WorkflowStep } from "@/types";
 import * as quantisApi from "@/api";
 import { getDefaultStandardWorkflow } from "@/sample-data";
-import { t } from "@/i18n";
+import { t, useLocale } from "@/i18n";
+import { TransformationHistory } from "@/features/data/TransformationHistory";
 
 export function AppHeader() {
+  useLocale();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const dataset = useDataStore((state) => state.datasets.find((d) => d.id === state.selectedDatasetId));
   const {
     mainSection,
     setMainSection,
@@ -54,6 +59,7 @@ export function AppHeader() {
   const { authConfig, authUser } = useSyncStore();
 
   const headerMenuRef = useRef<HTMLDivElement>(null);
+  const headerMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   const defaultWorkflowForDisplay = useMemo(() => getDefaultStandardWorkflow(), []);
   const selectedWorkflow = selectedWorkflowId ? workflows.find((w) => w.id === selectedWorkflowId) : null;
@@ -272,6 +278,7 @@ export function AppHeader() {
 
         <div className="relative">
           <button
+            ref={headerMenuButtonRef}
             type="button"
             onClick={() => setHeaderMenuOpen((v) => !v)}
             className="p-2 rounded-md hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
@@ -350,6 +357,21 @@ export function AppHeader() {
               <button
                 type="button"
                 role="menuitem"
+                aria-haspopup="dialog"
+                disabled={!dataset}
+                onClick={() => {
+                  headerMenuButtonRef.current?.focus();
+                  setHeaderMenuOpen(false);
+                  setHistoryOpen(true);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-neutral-700 dark:text-neutral-300 enabled:hover:bg-neutral-100 dark:enabled:hover:bg-neutral-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset rounded disabled:opacity-40"
+              >
+                <History className="w-4 h-4 shrink-0" />
+                {t("datasetHistory.open")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   setMainSection("reproducibility");
                   setReproTab("openscience");
@@ -394,6 +416,7 @@ export function AppHeader() {
           )}
         </div>
       </div>
+      {historyOpen && dataset && <TransformationHistory dataset={dataset} onClose={() => setHistoryOpen(false)} />}
     </header>
   );
 }

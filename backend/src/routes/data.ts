@@ -63,6 +63,13 @@ function mustHaveUserForEmbedded(userId: string | null, res: Response): userId i
   return false
 }
 
+function matchesWorkspaceOwner(req: Request, res: Response, userId: string | null): boolean {
+  const expected = req.get("X-Quantis-Workspace-Owner")
+  if (expected === undefined || expected === (userId ? `user:${userId}` : "local")) return true
+  res.status(409).json({ error: "Workspace session changed" })
+  return false
+}
+
 export async function getData(req: Request, res: Response): Promise<void> {
   try {
     const userId = getUserId(req)
@@ -73,6 +80,7 @@ export async function getData(req: Request, res: Response): Promise<void> {
     }
 
     if (process.env.RUN_MODE === "embedded" && !mustHaveUserForEmbedded(userId, res)) return
+    if (!matchesWorkspaceOwner(req, res, userId)) return
 
     if (userId && isValidUuid(userId)) {
       const r = await query<{ datasets: unknown; workflows: unknown }>(
@@ -115,6 +123,7 @@ export async function postData(req: Request, res: Response): Promise<void> {
     }
 
     if (process.env.RUN_MODE === "embedded" && !mustHaveUserForEmbedded(userId, res)) return
+    if (!matchesWorkspaceOwner(req, res, userId)) return
     // Có x-user-id = request qua Portal (RUN_MODE có thể chưa kịp = embedded trong bundle) -> khách không được ghi DB.
     if (((req.headers["x-user-id"] as string) ?? "").trim() && isGuestRequest(req)) {
       res.status(401).json({ error: "Cần đăng nhập để lưu workspace", code: "LOGIN_REQUIRED" })

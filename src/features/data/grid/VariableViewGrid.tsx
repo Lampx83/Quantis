@@ -37,22 +37,7 @@ export function getOrderedVariableMetadataList(
   dataset: Dataset | null | undefined
 ): VariableMetadata[] {
   if (!dataset) return [];
-  const hasHeaderInData =
-    dataset.data &&
-    dataset.data.length > 0 &&
-    dataset.columnNames.length > 0 &&
-    dataset.data[0][0] === dataset.columnNames[0];
-  const hasHeaderInPreview =
-    dataset.preview &&
-    dataset.preview.length > 0 &&
-    dataset.columnNames.length > 0 &&
-    dataset.preview[0][0] === dataset.columnNames[0];
-
-  const normalized = ensureDatasetMetadata({
-    ...dataset,
-    data: hasHeaderInData ? dataset.data!.slice(1) : dataset.data,
-    preview: hasHeaderInPreview ? dataset.preview.slice(1) : dataset.preview,
-  });
+  const normalized = ensureDatasetMetadata(dataset);
   const vars = normalized.variables ?? {};
   return normalized.columnNames.map(
     (colName) =>
