@@ -37,12 +37,12 @@ Docs: http://localhost:4000/docs
 | POST | `/logistic` | Hồi quy logistic nhị phân |
 | POST | `/mannwhitney` | Mann-Whitney U (non-parametric) |
 | POST | `/shapiro` | Shapiro-Wilk (kiểm định chuẩn) |
-| POST | `/cronbach` | Cronbach's alpha (độ tin cậy thang đo) |
 | POST | `/vif` | VIF – đa cộng tuyến |
 | POST | `/mediation` | Mediation (Baron-Kenny: X→M→Y) |
 | POST | `/moderation` | Moderation (tương tác X×M) |
 | POST | `/kmeans` | K-means clustering |
-| POST | `/efa` | EFA (trích nhân tố PCA + xoay varimax) |
+| POST | `/efa` | PCA trên ma trận tương quan Pearson, xoay Varimax khi giữ nhiều thành phần |
+| POST | `/paf` | Principal Axis Factoring (PAF) với Parallel Analysis, xoay Varimax khi giữ nhiều nhân tố |
 | POST | `/pairwise-posthoc` | So sánh từng cặp sau ANOVA (Welch t + Bonferroni) |
 | POST | `/crosstab` | Bảng tần số 2 chiều |
 | POST | `/boxstats` | Thống kê box plot theo nhóm (min, Q1, median, Q3, max, n) |
@@ -58,6 +58,15 @@ Docs: http://localhost:4000/docs
 | POST | `/keyword-counts` | Phân tích định tính: đếm từ khóa/mã (số dòng chứa, tổng lần xuất hiện) |
 | POST | `/ngram-freq` | Phân tích định tính: tần số cụm từ (n-gram: bigram, trigram) |
 | POST | `/cohens-kappa` | Phân tích định tính: Cohen's Kappa — độ đồng nhất mã hóa 2 coder |
+
+### PCA và PAF
+
+Cả hai endpoint nhận `rows` (dòng đầu là tiêu đề), `columnNames` theo thứ tự item và `nFactors` tùy chọn. Mẫu chỉ gồm dòng có giá trị số hữu hạn ở mọi item đã chọn. Tab Nhân tố xử lý mã khuyết đã khai báo trước khi gửi mẫu.
+
+- `/efa` giữ hợp đồng PCA hiện có, gồm `eigenvalues` và `varianceExplained`. Bỏ `nFactors` để giữ các thành phần có eigenvalue > 1, tối thiểu một.
+- `/paf` dùng ma trận tương quan rút gọn với SMC. Bỏ `nFactors` hoặc truyền `null` để dùng Parallel Analysis. Phép gợi ý dùng 500 lượt hoán vị từng cột độc lập với seed 4302 và phân vị 95%. Giới hạn là 3.000 dòng đầy đủ và 30 item. Vượt giới hạn vẫn có thể trích với số nhập tay hợp lệ.
+- Cả hai trả `result` có `method`, `columnNames`, `nUsed`, `screeEigenvalues` và `suggestedCount`. Nghiệm hợp lệ có `nFactors`, `rotation`, `unrotatedLoadings`, `loadings`, `communalities`, `varianceBefore` và `varianceAfter`. Phương sai tính theo phần trăm tổng phương sai của các item chuẩn hóa. Varimax dùng tải thô, không chuẩn hóa Kaiser. Một cột tải dùng `rotation: "none"`.
+- PAF trả thêm `parallelCutoff` và `parallelIssue`. `suggestedCount: 0` nghĩa là không bậc đầu nào vượt mốc. `suggestedCount: null` nghĩa là không tính được gợi ý. Khi chưa có nghiệm, `nFactors` là `null` và phản hồi vẫn có dãy Scree nếu đã tính. Lỗi dữ liệu hoặc trích trả mã trong `detail.code`. Lỗi trích sau khi tính Scree còn trả `detail.result`.
 
 ## Tích hợp với Node
 

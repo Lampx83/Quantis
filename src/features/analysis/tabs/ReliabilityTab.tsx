@@ -1,61 +1,82 @@
-import { useState, useEffect, useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Dataset } from "@/types";
-import { computeCronbachAlpha, computeCronbachDetail } from "@/utils/stats";
-import * as quantisApi from "@/api";
+import { computeReliability, reflectionConstant, reverseSuggestions, selectItem, toggleReverse, type ReliabilitySelection } from "@/utils/reliability";
 import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
-import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
+import { InfoHint } from "@/components/common/InfoHint";
+import { ItemPicker, numericItemColumns } from "../reliability/ItemPicker";
+import { ItemTable } from "../reliability/ItemTable";
+import { ItemCorrelationMatrix } from "../reliability/ItemCorrelationMatrix";
+import { ScaleVerdictCard } from "../reliability/ScaleVerdictCard";
+import { CurrentResultApa, apaSentence } from "../reliability/CurrentResultApa";
+import { formatStat } from "../reliability/format";
+import { buildMissingMatcher } from "@/utils/metadata";
 
 export interface ReliabilityTabProps {
   selectedDataset: Dataset;
   rows: string[][];
-  numericCols: string[];
-  analysisBackendAvailable?: boolean;
+  showToast?: (message: string) => void;
 }
 
-export function ReliabilityTab({
-  selectedDataset,
-  rows,
-  numericCols,
-  analysisBackendAvailable = false,
-}: ReliabilityTabProps) {
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [cronbachBackendResult, setCronbachBackendResult] = useState<number | null>(null);
+export function ReliabilityTab({ selectedDataset, rows, showToast }: ReliabilityTabProps) {
+  return <ReliabilityEditor key={selectedDataset.id} selectedDataset={selectedDataset} rows={rows} showToast={showToast} />;
+}
 
-  const toggle = (c: string) =>
-    setSelectedItems((prev) =>
-      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]
-    );
-
-  useEffect(() => {
-    if (!analysisBackendAvailable || selectedItems.length < 2) {
-      setCronbachBackendResult(null);
-      return;
-    }
-    quantisApi.analyzeCronbach(rows, selectedItems).then(setCronbachBackendResult);
-  }, [analysisBackendAvailable, selectedItems.join(","), rows.length]);
-
-  const alpha =
-    (analysisBackendAvailable ? cronbachBackendResult : null) ??
-    (selectedItems.length >= 2 ? computeCronbachAlpha(rows, selectedItems) : null);
-
-  // Bảng theo từng biến (Item-Total Statistics) luôn tính ở frontend, độc lập backend Python.
+// Dataset khác remount editor: không có một frame kết quả/cờ đảo điểm của dataset cũ.
+function ReliabilityEditor({ selectedDataset, rows, showToast }: ReliabilityTabProps) {
+  const [selection, setSelection] = useState<ReliabilitySelection>({ items: [], reverse: {} });
+  const selectedItems = selection.items;
   const itemKey = selectedItems.join("\u0001");
-  const detail = useMemo(() => (selectedItems.length >= 2 ? computeCronbachDetail(rows, selectedItems) : null), [rows, itemKey]);
-  const lowItems = detail ? detail.items.filter((it) => it.lowItemTotal).map((it) => it.name) : [];
-  const raiseItems = detail ? detail.items.filter((it) => it.raisesAlphaIfDeleted).map((it) => it.name) : [];
-  const fmtNum = (x: number | null | undefined, d = 3) => (x == null || Number.isNaN(x) ? "—" : x.toFixed(d));
+  const columns = selectedDataset.columnNames ?? [];
+  // Cùng một bộ lọc với picker: cột toàn ô trống không còn được coi là item.
+  const itemColumns = useMemo(() => numericItemColumns(rows, columns), [rows, columns]);
+
+  // Hằng số phản chiếu suy từ thang người dùng khai (valueLabels) trước, mẫu sau (spec R4).
+  const reflections = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const name of selectedItems) {
+      // Chỉ truyền thang khai báo. Nếu thiếu, computeReliability tự suy từ Scale sample.
+      const variable = selectedDataset.variables?.[name];
+      const constant = reflectionConstant([], variable?.valueLabels, buildMissingMatcher(variable));
+      if (Number.isFinite(constant)) out[name] = constant;
+    }
+    return out;
+  }, [rows, columns, itemKey, selectedDataset.variables]);
+
+  // Mọi số liệu đến từ MỘT Scale sample listwise (computeReliability): headline α và bảng item
+  // không thể lệch mẫu nhau, và không còn đường tính thứ hai ở Python (ADR-0002).
+  const result = useMemo(
+    () =>
+      selectedItems.length >= 2
+        ? computeReliability(rows, selectedItems, selection.reverse, reflections)
+        : null,
+    [rows, itemKey, selection.reverse, reflections]
+  );
+
+  const toggle = (c: string) => setSelection((prev) => selectItem(prev, c));
+  const handleToggleReverse = (name: string) =>
+    setSelection((prev) => toggleReverse(prev, name));
+  const copyApa = () => {
+    if (!result) return;
+    const sentence = apaSentence(result.statistics, result.verdict);
+    if (!sentence || typeof navigator === "undefined" || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(sentence)
+      .then(() => showToast?.(t("reliabilityTab.apaCopied")))
+      .catch(() => showToast?.(t("reliabilityTab.apaCopyFailed")));
+  };
+
+  const stats = result?.statistics;
+  const ci = stats?.ci;
 
   return (
     <div className="w-full max-w-full">
       <h2 className="text-xl font-semibold mb-2">{t("reliabilityTab.title")}<InfoHint term="cronbachAlpha" /></h2>
-      <GlossaryBar terms={["cronbachAlpha", "correctedItemTotal", "alphaIfDeleted"]} />
       <p className="text-neutral-600 dark:text-neutral-400 mb-4">{t("reliabilityTab.description")}</p>
       <div className="mb-4">
         <AIAssistPanel
           metadata={
             selectedDataset
-              ? `Dataset: ${selectedDataset.name}. Số cột số: ${numericCols.length}. Cột: ${numericCols.slice(0, 15).join(", ")}${numericCols.length > 15 ? "…" : ""}.`
+              ? `Dataset: ${selectedDataset.name}. Số cột số: ${itemColumns.length}. Cột: ${itemColumns.slice(0, 15).join(", ")}${itemColumns.length > 15 ? "…" : ""}.`
               : undefined
           }
           context={t("reliabilityTab.contextDesc")}
@@ -68,100 +89,62 @@ export function ReliabilityTab({
           title={t("reliabilityTab.askAiTitle")}
         />
       </div>
-      <div className="mb-4">
-        <p className="text-sm font-medium mb-2">{t("reliabilityTab.selectItemsLabel")}</p>
-        <div className="flex flex-wrap gap-2">
-          {numericCols.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => toggle(c)}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                selectedItems.includes(c)
-                  ? "bg-brand text-white"
-                  : "border border-neutral-300 dark:border-neutral-600"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      </div>
-      {alpha != null && (
-        <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-          <AIAssistPanel
-            context={`Cronbach's alpha = ${alpha.toFixed(4)}. Số item: ${selectedItems.length}. Đánh giá: ${
-              alpha >= 0.9
-                ? t("reliabilityTab.evalVeryGood")
-                : alpha >= 0.8
-                ? t("reliabilityTab.evalGood")
-                : alpha >= 0.7
-                ? t("reliabilityTab.evalAcceptable")
-                : alpha >= 0.6
-                ? t("reliabilityTab.evalNeedsImprovement")
-                : t("reliabilityTab.evalLow")
-            }. Các item: ${selectedItems.join(", ")}.${detail ? ` Bảng biến–tổng: ${detail.items.map((it) => `${it.name} (corrected item-total=${fmtNum(it.correctedItemTotal)}, α nếu loại=${fmtNum(it.alphaIfDeleted)})`).join("; ")}.${lowItems.length ? ` ${t("reliabilityTab.aiFlaggedPrefix")} ${lowItems.join(", ")}.` : ""}${raiseItems.length ? ` ${t("reliabilityTab.aiRaisesPrefix")} ${raiseItems.join(", ")}.` : ""}` : ""}`}
-            quickPrompts={[
-              {
-                label: t("reliabilityTab.interpretAlphaLabel"),
-                systemHint: `${t("reliabilityTab.interpretAlphaHint")} ${aiAnswerLangHint()}`,
-              },
-            ]}
-            title={t("reliabilityTab.askAiAlphaTitle")}
-          />
-          <p className="font-medium">Cronbach&apos;s α = {alpha.toFixed(4)}</p>
+      <ItemPicker
+        rows={rows}
+        columns={columns}
+        variables={selectedDataset.variables}
+        selected={selectedItems}
+        onToggle={toggle}
+      />
+      {stats && (
+        <div
+          className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4"
+          data-testid="reliability-summary"
+        >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.alphaLabel")}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="text-2xl font-semibold tabular-nums">{formatStat(stats.alpha)}</span>
+                <ScaleVerdictCard assessment={result!.verdict} />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                {t("reliabilityTab.alphaStandardizedLabel")}<InfoHint term="standardizedAlpha" />
+              </p>
+              <p className="mt-1 text-xl font-medium tabular-nums">{formatStat(stats.alphaStandardized)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">{t("reliabilityTab.ciLabel")}</p>
+              <p className="mt-1 text-xl font-medium tabular-nums">{ci ? `[${formatStat(ci.lower)}, ${formatStat(ci.upper)}]` : "—"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                {t("reliabilityTab.meanInterItemRLabel")}<InfoHint term="interItemCorrelation" />
+              </p>
+              <p className="mt-1 text-xl font-medium tabular-nums" data-testid="mean-inter-item-r">{formatStat(stats.meanInterItemR)}</p>
+            </div>
+          </div>
           <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
-            {alpha >= 0.9
-              ? t("reliabilityTab.resultVeryGood")
-              : alpha >= 0.8
-              ? t("reliabilityTab.resultGood")
-              : alpha >= 0.7
-              ? t("reliabilityTab.resultAcceptable")
-              : alpha >= 0.6
-              ? t("reliabilityTab.resultNeedsImprovement")
-              : t("reliabilityTab.resultLow")}
+            {t("reliabilityTab.kLabel")}: {stats.k} · {t("reliabilityTab.nCasesLabel")}:{" "}
+            {stats.nScaleSample} · {t("reliabilityTab.nInputLabel")}: {stats.nInput}
           </p>
         </div>
       )}
-      {detail && (
-        <div className="mt-4 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm" data-testid="item-total-table">
-          <p className="font-medium p-2 border-b border-neutral-200 dark:border-neutral-700">
-            {t("reliabilityTab.itemTotalTitle")}
-            <span className="ml-2 font-normal text-neutral-500">({t("reliabilityTab.nCasesLabel")}: {detail.nCases})</span>
-          </p>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-neutral-200 dark:border-neutral-600">
-                <th className="text-left p-2">{t("reliabilityTab.colItem")}</th>
-                <th className="text-right p-2">{t("reliabilityTab.colScaleMean")}</th>
-                <th className="text-right p-2">{t("reliabilityTab.colScaleVar")}</th>
-                <th className="text-right p-2">{t("reliabilityTab.colCitc")}<InfoHint term="correctedItemTotal" /></th>
-                <th className="text-right p-2">{t("reliabilityTab.colAlphaDel")}<InfoHint term="alphaIfDeleted" /></th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.items.map((it) => (
-                <tr key={it.name} className={`border-b border-neutral-100 dark:border-neutral-700/50 ${it.lowItemTotal || it.raisesAlphaIfDeleted ? "bg-amber-50 dark:bg-amber-900/20" : ""}`}>
-                  <td className="p-2 font-medium">{it.name}</td>
-                  <td className="p-2 text-right">{fmtNum(it.scaleMeanIfDeleted)}</td>
-                  <td className="p-2 text-right">{fmtNum(it.scaleVarianceIfDeleted)}</td>
-                  <td className={`p-2 text-right ${it.lowItemTotal ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`}>
-                    {fmtNum(it.correctedItemTotal)}{it.lowItemTotal ? ` (${t("reliabilityTab.flagLowCitc")})` : ""}
-                  </td>
-                  <td className={`p-2 text-right ${it.raisesAlphaIfDeleted ? "font-semibold text-amber-700 dark:text-amber-400" : ""}`}>
-                    {fmtNum(it.alphaIfDeleted)}{it.raisesAlphaIfDeleted ? ` (${t("reliabilityTab.flagRaisesAlpha")})` : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="p-2 text-xs text-neutral-600 dark:text-neutral-400 space-y-1">
-            {lowItems.length === 0 && raiseItems.length === 0 && <p>{t("reliabilityTab.noteAllGood")}</p>}
-            {lowItems.length > 0 && <p>{t("reliabilityTab.noteLowCitc")} ({lowItems.join(", ")})</p>}
-            {raiseItems.length > 0 && <p>{t("reliabilityTab.noteRaisesAlpha")} ({raiseItems.join(", ")})</p>}
-            {detail.nItems < 3 && <p>{t("reliabilityTab.needThreeItems")}</p>}
-          </div>
-        </div>
+      {result && (
+        <>
+          <ItemTable
+            items={result.items}
+            onToggleReverse={handleToggleReverse}
+            reverseSuggestions={reverseSuggestions(result.items, result.statistics.alpha)}
+          />
+          <ItemCorrelationMatrix
+            data={result.sample.data}
+            names={selectedItems}
+          />
+          <CurrentResultApa statistics={result.statistics} assessment={result.verdict} onCopy={copyApa} />
+        </>
       )}
     </div>
   );

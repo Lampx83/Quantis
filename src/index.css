@@ -16,6 +16,15 @@
   --color-neutral-700: #1f2937;
 }
 
+/* The document never scrolls; panels inside the app own their overflow. */
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
@@ -31,8 +40,8 @@ body {
 }
 
 #root {
-  min-height: 100dvh;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   min-width: 0;
 }
 

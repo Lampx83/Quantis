@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { t, setLocale } from "../../i18n";
+import { EXTRA_EN, EXTRA_VI } from "../../i18n-extra";
 
 describe("i18n Core Engine", () => {
   beforeEach(() => {
@@ -237,8 +238,7 @@ describe("i18n Core Engine", () => {
     });
   });
 
-  describe("Task 2: Smart Titles i18n Dictionary", () => {
-    const autoTitleKeys = [
+  describe("Task 2: Smart Titles i18n Dictionary", () => {    const autoTitleKeys = [
       "presentationView.autoTitlePieCategorical",
       "presentationView.autoTitlePieBinned",
       "presentationView.autoTitleHistogram",
@@ -289,6 +289,167 @@ describe("i18n Core Engine", () => {
       expect(t("presentationView.autoTitleHeatmap", { method: "Pearson" })).toBe("Ma trận tương quan Pearson");
       expect(t("presentationView.autoTitleRadarGrouped", { group: "Phòng ban" })).toBe("Hồ sơ đa chiều theo Phòng ban");
       expect(t("presentationView.autoTitleRadarNoGroup")).toBe("Biểu đồ radar đa chiều");
+    });
+  });
+
+  describe("Phase 4.1 regression diagnostics i18n", () => {
+    const REGDIAG_KEYS = [
+      "title",
+      "expand",
+      "collapse",
+      "copy",
+      "notApplicable",
+      "needsBackend",
+      "unavailable",
+      "stale",
+      "staleJump",
+      "failureConsequence",
+      "modelLine",
+      "sampleLine",
+      "method.listwise",
+      "method.miceActive",
+      "miceLine",
+      "miceOriginalLine",
+      "judgedSampleLine",
+      "judgedSampleDiffers",
+      "table.assumption",
+      "table.statistic",
+      "table.thresholdNote",
+      "table.verdict",
+      "table.action",
+      "verdict.pass",
+      "verdict.caution",
+      "verdict.violation",
+      "row.linearity",
+      "row.normality",
+      "row.influence",
+      "row.collinearity",
+      "explain.linearity.pass",
+      "explain.linearity.caution",
+      "explain.linearity.violation",
+      "explain.normality.pass",
+      "explain.normality.caution",
+      "explain.normality.violation",
+      "explain.influence.pass",
+      "explain.influence.caution",
+      "explain.influence.violation",
+      "explain.collinearity.pass",
+      "explain.collinearity.caution",
+      "explain.collinearity.violation",
+      "threshold.linearity",
+      "threshold.normality",
+      "threshold.influence",
+      "threshold.collinearity",
+      "action.linearity",
+      "action.normality",
+      "action.influence",
+      "action.influenceNone",
+      "action.none",
+      "action.collinearity",
+      "error.insufficient_n",
+      "error.singular_x",
+      "error.not_available",
+      "error.internal",
+      "reason.singlePredictor",
+      "reason.insufficientDf",
+      "reason.notComputable",
+      "stat.bp",
+      "stat.reset",
+      "stat.shapiro",
+      "stat.jarqueBera",
+      "stat.skewness",
+      "stat.influence",
+      "stat.collinearity",
+      "stat.unavailable",
+      "vifEntry",
+      "plot.residVsFitted",
+      "plot.qq",
+      "plot.cooks",
+      "plot.axisFitted",
+      "plot.axisResid",
+      "plot.axisTheoretical",
+      "plot.axisSample",
+      "plot.axisObservation",
+      "plot.axisCookD",
+      "plot.sampled",
+      "plot.cooksCut",
+      "copy.assumption",
+      "copy.statistic",
+      "copy.threshold",
+      "copy.verdict",
+      "hc3.toggle",
+      "hc3.classical",
+      "hc3.pooledNote",
+      "hc3.columnSe",
+      "hc3.columnT",
+      "hc3.columnP",
+      "influential.heading",
+      "influential.row",
+      "influential.more",
+    ];
+
+    const GLOSSARY_TERMS = [
+      "bpTest",
+      "resetTest",
+      "cooksDistance",
+      "leverage",
+      "studentizedResidual",
+      "hc3",
+      "qqPlot",
+      "assumptionCheck",
+    ];
+
+    it("defines every regDiag key in both locales with a non-empty value", () => {
+      for (const key of REGDIAG_KEYS) {
+        const full = `regDiag.${key}`;
+        expect(typeof EXTRA_EN[full], `missing English key: ${full}`).toBe("string");
+        expect(typeof EXTRA_VI[full], `missing Vietnamese key: ${full}`).toBe("string");
+        expect(EXTRA_EN[full].trim().length, `empty English key: ${full}`).toBeGreaterThan(0);
+        expect(EXTRA_VI[full].trim().length, `empty Vietnamese key: ${full}`).toBeGreaterThan(0);
+      }
+    });
+
+    it("has no regDiag key present in only one locale", () => {
+      const english = new Set(Object.keys(EXTRA_EN).filter((k) => k.startsWith("regDiag.")));
+      const vietnamese = new Set(Object.keys(EXTRA_VI).filter((k) => k.startsWith("regDiag.")));
+
+      expect([...english].filter((k) => !vietnamese.has(k))).toEqual([]);
+      expect([...vietnamese].filter((k) => !english.has(k))).toEqual([]);
+    });
+
+    it("interpolates the numeric thresholds instead of hardcoding them", () => {
+      expect(EXTRA_EN["regDiag.threshold.linearity"]).toContain("{pass}");
+      expect(EXTRA_EN["regDiag.threshold.normality"]).toContain("{violationP}");
+      expect(EXTRA_EN["regDiag.threshold.normality"]).toContain("{skew}");
+      expect(EXTRA_EN["regDiag.threshold.influence"]).toContain("{relative}");
+      expect(EXTRA_EN["regDiag.threshold.influence"]).toContain("{studentized}");
+      expect(EXTRA_EN["regDiag.threshold.collinearity"]).toContain("{caution}");
+      expect(EXTRA_EN["regDiag.threshold.collinearity"]).toContain("{violation}");
+      expect(EXTRA_VI["regDiag.threshold.linearity"]).toContain("{pass}");
+      expect(EXTRA_VI["regDiag.threshold.collinearity"]).toContain("{violation}");
+    });
+
+    it("resolves every regDiag key through t() in both locales", () => {
+      for (const key of REGDIAG_KEYS) {
+        const full = `regDiag.${key}`;
+        setLocale("en");
+        expect(t(full), `unresolved English key: ${full}`).not.toBe(full);
+        setLocale("vi");
+        expect(t(full), `unresolved Vietnamese key: ${full}`).not.toBe(full);
+      }
+    });
+
+    it("defines the eight new glossary terms with title and text in both locales", () => {
+      for (const term of GLOSSARY_TERMS) {
+        const title = `glossary.${term}.title`;
+        const text = `glossary.${term}.text`;
+        for (const key of [title, text]) {
+          expect(typeof EXTRA_EN[key], `missing English key: ${key}`).toBe("string");
+          expect(typeof EXTRA_VI[key], `missing Vietnamese key: ${key}`).toBe("string");
+          expect(EXTRA_EN[key].trim().length, `empty English key: ${key}`).toBeGreaterThan(0);
+          expect(EXTRA_VI[key].trim().length, `empty Vietnamese key: ${key}`).toBeGreaterThan(0);
+        }
+      }
     });
   });
 });

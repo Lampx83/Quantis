@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ColumnSelectionButton } from "../ColumnSelectionButton";
+import { itemLabel } from "../reliability/ItemPicker";
 import { Loader2 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -228,15 +230,13 @@ export function MLTab({
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-sm font-medium">{t("mlTab.colVariablesLabel")}</span>
                 {numericCols.map((c) => (
-                  <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedCols.includes(c)}
-                      onChange={() => toggleCol(c)}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{c}</span>
-                  </label>
+                  <ColumnSelectionButton
+                    key={c}
+                    name={c}
+                    label={itemLabel(c, selectedDataset.variables)}
+                    selected={selectedCols.includes(c)}
+                    onToggle={toggleCol}
+                  />
                 ))}
               </div>
               <div className="flex flex-wrap gap-4 items-end mb-4">
@@ -440,18 +440,16 @@ export function MLTab({
                 {numericCols
                   .filter((c) => c !== classTargetCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={classFeatureCols.includes(c)}
-                        onChange={() => {
-                          toggleClassFeature(c);
-                          setMulticlassResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset.variables)}
+                      selected={classFeatureCols.includes(c)}
+                      onToggle={(c) => {
+                        toggleClassFeature(c);
+                        setMulticlassResult(null);
+                      }}
+                    />
                   ))}
               </div>
               <button

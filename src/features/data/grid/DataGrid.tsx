@@ -113,6 +113,16 @@ export function paginateIndexedRows(
   };
 }
 
+/**
+ * Which page shows a given Analysis row (R6.2, AD-10). Grid data rows and Analysis
+ * rows share one 0-based index space (headers excluded), so this is a pure division.
+ */
+export function pageForAnalysisRow(rowIndex: number, pageSize: number): number {
+  const safeSize = Math.max(1, Math.floor(pageSize));
+  const safeIndex = Math.max(0, Math.floor(rowIndex));
+  return Math.floor(safeIndex / safeSize) + 1;
+}
+
 export function formatDisplayCellValue(
   rawValue: string,
   meta?: VariableMetadata,
@@ -245,6 +255,8 @@ export function DataGrid({
     showValueLabels: storeShowValueLabels,
     toggleShowValueLabels,
     setConfirmDialog,
+    rowFocus,
+    clearRowFocus,
   } = useUIStore();
 
   const effectiveShowValueLabels =
@@ -365,6 +377,36 @@ export function DataGrid({
     () => paginateIndexedRows(filteredAndSorted, page, pageSize),
     [filteredAndSorted, page, pageSize]
   );
+
+  // R6.2: consume a row-focus request by clearing search and sort, paging to the
+  // row, marking it active and scrolling it into view. The nonce makes a repeat
+  // request to the same row fire again, and only its own request is consumed.
+  const consumedRowFocus = useRef<number | null>(null);
+  const [scrollToRow, setScrollToRow] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!rowFocus || !enrichedDataset || rowFocus.datasetId !== enrichedDataset.id) return;
+    if (consumedRowFocus.current === rowFocus.nonce) return;
+    consumedRowFocus.current = rowFocus.nonce;
+
+    if (propSearchQuery !== undefined) onSearchQueryChange?.("");
+    else setInternalSearch("");
+    setSortColIndex(null);
+    setSortDir("asc");
+    setPage(pageForAnalysisRow(rowFocus.rowIndex, pageSize));
+    setActiveCell({ originalRowIndex: rowFocus.rowIndex, colIndex: 0 });
+    setScrollToRow(rowFocus.rowIndex);
+    clearRowFocus(rowFocus.nonce);
+  }, [rowFocus, enrichedDataset, pageSize, propSearchQuery, onSearchQueryChange, clearRowFocus]);
+
+  useEffect(() => {
+    if (scrollToRow == null) return;
+    if (typeof document !== "undefined") {
+      const element = document.querySelector(`[data-row-index="${scrollToRow}"]`);
+      element?.scrollIntoView({ block: "center" });
+    }
+    setScrollToRow(null);
+  }, [scrollToRow, pageRows]);
 
   if (!enrichedDataset) {
     return (
@@ -784,6 +826,7 @@ export function DataGrid({
                 return (
                   <tr
                     key={originalRowIndex}
+                    data-row-index={originalRowIndex}
                     className={`${
                       isRowActive
                         ? "bg-brand/5 dark:bg-brand/10"

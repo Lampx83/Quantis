@@ -88,12 +88,14 @@ Ký hiệu: ✅ có trên giao diện · ⚙️ có nhưng cần backend Python 
 
 | Tính năng | Quantis | Ghi chú |
 |-----------|---------|--------|
-| EFA | ✅ | PCA + xoay varimax, KMO, Bartlett (tab *Nhân tố*) |
+| PCA và EFA | ✅ | Tab *Nhân tố* có PCA offline hoặc qua Python và PAF qua Python. Chọn số lượng tự động hoặc nhập tay. |
 | Cronbach's alpha | ✅ | Kèm tương quan biến–tổng hiệu chỉnh, alpha nếu loại biến (tab *Độ tin cậy*) |
 | CFA, Path analysis, PLS-SEM | ⚙️ | Tab *SEM*; CFA qua semopy |
 | Mediation, Moderation | ✅ | Mediation nhiều M song song; chuỗi M₁→M₂ dùng Path analysis |
 | Cluster analysis | ✅ | K-means (tab *Học máy*) |
 | Discriminant analysis | ❌ | |
+
+Tab *Nhân tố* cho tìm item theo tên hoặc nhãn, cảnh báo biến định danh và dùng cùng mẫu listwise cho KMO, Bartlett, MSA và trích. Scree hiện dãy eigenvalue cùng mốc 1 cho PCA hoặc mốc Parallel Analysis cho PAF. Kết quả có tải có dấu, communality, bộ lọc item cần xem xét và phương sai tích lũy trước/sau Varimax. PAF vẫn cho nhập số nhân tố khi vượt giới hạn Parallel Analysis.
 
 ---
 

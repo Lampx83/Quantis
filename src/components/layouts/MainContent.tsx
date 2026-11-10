@@ -59,10 +59,10 @@ export function MainContent() {
       : null;
 
   return (
-    <div className="flex-1 min-h-0 min-w-0 flex flex-col w-full">
+    <div className="flex-1 min-h-0 min-w-0 flex flex-col w-full overflow-hidden">
       <AppToolbar />
 
-      <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 min-h-0 w-full max-w-full">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain p-3 sm:p-6 min-h-0 w-full max-w-full">
         {!selectedWorkflowId && (
           <div className="w-full max-w-full py-12">
             <h2 className="text-xl font-semibold text-neutral-800 dark:text-neutral-200 mb-2">

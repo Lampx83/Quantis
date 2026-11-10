@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { ColumnSelectionButton } from "../ColumnSelectionButton";
+import { itemLabel } from "../reliability/ItemPicker";
 import { Loader2, Copy } from "lucide-react";
 import type { Dataset } from "@/types";
 import {
@@ -7,7 +9,6 @@ import {
   computeOLS,
   computeLogisticRegression,
   computeVIF,
-  type OLSResult,
   type LogisticResult,
 } from "@/utils/stats";
 import * as quantisApi from "@/api";
@@ -15,6 +16,9 @@ import { t, aiAnswerLangHint } from "@/i18n";
 import { AIAssistPanel } from "@/features/ai";
 import { InfoHint, GlossaryBar } from "@/components/common/InfoHint";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
+import { RegressionDiagnosticsPanel } from "@/features/analysis/regression/RegressionDiagnosticsPanel";
+import type { RegressionRun, RegressionRunResult } from "@/stores/useAnalysisStore";
+import { useAnalysisStore } from "@/stores/useAnalysisStore";
 
 /**
  * Tái tạo m bảng dữ liệu từ Sparse Delta của ImputationMeta.
@@ -44,7 +48,9 @@ export interface RegressionTabProps {
   showToast: (msg: string) => void;
   initialOlsYCol?: string;
   initialOlsXSelected?: string[];
-  initialOlsResult?: OLSResult | null;
+  initialOlsResult?: RegressionRunResult | null;
+  /** Test seam: show the robust columns on first render (T09). */
+  initialHc3Enabled?: boolean;
 }
 
 export function RegressionTab({
@@ -54,6 +60,7 @@ export function RegressionTab({
   initialOlsYCol,
   initialOlsXSelected,
   initialOlsResult,
+  initialHc3Enabled,
 }: RegressionTabProps) {
   const BACKEND_PYTHON_REQUIRED_MSG = t("app.backendPythonRequiredMsg");
   const rows = selectedDataset ? getAnalysisRows(selectedDataset) : [];
@@ -77,9 +84,36 @@ export function RegressionTab({
     return uniq.length === 2 && uniq.every((v) => v === 0 || v === 1);
   });
 
-  const [olsYCol, setOlsYCol] = useState(initialOlsYCol ?? "");
-  const [olsXSelected, setOlsXSelected] = useState<string[]>(initialOlsXSelected ?? []);
-  const [olsResult, setOlsResult] = useState<OLSResult | null>(initialOlsResult ?? null);
+  // Hydrate the last run only when it belongs to the dataset on screen (AD-8).
+  // Read once through the initialiser: a store subscription would re-seed the tab
+  // on every store change, and hydration is a mount-time concern.
+  const [hydratedRun] = useState<RegressionRun | null>(() => {
+    const stored = useAnalysisStore.getState().regressionRun;
+    if (!stored || !selectedDataset || stored.datasetId !== selectedDataset.id) return null;
+    return stored;
+  });
+
+  const [olsYCol, setOlsYCol] = useState(initialOlsYCol ?? hydratedRun?.yCol ?? "");
+  const [olsXSelected, setOlsXSelected] = useState<string[]>(
+    initialOlsXSelected ?? hydratedRun?.xCols ?? []
+  );
+  const [olsRun, setOlsRun] = useState<RegressionRun | null>(() => {
+    if (initialOlsResult && selectedDataset) {
+      return {
+        datasetId: selectedDataset.id,
+        datasetUpdatedAt: selectedDataset.updatedAt,
+        datasetRowCount: selectedDataset.rows,
+        yCol: initialOlsYCol ?? "",
+        xCols: initialOlsXSelected ?? [],
+        activeImputationIndex: selectedDataset.imputationMeta?.activeImputationIndex ?? null,
+        result: initialOlsResult,
+      };
+    }
+    return hydratedRun;
+  });
+  const olsResult = olsRun?.result ?? null;
+  const [olsRunSequence, setOlsRunSequence] = useState(0);
+  const [hc3Enabled, setHc3Enabled] = useState(initialHc3Enabled ?? false);
   const [logYCol, setLogYCol] = useState("");
   const [logXSelected, setLogXSelected] = useState<string[]>([]);
   const [logResult, setLogResult] = useState<LogisticResult | null>(null);
@@ -129,6 +163,34 @@ export function RegressionTab({
       prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
     );
 
+  const activeImputationIndex = selectedDataset?.imputationMeta?.activeImputationIndex ?? null;
+
+  const captureOlsRun = (result: RegressionRunResult, fittedRows = rows) => {
+    if (!selectedDataset) return;
+    setHc3Enabled(false);
+    const run: RegressionRun = {
+      datasetId: selectedDataset.id,
+      datasetUpdatedAt: selectedDataset.updatedAt,
+      datasetRowCount: selectedDataset.rows,
+      yCol: olsYCol,
+      xCols: olsXSelected,
+      activeImputationIndex,
+      result: { ...result, nInput: result.nInput ?? Math.max(0, fittedRows.length - 1) },
+    };
+    setOlsRunSequence((sequence) => sequence + 1);
+    setOlsRun(run);
+    useAnalysisStore.getState().setRegressionRun(run);
+  };
+
+  // R9.2: the run is stale when the data it describes changed; a label, never a refit.
+  const stale = Boolean(
+    olsRun &&
+      selectedDataset &&
+      olsRun.datasetId === selectedDataset.id &&
+      (olsRun.datasetUpdatedAt !== selectedDataset.updatedAt ||
+        olsRun.datasetRowCount !== selectedDataset.rows)
+  );
+
   const runOLS = async () => {
     if (!olsYCol || olsXSelected.length === 0 || !rows.length) return;
     const reconstructed = selectedDataset?.imputationMeta
@@ -137,8 +199,15 @@ export function RegressionTab({
     if (analysisBackendAvailable) {
       setRegressionLoading("ols");
       try {
-        const res = await quantisApi.analyzeOLS(rows, olsYCol, olsXSelected, reconstructed);
-        setOlsResult(res ?? null);
+        const res = await quantisApi.analyzeOLS(
+          rows,
+          olsYCol,
+          olsXSelected,
+          reconstructed,
+          activeImputationIndex
+        );
+        if (res) captureOlsRun(res, reconstructed?.[0] ?? rows);
+        else setOlsRun(null);
         if (!res && reconstructed) showToast(t("regressionExplainer.miceOlsFailed"));
       } finally {
         setRegressionLoading(null);
@@ -146,7 +215,8 @@ export function RegressionTab({
       return;
     }
     const res = computeOLS(rows, olsYCol, olsXSelected);
-    setOlsResult(res ?? null);
+    if (res) captureOlsRun(res);
+    else setOlsRun(null);
   };
 
   const runLogistic = async () => {
@@ -165,17 +235,55 @@ export function RegressionTab({
     setLogResult(res ?? null);
   };
 
+  // R8.3: the payload's own VIF comes from the model's sample, so the extra /vif
+  // round-trip is skipped whenever diagnostics carry it.
+  const payloadVif =
+    olsResult?.diagnostics?.ok && olsResult.diagnostics.vif
+      ? olsResult.diagnostics.vif
+      : null;
+
   const [vifBackendResult, setVifBackendResult] = useState<Record<string, number> | null>(null);
   useEffect(() => {
-    if (!analysisBackendAvailable || !olsResult || olsXSelected.length < 2) {
+    if (
+      !analysisBackendAvailable ||
+      !olsResult ||
+      olsXSelected.length < 2 ||
+      payloadVif !== null
+    ) {
       setVifBackendResult(null);
       return;
     }
     quantisApi.analyzeVIF(rows, olsXSelected).then(setVifBackendResult);
-  }, [analysisBackendAvailable, olsResult, olsXSelected.join(","), rows.length]);
-  const vifResult =
-    (analysisBackendAvailable ? vifBackendResult : null) ??
-    (olsResult && olsXSelected.length >= 2 ? computeVIF(rows, olsXSelected) : null);
+  }, [analysisBackendAvailable, olsResult, olsXSelected.join(","), rows.length, payloadVif]);
+
+  const vifResult: Record<string, number> | null = payloadVif
+    ? Object.fromEntries(
+        Object.entries(payloadVif)
+          .filter(([, entry]) => entry.vif != null)
+          .map(([name, entry]) => [name, entry.vif as number])
+      )
+    : (analysisBackendAvailable ? vifBackendResult : null) ??
+      (olsResult && olsXSelected.length >= 2 ? computeVIF(rows, olsXSelected) : null);
+
+  // R6.1: robust columns are offered on single-table fits only; a Rubin-pooled run
+  // compares pooled classical columns, which robustHC3 cannot match.
+  const robustBlock = olsResult?.diagnostics?.ok ? olsResult.diagnostics.robustHC3 : null;
+  const canToggleHc3 = Boolean(robustBlock) && !olsResult?.rubinPooled;
+  const showHc3Columns = canToggleHc3 && hc3Enabled;
+
+  const robustValue = (
+    map: Record<string, number | null>,
+    key: string,
+    digits: number
+  ): string => {
+    const value = map[key];
+    return value == null || !Number.isFinite(value) ? "—" : value.toFixed(digits);
+  };
+  const robustPValue = (key: string): string => {
+    const value = robustBlock?.pValue[key];
+    if (value == null || !Number.isFinite(value)) return "—";
+    return value < 0.001 ? "< .001" : value.toFixed(3);
+  };
 
   return (
     <div className="w-full max-w-full">
@@ -237,7 +345,7 @@ export function RegressionTab({
                 value={olsYCol}
                 onChange={(e) => {
                   setOlsYCol(e.target.value);
-                  setOlsResult(null);
+                  setOlsRun(null);
                 }}
                 className="rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2"
               >
@@ -257,18 +365,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== olsYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={olsXSelected.includes(c)}
-                        onChange={() => {
-                          toggleX(c);
-                          setOlsResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={olsXSelected.includes(c)}
+                      onToggle={(c) => {
+                        toggleX(c);
+                        setOlsRun(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -290,7 +396,19 @@ export function RegressionTab({
           </div>
           {olsResult && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 overflow-x-auto text-sm mt-3">
-              <div className="flex items-center justify-end gap-2 p-2 border-b border-neutral-100">
+              <div className="flex flex-wrap items-center justify-end gap-3 p-2 border-b border-neutral-100">
+                {canToggleHc3 && (
+                  <label className="flex items-center gap-1.5 text-xs text-neutral-700 dark:text-neutral-300">
+                    <input
+                      type="checkbox"
+                      data-testid="regdiag-hc3-toggle"
+                      checked={hc3Enabled}
+                      onChange={(event) => setHc3Enabled(event.target.checked)}
+                      className="rounded"
+                    />
+                    {t("regDiag.hc3.toggle")}
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -365,13 +483,28 @@ export function RegressionTab({
                         4
                       )}, n = ${olsResult.n}`,
                     ].join("\n");
-                    void navigator.clipboard.writeText(tsv);
+                    if (typeof navigator === "undefined" || !navigator.clipboard) {
+                      showToast?.(t("regDiag.copyFailed"));
+                      return;
+                    }
+                    void navigator.clipboard
+                      .writeText(tsv)
+                      .then(() => showToast?.(t("regDiag.copied")))
+                      .catch(() => showToast?.(t("regDiag.copyFailed")));
                   }}
                   className="rounded border border-neutral-300 dark:border-neutral-600 px-2 py-1 text-xs flex items-center gap-1 hover:bg-neutral-100 dark:hover:bg-neutral-700"
                 >
                   <Copy className="w-3.5 h-3.5" /> {t("regressionExplainer.copyTableButton")}
                 </button>
               </div>
+              {olsResult.rubinPooled && olsResult.diagnostics?.ok && (
+                <p
+                  data-testid="regdiag-hc3-pooled-note"
+                  className="px-2 pt-2 text-xs text-neutral-500 dark:text-neutral-400"
+                >
+                  {t("regDiag.hc3.pooledNote")}
+                </p>
+              )}
               <AIAssistPanel
                 metadata={
                   selectedDataset
@@ -424,6 +557,13 @@ export function RegressionTab({
                     <th className="text-right p-2">{t("regressionExplainer.tableCoefficient")}<InfoHint term="coefficient" /></th>
                     <th className="text-right p-2">SE</th>
                     <th className="text-right p-2">t</th>
+                    {showHc3Columns && (
+                      <>
+                        <th className="text-right p-2">{t("regDiag.hc3.columnSe")}<InfoHint term="hc3" /></th>
+                        <th className="text-right p-2">{t("regDiag.hc3.columnT")}</th>
+                        <th className="text-right p-2">{t("regDiag.hc3.columnP")}</th>
+                      </>
+                    )}
                     {olsResult.rubinPooled && (
                       <>
                         <th className="text-right p-2">{t("regressionExplainer.tableRubinDf")}</th>
@@ -444,6 +584,19 @@ export function RegressionTab({
                     <td className="p-2 text-right">
                       {olsResult.tStat["(Intercept)"]?.toFixed(3) ?? "—"}
                     </td>
+                    {showHc3Columns && robustBlock && (
+                      <>
+                        <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                          {robustValue(robustBlock.se, "(Intercept)", 4)}
+                        </td>
+                        <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                          {robustValue(robustBlock.tStat, "(Intercept)", 3)}
+                        </td>
+                        <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                          {robustPValue("(Intercept)")}
+                        </td>
+                      </>
+                    )}
                     {olsResult.rubinPooled && (
                       <>
                         <td className="p-2 text-right">
@@ -485,6 +638,19 @@ export function RegressionTab({
                       <td className="p-2 text-right">
                         {olsResult.tStat[name]?.toFixed(3) ?? "—"}
                       </td>
+                      {showHc3Columns && robustBlock && (
+                        <>
+                          <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                            {robustValue(robustBlock.se, name, 4)}
+                          </td>
+                          <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                            {robustValue(robustBlock.tStat, name, 3)}
+                          </td>
+                          <td className="p-2 text-right bg-sky-50/40 dark:bg-sky-900/10">
+                            {robustPValue(name)}
+                          </td>
+                        </>
+                      )}
                       {olsResult.rubinPooled && (
                         <>
                           <td className="p-2 text-right">
@@ -546,6 +712,15 @@ export function RegressionTab({
               )}
             </div>
           )}
+          {olsRun && selectedDataset && (
+            <RegressionDiagnosticsPanel
+              key={olsRunSequence}
+              run={olsRun}
+              selectedDatasetId={selectedDataset.id}
+              variables={selectedDataset.variables}
+              stale={stale}
+            />
+          )}
         </section>
       )}
 
@@ -596,18 +771,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== logYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={logXSelected.includes(c)}
-                        onChange={() => {
-                          toggleLogX(c);
-                          setLogResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={logXSelected.includes(c)}
+                      onToggle={(c) => {
+                        toggleLogX(c);
+                        setLogResult(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -793,18 +966,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== poissonYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={poissonXSelected.includes(c)}
-                        onChange={() => {
-                          togglePoissonX(c);
-                          setPoissonResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={poissonXSelected.includes(c)}
+                      onToggle={(c) => {
+                        togglePoissonX(c);
+                        setPoissonResult(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>
@@ -957,18 +1128,16 @@ export function RegressionTab({
                 {numericCols
                   .filter((c) => c !== ridgeYCol)
                   .map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={ridgeXSelected.includes(c)}
-                        onChange={() => {
-                          toggleRidgeX(c);
-                          setRidgeResult(null);
-                        }}
-                        className="rounded"
-                      />
-                      <span className="text-sm">{c}</span>
-                    </label>
+                    <ColumnSelectionButton
+                      key={c}
+                      name={c}
+                      label={itemLabel(c, selectedDataset?.variables)}
+                      selected={ridgeXSelected.includes(c)}
+                      onToggle={(c) => {
+                        toggleRidgeX(c);
+                        setRidgeResult(null);
+                      }}
+                    />
                   ))}
               </div>
             </div>

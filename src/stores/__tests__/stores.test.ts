@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useDataStore } from "../useDataStore";
 import { useUIStore } from "../useUIStore";
+import { useAnalysisStore, type RegressionRun } from "../useAnalysisStore";
 import { Dataset, VariableMetadata } from "../../types";
 
 const mockDataset: Dataset = {
@@ -238,5 +239,121 @@ describe("DataStore & UIStore Expansion", () => {
       toggleShowValueLabels();
       expect(useUIStore.getState().showValueLabels).toBe(false);
     });
+  });
+});
+
+describe("useUIStore row focus requests", () => {
+  beforeEach(() => {
+    useUIStore.setState({ rowFocus: null });
+  });
+
+  it("stores the request with an incremented nonce", () => {
+    useUIStore.getState().requestRowFocus("ds_a", 12);
+    expect(useUIStore.getState().rowFocus).toEqual({
+      datasetId: "ds_a",
+      rowIndex: 12,
+      nonce: 1,
+    });
+
+    useUIStore.getState().requestRowFocus("ds_a", 99);
+    expect(useUIStore.getState().rowFocus).toEqual({
+      datasetId: "ds_a",
+      rowIndex: 99,
+      nonce: 2,
+    });
+  });
+
+  it("gives a repeat request to the same row a new nonce", () => {
+    useUIStore.getState().requestRowFocus("ds_a", 7);
+    const first = useUIStore.getState().rowFocus!.nonce;
+    useUIStore.getState().requestRowFocus("ds_a", 7);
+    const second = useUIStore.getState().rowFocus!.nonce;
+
+    expect(second).toBe(first + 1);
+  });
+
+  it("clears only the request whose nonce matches", () => {
+    useUIStore.getState().requestRowFocus("ds_a", 5);
+    const nonce = useUIStore.getState().rowFocus!.nonce;
+
+    useUIStore.getState().clearRowFocus(nonce + 1);
+    expect(useUIStore.getState().rowFocus).not.toBeNull();
+
+    useUIStore.getState().clearRowFocus(nonce);
+    expect(useUIStore.getState().rowFocus).toBeNull();
+  });
+});
+
+describe("useAnalysisStore regression run slice", () => {
+  const resultA = {
+    n: 80,
+    coefficients: { "(Intercept)": 1.5 },
+    diagnostics: { ok: true },
+  } as unknown as RegressionRun["result"];
+  const resultB = {
+    n: 60,
+    coefficients: { "(Intercept)": 0.5 },
+    diagnostics: { ok: false, errorCode: "insufficient_n" },
+  } as unknown as RegressionRun["result"];
+
+  const runA: RegressionRun = {
+    datasetId: "ds_test",
+    datasetUpdatedAt: "2026-11-04T00:00:00Z",
+    datasetRowCount: 80,
+    yCol: "Y",
+    xCols: ["X1", "X2"],
+    activeImputationIndex: 1,
+    result: resultA,
+  };
+
+  beforeEach(() => {
+    useAnalysisStore.getState().clearRegressionRun();
+  });
+
+  it("stores the whole run context", () => {
+    useAnalysisStore.getState().setRegressionRun(runA);
+
+    expect(useAnalysisStore.getState().regressionRun).toEqual(runA);
+  });
+
+  it("replaces the previous run when a second one is stored", () => {
+    useAnalysisStore.getState().setRegressionRun(runA);
+    const runB: RegressionRun = {
+      ...runA,
+      yCol: "Z",
+      xCols: ["W"],
+      datasetRowCount: 60,
+      activeImputationIndex: null,
+      result: resultB,
+    };
+
+    useAnalysisStore.getState().setRegressionRun(runB);
+
+    const stored = useAnalysisStore.getState().regressionRun;
+    expect(stored?.yCol).toBe("Z");
+    expect(stored?.xCols).toEqual(["W"]);
+    expect(stored?.datasetRowCount).toBe(60);
+    expect(stored?.activeImputationIndex).toBeNull();
+    expect(stored?.result).toBe(resultB);
+  });
+
+  it("clears the run on request", () => {
+    useAnalysisStore.getState().setRegressionRun(runA);
+    useAnalysisStore.getState().clearRegressionRun();
+
+    expect(useAnalysisStore.getState().regressionRun).toBeNull();
+  });
+
+  it("leaves the regression run alone when the analysis cache is cleared", () => {
+    useAnalysisStore.getState().setCorrelationBackendResult({
+      matrix: [[1]],
+      columnNames: ["X"],
+    });
+    useAnalysisStore.getState().setRegressionRun(runA);
+
+    useAnalysisStore.getState().clearAnalysisCache();
+
+    expect(useAnalysisStore.getState().correlationBackendResult).toBeNull();
+    expect(useAnalysisStore.getState().regressionRun).toEqual(runA);
   });
 });

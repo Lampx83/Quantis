@@ -4,9 +4,11 @@ API routes cho phân tích — nhận rows (string[][]) + params, gọi analysis
 from typing import Any
 import numpy as np
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool, StrictFloat, StrictInt
 
+from factor_analysis import FactorAnalysisError, run_paf
 from analysis_impl import (
+    MAX_ROWS,
     run_descriptive,
     run_ttest,
     run_chi2,
@@ -22,7 +24,6 @@ from analysis_impl import (
     run_ridge,
     run_mann_whitney,
     run_shapiro_wilk,
-    run_cronbach_alpha,
     run_vif,
     run_mediation,
     run_moderation,
@@ -62,6 +63,7 @@ from analysis_impl import (
 )
 
 from panel_impl import run_panel
+from regression_diagnostics import build_regression_diagnostics, diagnostics_failure
 
 router = APIRouter()
 
@@ -137,6 +139,8 @@ class OLSBody(BaseModel):
     xCols: list[str]
     imputed_datasets: list[list[list[Any]]] | None = None
     imputedDatasets: list[list[list[Any]]] | None = None
+    # 0 = dữ liệu gốc (gửi kèm `rows`), 1..m = bộ điền thứ k của bundle; None = hành vi cũ.
+    activeImputationIndex: int | None = None
 
 
 class PanelBody(BaseModel):
@@ -177,11 +181,6 @@ class MannWhitneyBody(BaseModel):
 
 class ShapiroWilkBody(BaseModel):
     values: list[float]
-
-
-class CronbachBody(BaseModel):
-    rows: list[list[str]]
-    columnNames: list[str]
 
 
 class VIFBody(BaseModel):
@@ -233,10 +232,10 @@ class KMeansBody(BaseModel):
     maxIter: int = 100
 
 
-class EFABody(BaseModel):
+class FactorBody(BaseModel):
     rows: list[list[str]]
     columnNames: list[str]
-    nFactors: int | None = None
+    nFactors: StrictInt | StrictFloat | StrictBool | str | None = None
 
 
 class PairwisePosthocBody(BaseModel):
@@ -549,6 +548,52 @@ async def analyze_kruskal(body: AnovaBody):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _diagnostics_table(body: "OLSBody", imputed_data: list | None):
+    """(rows, active_imputation, method, error_code) for the table diagnostics judge.
+
+    `None` rows + an error code means the request named a table that does not exist
+    (R7.2 `not_available`); coefficients are unaffected.
+    """
+    active = body.activeImputationIndex
+    if active is None:
+        return body.rows, None, "listwise", None
+    if active == 0:
+        return body.rows, 0, "listwise", None
+    if active < 1 or not imputed_data or active > len(imputed_data):
+        return None, active, "listwise", "not_available"
+    return imputed_data[active - 1], active, "mice-active", None
+
+
+def _result_with_diagnostics(result: dict, body: "OLSBody", imputed_data: list | None) -> dict:
+    """Merge the additive sample keys and the diagnostics payload into an OLS result (R1.1–R1.2)."""
+    judged_rows, active_imputation, sample_method, error_code = _diagnostics_table(body, imputed_data)
+
+    # Pooled fits share the same used count. Report submitted rows for the first fitted table.
+    fitted_rows = imputed_data[0] if imputed_data else body.rows
+    n_input = max(0, len(fitted_rows) - 1)
+    n_used = int(result.get("n", 0))
+    result["nInput"] = int(n_input)
+    result["nDropped"] = int(max(0, n_input - n_used))
+    result["missingMethod"] = "mice-active" if result.get("rubinPooled") else "listwise"
+
+    if error_code is not None:
+        result["diagnostics"] = diagnostics_failure(error_code)
+        return result
+
+    try:
+        result["diagnostics"] = build_regression_diagnostics(
+            judged_rows or [],
+            body.yCol,
+            body.xCols,
+            method=sample_method,
+            m=len(imputed_data) if imputed_data else None,
+            active_imputation=active_imputation,
+        )
+    except Exception as exc:  # R7.1: never let diagnostics take the model down
+        result["diagnostics"] = diagnostics_failure("internal", str(exc))
+    return result
+
+
 @router.post("/ols")
 def analyze_ols(body: OLSBody):
     try:
@@ -558,7 +603,7 @@ def analyze_ols(body: OLSBody):
         result = run_ols(body.rows, body.yCol, body.xCols, imputed_datasets=imputed_data)
         if result is None:
             raise HTTPException(status_code=400, detail="Dữ liệu hoặc biến không hợp lệ")
-        return {"result": result}
+        return {"result": _result_with_diagnostics(result, body, imputed_data)}
     except HTTPException:
         raise
     except ValueError as e:
@@ -653,21 +698,6 @@ async def analyze_shapiro(body: ShapiroWilkBody):
         return {"result": result}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/cronbach")
-async def analyze_cronbach(body: CronbachBody):
-    try:
-        result = run_cronbach_alpha(body.rows, body.columnNames)
-        if result is None:
-            raise HTTPException(status_code=400, detail="Cần ít nhất 2 cột và đủ dữ liệu")
-        return {"result": result}
-    except HTTPException:
-        raise
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -808,14 +838,28 @@ async def analyze_kmeans(body: KMeansBody):
 
 
 @router.post("/efa")
-async def analyze_efa(body: EFABody):
+def analyze_efa(body: FactorBody):
     try:
-        result = run_efa(body.rows, body.columnNames, body.nFactors)
-        if result is None:
-            raise HTTPException(status_code=400, detail="Cần ít nhất 2 cột và đủ dữ liệu (n >= 10)")
-        return {"result": result}
+        return {"result": run_efa(body.rows, body.columnNames, body.nFactors)}
     except HTTPException:
         raise
+    except FactorAnalysisError as error:
+        raise HTTPException(status_code=error.status, detail=error.detail) from error
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/paf")
+def analyze_paf(body: FactorBody):
+    # A synchronous route keeps extraction and permutations off the event loop.
+    try:
+        return {"result": run_paf(body.rows, body.columnNames, body.nFactors, MAX_ROWS)}
+    except HTTPException:
+        raise
+    except FactorAnalysisError as error:
+        raise HTTPException(status_code=error.status, detail=error.detail) from error
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

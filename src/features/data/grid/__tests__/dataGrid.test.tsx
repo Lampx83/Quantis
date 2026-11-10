@@ -8,6 +8,7 @@ import {
   DataGrid,
   filterAndSortDataRows,
   paginateIndexedRows,
+  pageForAnalysisRow,
   formatDisplayCellValue,
   parseClipboardPasteMatrix,
 } from "../DataGrid";
@@ -99,8 +100,7 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     expect(filtered[0].originalRowIndex).toBe(1);
   });
 
-  it("paginates indexed rows accurately across pages", () => {
-    const indexed = Array.from({ length: 45 }, (_, i) => ({
+  it("paginates indexed rows accurately across pages", () => {    const indexed = Array.from({ length: 45 }, (_, i) => ({
       originalRowIndex: i,
       cells: [String(i + 1)],
     }));
@@ -397,5 +397,27 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     expect(html).toContain("(khuyết)");
     expect(html).toContain("Good student");
     expect(html).toContain("95.50");
+  });
+
+  it("maps an Analysis row to the page that shows it", () => {
+    expect(pageForAnalysisRow(0, 100)).toBe(1);
+    expect(pageForAnalysisRow(99, 100)).toBe(1);
+    expect(pageForAnalysisRow(100, 100)).toBe(2);
+    expect(pageForAnalysisRow(250, 100)).toBe(3);
+    expect(pageForAnalysisRow(41, 20)).toBe(3);
+  });
+
+  it("guards a non-positive page size and a negative row index", () => {
+    expect(pageForAnalysisRow(5, 0)).toBe(6);
+    expect(pageForAnalysisRow(5, -10)).toBe(6);
+    expect(pageForAnalysisRow(-3, 100)).toBe(1);
+  });
+
+  it("tags every rendered row with its Analysis row index", () => {
+    const html = renderToStaticMarkup(
+      <DataGrid dataset={mockDataset} showValueLabels={false} />
+    );
+    expect(html).toContain('data-row-index="0"');
+    expect(html).toContain('data-row-index="2"');
   });
 });

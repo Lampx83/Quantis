@@ -110,7 +110,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-dvh min-h-0 max-h-dvh overflow-hidden bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100">
       <AppHeader />
 
       {workspacePullLoading && (
@@ -124,7 +124,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 min-w-0">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
         <AppSidebar />
         <MainContent />
       </div>

@@ -8,11 +8,14 @@ import { t } from "@/i18n";
  * Nội dung lấy từ khoá i18n `glossary.<term>.title` và `glossary.<term>.text` (xem src/i18n-extra.ts).
  */
 export type GlossaryTerm =
-  | "cronbachAlpha" | "correctedItemTotal" | "alphaIfDeleted" | "kmo" | "bartlett" | "efa"
+  | "cronbachAlpha" | "correctedItemTotal" | "alphaIfDeleted" | "standardizedAlpha" | "interItemCorrelation"
+  | "kmo" | "bartlett" | "efa"
   | "pValue" | "coefficient" | "r2" | "vif" | "ttest" | "anova" | "cohensD" | "correlationMatrix"
   | "panelData" | "pooledOls" | "fixedEffects" | "randomEffects" | "hausman" | "withinBetween"
   | "zScore" | "iqr" | "nonNumeric"
-  | "mice" | "miceM" | "miceMaxIter";
+  | "mice" | "miceM" | "miceMaxIter"
+  | "bpTest" | "resetTest" | "cooksDistance" | "leverage" | "studentizedResidual"
+  | "hc3" | "qqPlot" | "assumptionCheck";
 
 /** Dải thuật ngữ: «Giải thích thuật ngữ: p-value (i) · t-test (i) …» — đặt ngay dưới tiêu đề của một chức năng. */
 export function GlossaryBar({ terms }: { terms: GlossaryTerm[] }) {
@@ -35,12 +38,14 @@ export function InfoHint({
   term,
   title: customTitle,
   text: customText,
+  hoverText,
   icon,
   className = "",
 }: {
   term?: GlossaryTerm;
   title?: string;
   text?: string;
+  hoverText?: string;
   icon?: React.ReactNode;
   className?: string;
 }) {
@@ -89,7 +94,7 @@ export function InfoHint({
         data-testid={term ? `info-hint-${term}` : "info-hint"}
         aria-label={customTitle ? title : `${t("glossary.ariaPrefix")}: ${title}`}
         aria-expanded={open}
-        title={title}
+        title={hoverText && open ? undefined : hoverText ?? title}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -110,7 +115,7 @@ export function InfoHint({
             className="rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 shadow-lg p-3 text-sm leading-relaxed"
           >
             <p className="font-semibold mb-1">{title}</p>
-            <p className="text-neutral-700 dark:text-neutral-300">{text}</p>
+            <p className="whitespace-pre-line text-neutral-700 dark:text-neutral-300">{text}</p>
           </div>,
           document.body
         )}
