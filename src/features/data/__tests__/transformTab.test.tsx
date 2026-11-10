@@ -213,7 +213,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(t("transformTab.mice.colImputedStd")).toBe("Std (sau MICE)");
   });
 
-  it("does not duplicate dataset in useDataStore when creating a new dataset from transform", async () => {
+  it.each(["fill_mean", "fill_median", "fill_mode", "drop_missing"] as const)("creates one derived dataset with an accurate row-count summary for %s", async (action) => {
     setLocale("en");
     useDataStore.setState({
       datasets: [JSON.parse(JSON.stringify(sampleDatasetWithMissing))],
@@ -227,6 +227,7 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
         onSelectDataset: vi.fn(),
         initialShowChoiceModal: true,
         initialColsMultiple: ["INCOME"],
+        initialAction: action,
       });
       return rendered;
     }
@@ -258,6 +259,10 @@ describe("Task 10: TransformTab Refactor & Missing Data Suite", () => {
     expect(datasets.length).toBe(2);
     expect(datasets[0].id).toBe("ds_transform_test");
     expect(datasets[1].id).not.toBe("ds_transform_test");
+    // Filling selected missing cells does not affect every row in the dataset.
+    const change = datasets[1].audit?.entries.slice(-1)[0];
+    expect(change?.operation).toBe(action);
+    expect(change?.rowCount).toBe(action === "drop_missing" ? 2 : undefined);
 
     // Deleting the newly created dataset should delete ONLY that dataset, leaving the original
     const newDsId = datasets[1].id;

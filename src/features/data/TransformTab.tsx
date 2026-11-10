@@ -1050,7 +1050,7 @@ export function TransformTab({
       action: "transform",
       operation: transformAction,
       columns: (scopedColumns[transformAction] ?? (transformColsMultiple.length ? transformColsMultiple : [transformCol])).filter(Boolean),
-      rowCount: Math.abs(transformed.rows - selectedDs.rows) || transformed.rows,
+      rowCount: Math.abs(transformed.rows - selectedDs.rows) || undefined,
       formula: transformAction === "compute" ? computeFormula.trim() : undefined,
     };
     const committed = overwriteOriginal
