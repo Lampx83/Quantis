@@ -191,8 +191,10 @@ describe("workspace sync ownership", () => {
 
     const data = useDataStore.getState();
     sync.setIsOnline(false);
+    sync.setUseBackend(false);
     data.updateCell(0, 0, "offline edit", "a-data");
     sync.setIsOnline(true);
+    sync.setUseBackend(true);
     data.setSelectedDatasetId("a-data");
     const cached = () => JSON.parse(localStorage.getItem("quantis_data:user:a")!).state.datasets;
     expect(cached()[0]?.data[1][0]).toBe("offline edit");

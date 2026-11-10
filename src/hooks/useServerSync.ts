@@ -61,10 +61,11 @@ export function startWorkspaceSync(): () => void {
 
   function scheduleSave() {
     const state = useSyncStore.getState();
-    if (applyingPull || !current(epoch) || !canSyncToServer(state)) return;
+    // Backend availability can change offline without ending the owner's sync session.
+    if (applyingPull || !current(epoch) || !canSyncToServer({ ...state, useBackend: true })) return;
     if (state.workspaceSaveStatus === "saved") state.setWorkspaceSaveStatus("idle");
     dirty = true;
-    if (!state.isOnline && didPull && state.workspaceSaveStatus !== "failed") {
+    if ((!state.isOnline || !state.useBackend) && didPull && state.workspaceSaveStatus !== "failed") {
       state.setWorkspaceSaveStatus("pending");
     }
     cancelSave();
@@ -81,7 +82,7 @@ export function startWorkspaceSync(): () => void {
       cancelSave();
       pullVersion++;
       pulling = false;
-      if (ownerChanged || !canSync) {
+      if (ownerChanged || !canSyncToServer({ ...state, useBackend: true })) {
         didPull = false;
         dirty = false;
       } else if (didPull && (dirty || saving) && state.workspaceSaveStatus !== "failed") {
@@ -164,11 +165,11 @@ export function useServerSync() {
   const selectedDataset = datasets.find((d) => d.id === selectedDatasetId);
 
   useEffect(() => {
-    if (useSyncStore.getState().useBackend) return;
     if (!isOnline) {
       setUseBackend(false);
       return;
     }
+    if (useSyncStore.getState().useBackend) return;
     let cancelled = false;
     void quantisApi.checkBackendAvailable().then((available) => {
       if (!cancelled) setUseBackend(available);
