@@ -107,8 +107,9 @@ export function TransformationHistory({ dataset, onClose }: { dataset: Dataset; 
             <ol reversed className="divide-y divide-slate-100 dark:divide-slate-800">
               {[...entries].reverse().map((change) => {
                 const { action, operation, columns = [], formula, firstRow, lastRow, rowCount, cellCount, timestamp } = change;
-                const showRowCount = rowCount !== undefined &&
-                  (firstRow === undefined || rowCount !== (lastRow ?? firstRow) - firstRow + 1);
+                const showRowCount = rowCount !== undefined && rowCount > 0 &&
+                  operation !== undefined && operationTone[operation] === "removeRows";
+                const showCellCount = action === "paste" && cellCount !== undefined && cellCount > 1;
                 const computed = operation === "compute" && columns[0] && formula;
                 const label = computed ? t("datasetHistory.computed") : operation ? transformActionLabel(operation) : t(`datasetHistory.action.${action}`);
                 const shown = columns.slice(0, VISIBLE_VARIABLES);
@@ -141,13 +142,13 @@ export function TransformationHistory({ dataset, onClose }: { dataset: Dataset; 
                           </div>
                         )}
                         {computed && <code className="mt-1 block break-words font-mono text-xs text-slate-500 dark:text-slate-400">{columns[0]} = {formula}</code>}
-                        {(firstRow !== undefined || showRowCount || cellCount !== undefined || change.kind === "derive") && (
+                        {(firstRow !== undefined || showRowCount || showCellCount || change.kind === "derive") && (
                           <div className="mt-1 flex flex-wrap gap-x-2 text-xs text-slate-500 dark:text-slate-400">
                             {firstRow !== undefined && <span>{lastRow !== undefined && lastRow !== firstRow
                               ? t("datasetHistory.rowRange", { first: number.format(firstRow), last: number.format(lastRow) })
                               : t("datasetHistory.row", { n: number.format(firstRow) })}</span>}
                             {showRowCount && <span>{t(rowCount === 1 ? "datasetHistory.oneRowAffected" : "datasetHistory.rowsAffected", { n: number.format(rowCount) })}</span>}
-                            {cellCount !== undefined && <span>{t(cellCount === 1 ? "datasetHistory.oneCell" : "datasetHistory.cells", { n: number.format(cellCount) })}</span>}
+                            {showCellCount && <span>{t("datasetHistory.cells", { n: number.format(cellCount) })}</span>}
                             {change.kind === "derive" && <>
                               <span className="break-all" title={change.source.datasetId}>{t("datasetHistory.source", { name: change.source.name })}</span>
                               {change.source.member !== undefined && <span>{change.source.member === 0 ? t("dataGrid.bundleOriginal") :

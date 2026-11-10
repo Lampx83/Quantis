@@ -36,9 +36,9 @@ describe("dataset History", () => {
   });
 
   it.each([
-    ["en", "History", "Computed", "Undo", "Redo", "350 rows", "350 rows affected", "Total: 3 steps"],
-    ["vi", "Lịch sử", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng", "350 dòng bị ảnh hưởng", "Tổng: 3 bước"],
-  ] as const)("shows the latest changes first and localizes affected rows in %s", (locale, title, computed, undo, redo, rows, affected, total) => {
+    ["en", "History", "Computed", "Undo", "Redo", "350 rows", "Total: 3 steps"],
+    ["vi", "Lịch sử", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng", "Tổng: 3 bước"],
+  ] as const)("shows the latest changes first and localizes the dataset row total in %s", (locale, title, computed, undo, redo, rows, total) => {
     setLocale(locale);
     const html = renderToStaticMarkup(<TransformationHistory dataset={{
       ...dataset,
@@ -53,13 +53,33 @@ describe("dataset History", () => {
     expect(html).toContain(total);
     expect(html).toContain("TOTAL = MEAN(Q1, Q2, Q3)");
     expect(html.match(new RegExp(`>${rows}</span>`, "g"))).toHaveLength(1);
-    expect(html.match(new RegExp(`>${affected}</span>`, "g"))).toHaveLength(3);
     const date = new Date(compute.timestamp);
     const clock = new Intl.DateTimeFormat(locale, { timeStyle: "short" }).format(date);
     const fullDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
     expect(html).toContain(`dateTime="${compute.timestamp}" title="${fullDate}">${clock}</time>`);
     expect(html.indexOf(redo)).toBeLessThan(html.indexOf(undo));
     expect(html.lastIndexOf(undo)).toBeLessThan(html.lastIndexOf(computed));
+  });
+
+  it("keeps row locations and bulk counts while omitting routine edit counts", () => {
+    setLocale("en");
+    const html = renderToStaticMarkup(<TransformationHistory dataset={{
+      ...dataset, audit: { entries: [
+        { ...deleteRow, firstRow: 10, rowCount: 1 },
+        { ...deleteRow, id: "delete-column", action: "deleteColumn", columns: ["TS1"], rowCount: 200 },
+        { ...deleteRow, id: "edit-cell", action: "cell", columns: ["nam_hoc"], firstRow: 4, rowCount: 1, cellCount: 1 },
+        { ...deleteRow, id: "paste", action: "paste", firstRow: 5, lastRow: 8, rowCount: 4, cellCount: 12 },
+        { ...filter, rowCount: 2 },
+      ] },
+    }} onClose={vi.fn()} />);
+
+    expect(html).toContain(">Row 10</span>");
+    expect(html).toContain(">Row 4</span>");
+    expect(html).toContain(">Rows 5–8</span>");
+    expect(html).toContain(">12 cells</span>");
+    expect(html).toContain(">2 rows affected</span>");
+    expect(html).not.toContain("200 rows");
+    expect(html).not.toContain("1 cell");
   });
 
   it("shows four variable chips and counts all other variables, including names omitted by retention", () => {
