@@ -68,6 +68,30 @@ describe("DataStore & UIStore Expansion", () => {
   });
 
   describe("useDataStore Actions", () => {
+    it("edits the first headerless row even when its value matches the column name", () => {
+      const store = useDataStore.getState();
+      const rows = [["ID", "1", "85"], ["2", "2", "90"], ["3", "1", "78"]];
+      store.setDatasets([{ ...mockDataset, data: rows, preview: rows.slice(0, 2) }]);
+      store.updateCell(0, 2, "99");
+      expect(useDataStore.getState().datasets[0].data).toEqual([
+        ["ID", "1", "99"], rows[1], rows[2],
+      ]);
+      expect(useDataStore.getState().datasets[0].preview).toEqual([["ID", "1", "99"], rows[1]]);
+      expect(store.undoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data).toEqual(rows);
+      expect(store.redoDataset()).toBe(true);
+      expect(useDataStore.getState().datasets[0].data?.[0][2]).toBe("99");
+    });
+
+    it("preserves a truncated preview header when preview length equals the row count", () => {
+      const store = useDataStore.getState();
+      const rows = [...mockDataset.data!, ["4", "1", "80"]];
+      store.setDatasets([{ ...mockDataset, rows: 4, data: rows, preview: rows.slice(0, 4) }]);
+      store.updateCell(0, 2, "99");
+      expect(useDataStore.getState().datasets[0].preview[0]).toEqual(mockDataset.columnNames);
+      expect(useDataStore.getState().datasets[0].preview[1][2]).toBe("99");
+    });
+
     it("reverses variable metadata and schema edits without disturbing row values", () => {
       const store = useDataStore.getState();
       const before = useDataStore.getState().datasets[0];

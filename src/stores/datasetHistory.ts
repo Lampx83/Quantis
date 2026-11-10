@@ -116,7 +116,11 @@ export function applyDatasetChange(dataset: Dataset, patch: DatasetContentPatch,
 }
 
 export function datasetRowOffset(matrix: string[][] | undefined, dataset: Dataset): number {
-  return matrix?.length && (matrix.length === dataset.rows + 1 || matrix[0][0] === dataset.columnNames[0])
+  if (!matrix?.length) return 0;
+  // A truncated preview follows the full matrix's header convention.
+  if (dataset.data && matrix !== dataset.data) return datasetRowOffset(dataset.data, dataset);
+  if (matrix.length === dataset.rows) return 0;
+  return matrix.length === dataset.rows + 1 || matrix[0][0] === dataset.columnNames[0]
     ? 1
     : 0;
 }
