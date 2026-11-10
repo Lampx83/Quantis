@@ -12,8 +12,29 @@ const compute: DatasetChange = {
   id: "compute-1", datasetId: dataset.id, kind: "commit", timestamp: "2026-11-09T07:20:00Z",
   action: "transform", operation: "compute", columns: ["TOTAL"], formula: "MEAN(Q1, Q2, Q3)", rowCount: 350,
 };
+const deleteRow: DatasetChange = {
+  id: "delete-row", datasetId: dataset.id, kind: "commit", timestamp: compute.timestamp, action: "deleteRow",
+};
+const filter: DatasetChange = { ...deleteRow, id: "filter", action: "transform", operation: "filter" };
 
 describe("dataset History", () => {
+  it.each<[string, DatasetChange, string]>([
+    ["deleting a row", deleteRow, "bg-red-600 dark:bg-red-400"],
+    ["deleting a variable", { ...deleteRow, action: "deleteColumn" }, "bg-red-600 dark:bg-red-400"],
+    ["undoing a deletion", { ...deleteRow, kind: "undo", originalChangeId: deleteRow.id }, "bg-slate-500 dark:bg-slate-400"],
+    ["redoing a deletion", { ...deleteRow, kind: "redo", originalChangeId: deleteRow.id }, "bg-red-600 dark:bg-red-400"],
+    ["filtering the current dataset", filter, "bg-amber-700 dark:bg-amber-400"],
+    ["filtering into a new dataset", { ...filter, kind: "derive", source: { datasetId: "source", name: "Source" } }, "bg-blue-600 dark:bg-blue-400"],
+    ["computing a variable", compute, "bg-emerald-600 dark:bg-emerald-400"],
+    ["editing a cell", { ...deleteRow, action: "cell" }, "bg-slate-500 dark:bg-slate-400"],
+    ["imputing missing values", { ...filter, operation: "fill_mice" }, "bg-violet-600 dark:bg-violet-400"],
+  ])("shows the semantic dot for %s", (_name, change, colors) => {
+    const html = renderToStaticMarkup(<TransformationHistory dataset={{
+      ...dataset, audit: { entries: [change] },
+    }} onClose={vi.fn()} />);
+    expect(html).toContain(`${colors}"`);
+  });
+
   it.each([
     ["en", "History", "Computed", "Undo", "Redo", "350 rows", "350 rows affected", "Total: 3 steps"],
     ["vi", "Lịch sử", "Đã tính", "Hoàn tác", "Làm lại", "350 dòng", "350 dòng bị ảnh hưởng", "Tổng: 3 bước"],

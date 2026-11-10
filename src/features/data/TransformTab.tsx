@@ -311,7 +311,7 @@ const CATEGORIES: {
   { id: "variables", titleKey: "transformTab.categoryVariables", tabKey: "transformTab.tabVariables", icon: FileSpreadsheet },
 ];
 
-export const getCategoryForAction = (act: TransformAction): TransformCategory => {
+const getCategoryForAction = (act: TransformAction): TransformCategory => {
   if (["drop_missing", "fill_mean", "fill_median", "fill_mode", "fill_hot_deck", "fill_mice"].includes(act)) {
     return "missing";
   }

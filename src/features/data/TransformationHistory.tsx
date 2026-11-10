@@ -1,21 +1,59 @@
 import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
-import type { Dataset, DatasetChange } from "@/types";
+import type { Dataset, DatasetChange, TransformOperation } from "@/types";
 import { t, useLocale } from "@/i18n";
-import { getCategoryForAction, transformActionLabel, type TransformCategory } from "./TransformTab";
+import { transformActionLabel } from "./TransformTab";
 
 const VISIBLE_VARIABLES = 4;
-const categoryDot: Record<TransformCategory, string> = {
-  missing: "bg-violet-500 dark:bg-violet-400",
-  scale: "bg-amber-500 dark:bg-amber-400",
-  clean: "bg-sky-500 dark:bg-sky-400",
-  variables: "bg-emerald-500 dark:bg-emerald-400",
+const dotClass = {
+  delete: "bg-red-600 dark:bg-red-400",
+  removeRows: "bg-amber-700 dark:bg-amber-400",
+  transform: "bg-blue-600 dark:bg-blue-400",
+  impute: "bg-violet-600 dark:bg-violet-400",
+  create: "bg-emerald-600 dark:bg-emerald-400",
+  edit: "bg-slate-500 dark:bg-slate-400",
 };
-const editCategory: Partial<Record<DatasetChange["action"], TransformCategory>> = {
-  insertRow: "clean",
-  deleteRow: "clean",
-  extractImputation: "missing",
+type HistoryTone = keyof typeof dotClass;
+
+const actionTone: Record<DatasetChange["action"], HistoryTone> = {
+  cell: "edit",
+  paste: "edit",
+  metadata: "edit",
+  renameColumn: "edit",
+  insertRow: "create",
+  insertColumn: "create",
+  extractImputation: "create",
+  deleteRow: "delete",
+  deleteColumn: "delete",
+  transform: "transform",
 };
+
+const operationTone: Record<TransformOperation, HistoryTone> = {
+  drop_missing: "removeRows",
+  filter: "removeRows",
+  outlier_iqr: "removeRows",
+  dedupe: "removeRows",
+  fill_mean: "impute",
+  fill_median: "impute",
+  fill_mode: "impute",
+  fill_hot_deck: "impute",
+  fill_mice: "impute",
+  z_score: "transform",
+  min_max: "transform",
+  log: "transform",
+  sort: "transform",
+  recode: "transform",
+  coerce_numeric: "transform",
+  coerce_text: "transform",
+  compute: "create",
+  rename: "edit",
+};
+
+function historyDotClass({ kind, action, operation }: DatasetChange): string {
+  if (kind === "undo") return dotClass.edit;
+  const tone = (operation && operationTone[operation]) ?? actionTone[action] ?? "edit";
+  return dotClass[kind === "derive" && tone === "removeRows" ? "transform" : tone];
+}
 
 function formatTimestamp(timestamp: string, formatter: Intl.DateTimeFormat): string {
   const date = new Date(timestamp);
@@ -71,7 +109,6 @@ export function TransformationHistory({ dataset, onClose }: { dataset: Dataset; 
                 const { action, operation, columns = [], formula, firstRow, lastRow, rowCount, cellCount, timestamp } = change;
                 const showRowCount = rowCount !== undefined &&
                   (firstRow === undefined || rowCount !== (lastRow ?? firstRow) - firstRow + 1);
-                const category = operation ? getCategoryForAction(operation) : editCategory[action] ?? "variables";
                 const computed = operation === "compute" && columns[0] && formula;
                 const label = computed ? t("datasetHistory.computed") : operation ? transformActionLabel(operation) : t(`datasetHistory.action.${action}`);
                 const shown = columns.slice(0, VISIBLE_VARIABLES);
@@ -82,7 +119,7 @@ export function TransformationHistory({ dataset, onClose }: { dataset: Dataset; 
                 return (
                   <li key={change.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-2">
                     <div className="flex min-w-0 items-start gap-2.5">
-                      <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${categoryDot[category]}`} />
+                      <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${historyDotClass(change)}`} />
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           <span className={`break-words text-sm font-semibold leading-5 ${locale === "en" ? "capitalize" : ""}`}>{label}</span>
