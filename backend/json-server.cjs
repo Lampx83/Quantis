@@ -472,6 +472,13 @@ function resolveDataForRequest(req) {
   return { mode: "global" };
 }
 
+function matchesWorkspaceOwner(req, res, ctx) {
+  const expected = req.get("X-Quantis-Workspace-Owner");
+  if (expected === undefined || expected === (ctx.mode === "user" ? `user:${ctx.userId}` : "local")) return true;
+  res.status(409).json({ error: "Workspace session changed" });
+  return false;
+}
+
 function handleGetData(req, res) {
   try {
     if (authActive() && QUANTIS_AUTH_REQUIRED && !safeUserId(req.session?.userId)) {
@@ -479,6 +486,7 @@ function handleGetData(req, res) {
       return;
     }
     const ctx = resolveDataForRequest(req);
+    if (!matchesWorkspaceOwner(req, res, ctx)) return;
     if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
       res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
       return;
@@ -515,13 +523,14 @@ function handlePostData(req, res) {
       res.status(401).json({ error: "Cần đăng nhập" });
       return;
     }
-    const datasets = sanitizeJson(Array.isArray(req.body?.datasets) ? req.body.datasets : []);
-    const workflows = sanitizeJson(Array.isArray(req.body?.workflows) ? req.body.workflows : []);
     const ctx = resolveDataForRequest(req);
+    if (!matchesWorkspaceOwner(req, res, ctx)) return;
     if (ctx.mode === "global" && !QUANTIS_ALLOW_GLOBAL_DATA) {
       res.status(403).json({ error: "Kho dữ liệu chung đã tắt. Hãy đăng nhập để dùng workspace riêng." });
       return;
     }
+    const datasets = sanitizeJson(Array.isArray(req.body?.datasets) ? req.body.datasets : []);
+    const workflows = sanitizeJson(Array.isArray(req.body?.workflows) ? req.body.workflows : []);
     if (ctx.mode === "user") {
       writeUserStore(ctx.userId, datasets, workflows);
     } else {

@@ -1,5 +1,6 @@
 import type { Dataset, DatasetChange, DatasetChangeDetails, DatasetChangeSummary } from "@/types";
 import { generateId } from "@/utils/helpers";
+import { datasetRowOffset } from "@/utils/metadata";
 import { appendDatasetAudit } from "./transformationAudit";
 
 export type DatasetContentPatch = Partial<Pick<Dataset,
@@ -115,16 +116,6 @@ export function applyDatasetChange(dataset: Dataset, patch: DatasetContentPatch,
   };
 }
 
-export function datasetRowOffset(matrix: string[][] | undefined, dataset: Dataset): number {
-  if (!matrix?.length) return 0;
-  // A truncated preview follows the full matrix's header convention.
-  if (dataset.data && matrix !== dataset.data) return datasetRowOffset(dataset.data, dataset);
-  if (matrix.length === dataset.rows) return 0;
-  return matrix.length === dataset.rows + 1 || matrix[0][0] === dataset.columnNames[0]
-    ? 1
-    : 0;
-}
-
 export function sameContent(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length &&
@@ -172,7 +163,7 @@ export function editMatrixCells(
 export function editMatrixRow(
   matrix: string[][] | undefined, dataset: Dataset, row: number, inserted?: string[],
 ) {
-  if (!matrix) return matrix;
+  if (!matrix || (!matrix.length && dataset.rows > 0)) return matrix;
   const index = row + datasetRowOffset(matrix, dataset);
   if (inserted ? index > matrix.length : index >= matrix.length) return matrix;
   const next = [...matrix];

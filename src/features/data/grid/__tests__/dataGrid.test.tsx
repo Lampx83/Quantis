@@ -79,6 +79,30 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
     });
   });
 
+  it("renders the first headerless observation even when its first cell matches the column name", () => {
+    const rows = [["ID", "1", "81.5"], ["2", "2", "92.0"], ["3", "1", "74.0"]];
+    const dataset = { ...mockDataset, data: rows, preview: rows };
+    const store = useDataStore.getState();
+    store.setDatasets([dataset]);
+    expect(renderToStaticMarkup(<DataGrid dataset={dataset} />)).toContain("81.5");
+
+    store.updateCell(0, 2, "82", dataset.id);
+    const edited = useDataStore.getState().datasets[0];
+    expect(edited.data).toEqual([["ID", "1", "82"], rows[1], rows[2]]);
+    expect(renderToStaticMarkup(<DataGrid dataset={edited} />)).toContain("82");
+  });
+
+  it("disables appending to a partial preview and records no phantom row", () => {
+    const dataset = { ...mockDataset, rows: 20, data: undefined };
+    const store = useDataStore.getState();
+    store.setDatasets([dataset]);
+    setLocale("en");
+    const html = renderToStaticMarkup(<DataGrid dataset={dataset} />);
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*title="Load the full dataset to append rows"/);
+    expect(store.addRow(undefined, undefined, dataset.id)).toBe(false);
+    expect(useDataStore.getState().datasets[0]).toBe(dataset);
+  });
+
   it("filters and sorts data rows while preserving originalRowIndex", () => {
     const rawRows = [
       ["1", "1", "85.5"],
@@ -365,6 +389,8 @@ describe("Task 6: DataGrid & GridContextMenu", () => {
   it("does not flag empty cells, valid numbers, or text in string columns as invalid", () => {
     const dsMixed: Dataset = {
       ...mockDataset,
+      rows: 2,
+      columns: 4,
       preview: [
         ["ID", "GENDER", "SCORE", "COMMENT"],
         ["1", "1", "", "Good student"],

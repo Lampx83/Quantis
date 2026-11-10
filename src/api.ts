@@ -1542,11 +1542,14 @@ export async function analyzeZTestTwoMeans(
 }
 
 /** Lấy toàn bộ datasets + workflows (cần đăng nhập). Trả về null nếu 401/lỗi. */
-export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workflow[] } | null> {
+export async function getData(owner?: string): Promise<{ datasets: Dataset[]; workflows: Workflow[] } | null> {
   try {
     const url = getWorkspaceDataUrl();
     if (!url) return null;
-    const res = await fetch(url, { method: "GET", credentials: "include", cache: "no-store" });
+    const res = await fetch(url, {
+      method: "GET", credentials: "include", cache: "no-store",
+      headers: owner === undefined ? undefined : { "X-Quantis-Workspace-Owner": owner },
+    });
     if (!res.ok) return null;
     const json = await res.json();
     return {
@@ -1559,14 +1562,17 @@ export async function getData(): Promise<{ datasets: Dataset[]; workflows: Workf
 }
 
 /** Ghi đè toàn bộ datasets + workflows lên server (cần đăng nhập). Trả về true nếu thành công. */
-export async function saveData(payload: { datasets: Dataset[]; workflows: Workflow[] }): Promise<boolean> {
+export async function saveData(payload: { datasets: Dataset[]; workflows: Workflow[] }, owner?: string): Promise<boolean> {
   const url = getWorkspaceDataUrl();
   if (!url) return false;
   try {
     const res = await fetch(url, {
       method: "POST",
       credentials: "include",
-      headers: getHeaders(),
+      headers: owner === undefined ? getHeaders() : {
+        "Content-Type": "application/json",
+        "X-Quantis-Workspace-Owner": owner,
+      },
       // cleanJsonReplacer: bỏ \u0000/ký tự điều khiển để PostgreSQL không từ chối payload.
       body: JSON.stringify({
         datasets: payload.datasets,

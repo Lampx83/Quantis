@@ -156,6 +156,15 @@ export function inferVariableMetadata(name: string, values: string[]): VariableM
   };
 }
 
+export function datasetRowOffset(matrix: string[][] | undefined, dataset: Dataset): number {
+  if (!matrix?.length) return 0;
+  // A truncated preview follows the full matrix's header convention.
+  if (dataset.data?.length && matrix !== dataset.data) return datasetRowOffset(dataset.data, dataset);
+  if (matrix.length === dataset.rows) return 0;
+  return matrix.length === dataset.rows + 1 ||
+    (dataset.columnNames.length > 0 && matrix[0]?.[0] === dataset.columnNames[0]) ? 1 : 0;
+}
+
 /**
  * Ensures backward compatibility by populating default variable metadata
  * for datasets that do not have `variables` defined.
@@ -164,21 +173,8 @@ export function ensureDatasetMetadata(dataset: Dataset): Dataset {
   const existingVariables = dataset.variables ? { ...dataset.variables } : {};
   let modified = false;
 
-  const hasHeaderInData = Boolean(
-    dataset.data &&
-      dataset.data.length > 0 &&
-      dataset.columnNames.length > 0 &&
-      dataset.data[0][0] === dataset.columnNames[0]
-  );
-  const hasHeaderInPreview = Boolean(
-    dataset.preview &&
-      dataset.preview.length > 0 &&
-      dataset.columnNames.length > 0 &&
-      dataset.preview[0][0] === dataset.columnNames[0]
-  );
-
-  const effectiveData = hasHeaderInData ? dataset.data!.slice(1) : dataset.data;
-  const effectivePreview = hasHeaderInPreview ? dataset.preview!.slice(1) : dataset.preview;
+  const effectiveData = datasetRowOffset(dataset.data, dataset) ? dataset.data?.slice(1) : dataset.data;
+  const effectivePreview = datasetRowOffset(dataset.preview, dataset) ? dataset.preview?.slice(1) : dataset.preview;
 
   dataset.columnNames.forEach((colName, colIdx) => {
     if (!existingVariables[colName]) {

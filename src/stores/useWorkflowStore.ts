@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Workflow, WorkflowStep } from "@/types";
 import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache } from "./useSyncStore";
-import { readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
+import { WORKFLOW_CACHE, readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
 
 let switchingOwner = false;
 
@@ -161,12 +161,13 @@ export const useWorkflowStore = create<WorkflowState>()(
       hydrateFromServer: (workflows) => set({ workflows }),
     }),
     {
-      name: "quantis_workflows_data",
+      name: WORKFLOW_CACHE,
       partialize: (s) =>
         ({
           workflows: s.workflows,
           selectedWorkflowId: s.selectedWorkflowId,
           owner: useSyncStore.getState().workspaceOwner,
+          pendingChanges: useSyncStore.getState().workspaceChanges.workflows,
         }),
       storage: {
         getItem: (name) => {
@@ -211,6 +212,7 @@ export const useWorkflowStore = create<WorkflowState>()(
                 state: {
                   ...value.state,
                   workflows: [],
+                  pendingChanges: {},
                 },
               };
               localStorage.setItem(key, JSON.stringify(lightweightValue));

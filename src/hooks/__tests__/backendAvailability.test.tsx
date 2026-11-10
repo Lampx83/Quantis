@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import * as api from "@/api";
 import { useSyncStore } from "@/stores";
 import { useServerSync } from "../useServerSync";
+import { useAuthSession } from "../useAuthSession";
 
 const { effects } = vi.hoisted(() => ({ effects: [] as (() => void | (() => void))[] }));
 vi.mock("react", async (importOriginal) => ({
@@ -54,4 +55,34 @@ it("disables an active backend offline and probes again on reconnect", async () 
   expect(useSyncStore.getState().useBackend).toBe(true);
   expect(api.checkBackendAvailable).toHaveBeenCalledOnce();
   cleanup();
+});
+
+it("verifies the standalone owner only after the session request settles", async () => {
+  vi.spyOn(api, "isPortalEmbed").mockReturnValue(false);
+  vi.spyOn(api, "checkAdminStatus").mockResolvedValue(false);
+  vi.spyOn(api, "getAuthConfig").mockResolvedValue({
+    authEnabled: true, authRequired: false, ssoEnabled: false, ssoLabel: "",
+  });
+  let resolve!: (user: api.AuthUser | null) => void;
+  const session = new Promise<api.AuthUser | null>((done) => { resolve = done; });
+  vi.spyOn(api, "getAuthMe").mockReturnValue(session);
+  useSyncStore.setState({ isOnline: true, useBackend: true, authConfig: null, workspaceSessionVerified: false });
+  useSyncStore.getState().setAuthUser({ id: "a", email: "a@example.test" });
+
+  function Harness() {
+    useAuthSession();
+    return null;
+  }
+  renderToStaticMarkup(<Harness />);
+  const cleanups = effects.splice(0).map((effect) => effect());
+  try {
+    expect(useSyncStore.getState().workspaceSessionVerified).toBe(false);
+    resolve(null);
+    await session;
+    await Promise.resolve();
+    expect(useSyncStore.getState().authUser).toBeNull();
+    expect(useSyncStore.getState().workspaceSessionVerified).toBe(true);
+  } finally {
+    cleanups.forEach((cleanup) => cleanup?.());
+  }
 });

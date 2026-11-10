@@ -1,15 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Dataset, DatasetChangeSummary, DerivationSummary, TransformChangeSummary, VariableMetadata } from "@/types";
-import { ensureDatasetMetadata } from "@/utils/metadata";
+import { datasetRowOffset, ensureDatasetMetadata } from "@/utils/metadata";
 import { generateId } from "@/utils/helpers";
 import { reconstructImputedRows } from "@/utils/sparseDelta";
 import { useSyncStore, persistsWorkspaceLocally, shouldWriteWorkspaceCache } from "./useSyncStore";
-import { readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
+import { DATA_CACHE, readWorkspaceCache, workspaceCacheKey } from "./workspaceCache";
 import {
   applyDatasetChange,
   createHistoryStep,
-  datasetRowOffset,
   editMatrixCells,
   editMatrixRow,
   newDatasetChange,
@@ -54,7 +53,7 @@ export interface DataState {
   renameVariable: (oldName: string, newName: string, datasetId?: string) => void;
   addVariable: (metadata: VariableMetadata, defaultValues?: string[], datasetId?: string) => void;
   removeVariable: (varName: string, datasetId?: string) => void;
-  addRow: (values?: string[], atIndex?: number, datasetId?: string) => void;
+  addRow: (values?: string[], atIndex?: number, datasetId?: string) => boolean;
   removeRow: (rowIndex: number, datasetId?: string) => void;
 
   // --- Imputed Bundle Actions ---
@@ -177,18 +176,22 @@ export const useDataStore = create<DataState>()(
       function editRow(action: "insertRow" | "deleteRow", id?: string, atIndex?: number, values?: string[]) {
         const state = get();
         const dataset = state.datasets.find((d) => d.id === (id ?? state.selectedDatasetId));
-        if (!dataset || dataset.readOnly) return;
+        if (!dataset || dataset.readOnly) return false;
         const inserting = action === "insertRow";
         const row = atIndex ?? dataset.rows;
-        if (!Number.isInteger(row) || row < 0 || row > dataset.rows || (!inserting && row === dataset.rows)) return;
+        if (!Number.isInteger(row) || row < 0 || row > dataset.rows || (!inserting && row === dataset.rows)) return false;
         const columns = dataset.columns || dataset.columnNames.length;
-        if (values && values.length > columns) return;
+        if (values && values.length > columns) return false;
         const inserted = inserting ? Array.from({ length: columns }, (_, i) => values?.[i] ?? "") : undefined;
+        const data = editMatrixRow(dataset.data, dataset, row, inserted);
+        const preview = editMatrixRow(dataset.preview, dataset, row, inserted) ?? dataset.preview;
+        if (data === dataset.data && preview === dataset.preview) return false;
         set(commitDatasetChange(state, dataset, {
           rows: dataset.rows + (inserting ? 1 : -1),
-          data: editMatrixRow(dataset.data, dataset, row, inserted),
-          preview: editMatrixRow(dataset.preview, dataset, row, inserted) ?? dataset.preview,
+          data,
+          preview,
         }, { action, firstRow: row + 1, lastRow: row + 1, rowCount: 1 }, [row]));
+        return true;
       }
 
       function editSchema(id: string | undefined, edit: (dataset: Dataset) => {
@@ -298,7 +301,7 @@ export const useDataStore = create<DataState>()(
         const oldMetadata = variables[oldName];
         delete variables[oldName];
         function renameHeader(matrix: string[][] | undefined) {
-          if (!matrix?.length || (!datasetRowOffset(matrix, dataset) && matrix[0][column] !== oldName)) return matrix;
+          if (!matrix?.length || !datasetRowOffset(matrix, dataset)) return matrix;
           const header = [...matrix[0]];
           header[column] = name;
           return [header, ...matrix.slice(1)];
@@ -394,7 +397,7 @@ export const useDataStore = create<DataState>()(
       };
     },
     {
-      name: "quantis_data",
+      name: DATA_CACHE,
       merge: (persisted, current) => {
         const saved = persisted as Pick<DataState, "datasets" | "selectedDatasetId"> | undefined;
         return {
@@ -408,6 +411,7 @@ export const useDataStore = create<DataState>()(
           datasets: s.datasets,
           selectedDatasetId: s.selectedDatasetId,
           owner: useSyncStore.getState().workspaceOwner,
+          pendingChanges: useSyncStore.getState().workspaceChanges.datasets,
         }),
       storage: {
         getItem: (name) => {
@@ -460,6 +464,7 @@ export const useDataStore = create<DataState>()(
                 state: {
                   ...value.state,
                   datasets: [],
+                  pendingChanges: {},
                 },
               };
               localStorage.setItem(key, JSON.stringify(lightweightValue));

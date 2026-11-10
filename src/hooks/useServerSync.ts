@@ -5,13 +5,22 @@ import {
   useAnalysisStore,
   useSyncStore,
   useUIStore,
-  canSyncToServer,
+  canSyncWorkspace,
   type SyncState,
 } from "@/stores";
 import * as quantisApi from "@/api";
 import { clearWorkspaceLocalData, setServerSettings } from "@/utils/storage";
 import { getAnalysisRows } from "@/utils/stats";
 import { numericColumnNames } from "@/utils/metadata";
+import {
+  DATA_CACHE,
+  WORKFLOW_CACHE,
+  readWorkspaceChanges,
+  reconcileWorkspaceItems,
+  recordWorkspaceChanges,
+  type WorkspaceChangeScope,
+  type WorkspaceChanges,
+} from "@/stores/workspaceCache";
 
 /** Owns one sync session and invalidates work synchronously when the workspace changes. */
 export function startWorkspaceSync(): () => void {
@@ -34,86 +43,112 @@ export function startWorkspaceSync(): () => void {
     return !stopped && useSyncStore.getState().workspaceEpoch === ownerEpoch;
   }
 
+  function hasChanges(changes: WorkspaceChanges) {
+    return Object.keys(changes.datasets).length > 0 || Object.keys(changes.workflows).length > 0;
+  }
+
+  function restoreChanges(owner: string) {
+    const workspaceChanges = {
+      datasets: readWorkspaceChanges(DATA_CACHE, owner, "datasets"),
+      workflows: readWorkspaceChanges(WORKFLOW_CACHE, owner, "workflows"),
+    };
+    dirty = hasChanges(workspaceChanges);
+    useSyncStore.setState({ workspaceChanges });
+    if (dirty) useSyncStore.getState().setWorkspaceSaveStatus("pending");
+  }
+
   function armSave() {
     const state = useSyncStore.getState();
-    if (!dirty || timer || saving || pulling || !current(epoch) || !state.isOnline || !canSyncToServer(state)) return;
+    if (!dirty || !didPull || timer || saving || !current(epoch) || !canSyncWorkspace(state)) return;
     const ownerEpoch = epoch;
     timer = setTimeout(async () => {
       timer = undefined;
       const connection = useSyncStore.getState();
-      if (!current(ownerEpoch) || !connection.isOnline || !canSyncToServer(connection)) return;
+      if (!current(ownerEpoch) || !canSyncWorkspace(connection)) return;
       saving = true;
       dirty = false;
       const datasets = useDataStore.getState().datasets;
       const workflows = useWorkflowStore.getState().workflows;
-      const ok = await quantisApi.saveData({ datasets, workflows }).catch(() => false);
+      const owner = quantisApi.isPortalEmbed() ? undefined : connection.workspaceOwner;
+      const ok = await quantisApi.saveData({ datasets, workflows }, owner).catch(() => false);
       if (!current(ownerEpoch)) return;
       saving = false;
       const sync = useSyncStore.getState();
       if (!ok) {
         sync.setWorkspaceSaveStatus("failed");
       } else if (datasets === useDataStore.getState().datasets && workflows === useWorkflowStore.getState().workflows) {
+        useSyncStore.setState({ workspaceChanges: { datasets: {}, workflows: {} } });
         sync.setWorkspaceSaveStatus("saved");
       }
       armSave();
     }, 1500);
   }
 
-  function scheduleSave() {
+  function scheduleSave<T extends { id: string; updatedAt: string }>(scope: WorkspaceChangeScope, before: T[], after: T[]) {
+    if (applyingPull || !current(epoch) || before === after) return;
     const state = useSyncStore.getState();
-    // Backend availability can change offline without ending the owner's sync session.
-    if (applyingPull || !current(epoch) || !canSyncToServer({ ...state, useBackend: true })) return;
-    if (state.workspaceSaveStatus === "saved") state.setWorkspaceSaveStatus("idle");
+    const pending = state.workspaceChanges[scope];
+    const changes = recordWorkspaceChanges(pending, before, after);
+    if (!Object.keys(changes).length) return;
+    useSyncStore.setState({ workspaceChanges: { ...state.workspaceChanges, [scope]: changes } });
     dirty = true;
-    if ((!state.isOnline || !state.useBackend) && didPull && state.workspaceSaveStatus !== "failed") {
-      state.setWorkspaceSaveStatus("pending");
-    }
+    if (state.workspaceSaveStatus !== "failed") state.setWorkspaceSaveStatus("pending");
     cancelSave();
-    armSave();
+    if (didPull) armSave();
+    else if (canSyncWorkspace(state)) pullWorkspace(state);
   }
 
   function updateConnection(state: SyncState, previous?: SyncState) {
-    const canSync = canSyncToServer(state);
+    const canSync = canSyncWorkspace(state);
     const ownerChanged = epoch !== state.workspaceEpoch;
-    if (previous && !ownerChanged && state.isOnline === previous.isOnline &&
-      canSync === canSyncToServer(previous)) return;
+    if (previous && !ownerChanged && canSync === canSyncWorkspace(previous)) return;
 
-    if (ownerChanged || !canSync || !state.isOnline) {
+    if (ownerChanged || !canSync) {
       cancelSave();
       pullVersion++;
       pulling = false;
-      if (ownerChanged || !canSyncToServer({ ...state, useBackend: true })) {
+      if (ownerChanged) {
         didPull = false;
-        dirty = false;
-      } else if (didPull && (dirty || saving) && state.workspaceSaveStatus !== "failed") {
-        state.setWorkspaceSaveStatus("pending");
+        saving = false;
+        epoch = state.workspaceEpoch;
+        restoreChanges(state.workspaceOwner);
       }
-      if (ownerChanged) saving = false;
-      epoch = state.workspaceEpoch;
       state.setWorkspacePullLoading(false);
     }
-    if (!state.isOnline || !canSync) return;
-    if (didPull || pulling) {
-      if (state.workspaceSaveStatus === "failed") dirty = true;
+    if (!canSync) return;
+    if (state.workspaceSaveStatus === "failed") dirty = true;
+    if (didPull) {
       armSave();
       return;
     }
+    pullWorkspace(state);
+  }
 
+  function pullWorkspace(state: SyncState) {
+    if (pulling) return;
     const ownerEpoch = epoch;
     const request = ++pullVersion;
     const valid = () => current(ownerEpoch) && pullVersion === request;
     pulling = true;
     state.setWorkspacePullLoading(true);
-    void quantisApi.getData()
+    const owner = quantisApi.isPortalEmbed() ? undefined : state.workspaceOwner;
+    void quantisApi.getData(owner)
       .then((data) => {
         if (!valid() || !data) return;
-        cancelSave();
-        dirty = false;
+        const { workspaceChanges } = useSyncStore.getState();
+        const datasets = useDataStore.getState();
+        const workflows = useWorkflowStore.getState();
+        const mergedDatasets = reconcileWorkspaceItems(data.datasets, datasets.datasets, workspaceChanges.datasets);
+        const mergedWorkflows = reconcileWorkspaceItems(data.workflows, workflows.workflows, workspaceChanges.workflows);
+        const changes = { datasets: mergedDatasets.pending, workflows: mergedWorkflows.pending };
+        dirty = hasChanges(changes);
+        useSyncStore.setState({ workspaceChanges: changes, workspaceSaveStatus: dirty ? "pending" : "idle" });
         applyingPull = true;
         try {
-          useDataStore.getState().hydrateFromServer(data.datasets);
-          useWorkflowStore.getState().hydrateFromServer(data.workflows);
+          datasets.hydrateFromServer(mergedDatasets.items);
+          workflows.hydrateFromServer(mergedWorkflows.items);
           clearWorkspaceLocalData();
+          didPull = true;
         } finally {
           applyingPull = false;
         }
@@ -122,21 +157,23 @@ export function startWorkspaceSync(): () => void {
       .finally(() => {
         if (!valid()) return;
         pulling = false;
-        didPull = true;
-        useSyncStore.getState().setWorkspacePullLoading(false);
+        const sync = useSyncStore.getState();
+        sync.setWorkspacePullLoading(false);
+        if (!didPull && dirty) sync.setWorkspaceSaveStatus("failed");
         armSave();
       });
   }
 
   const unsubscribe = [
     useDataStore.subscribe((state, previous) => {
-      if (state.datasets !== previous.datasets) scheduleSave();
+      scheduleSave("datasets", previous.datasets, state.datasets);
     }),
     useWorkflowStore.subscribe((state, previous) => {
-      if (state.workflows !== previous.workflows) scheduleSave();
+      scheduleSave("workflows", previous.workflows, state.workflows);
     }),
     useSyncStore.subscribe(updateConnection),
   ];
+  restoreChanges(useSyncStore.getState().workspaceOwner);
   updateConnection(useSyncStore.getState());
   return () => {
     stopped = true;

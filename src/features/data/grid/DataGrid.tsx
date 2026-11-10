@@ -15,6 +15,7 @@ import {
 import type { Dataset, VariableMetadata } from "@/types";
 import { getDataRows } from "@/utils/stats";
 import {
+  datasetRowOffset,
   ensureDatasetMetadata,
   formatCellValueWithLabels,
   isMissingValue,
@@ -348,20 +349,13 @@ export function DataGrid({
     if (rows.length === 0) {
       return { headers: enrichedDataset.columnNames ?? [], dataRows: [] };
     }
-    const firstRowMatchesHeader =
-      enrichedDataset.columnNames.length > 0 &&
-      rows[0]?.[0] === enrichedDataset.columnNames[0];
-    if (firstRowMatchesHeader) {
-      return {
-        headers: enrichedDataset.columnNames.length > 0 ? enrichedDataset.columnNames : rows[0],
-        dataRows: rows.slice(1),
-      };
-    }
+    const offset = datasetRowOffset(rows, enrichedDataset);
     return {
       headers: enrichedDataset.columnNames.length > 0 ? enrichedDataset.columnNames : rows[0],
-      dataRows: rows,
+      dataRows: offset ? rows.slice(offset) : rows,
     };
   }, [enrichedDataset]);
+  const canAppendRow = !isReadOnly && dataRows.length >= (enrichedDataset?.rows ?? 0);
 
   const filteredAndSorted = useMemo(
     () =>
@@ -684,17 +678,16 @@ export function DataGrid({
             <button
               type="button"
               onClick={() => {
-                if (isReadOnly) return;
-                addRow(undefined, undefined, enrichedDataset.id);
-                if (showToast) showToast(t("dataGrid.addRowSuccessToast"));
+                if (addRow(undefined, undefined, enrichedDataset.id)) showToast?.(t("dataGrid.addRowSuccessToast"));
               }}
               className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium border border-neutral-200 dark:border-neutral-700 rounded-md shadow-2xs transition ${
-                isReadOnly
+                !canAppendRow
                   ? "opacity-50 cursor-not-allowed text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800"
                   : "hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300"
               }`}
-              disabled={isReadOnly}
-              title={isReadOnly ? t("dataGrid.readOnlyDisabled") : t("dataGrid.addRowTitle")}
+              disabled={!canAppendRow}
+              title={t(isReadOnly ? "dataGrid.readOnlyDisabled" :
+                canAppendRow ? "dataGrid.addRowTitle" : "dataGrid.addRowPreviewOnly")}
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{t("dataGrid.addRowButton")}</span>

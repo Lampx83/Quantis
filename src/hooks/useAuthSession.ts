@@ -5,6 +5,7 @@ import * as quantisApi from "@/api";
 export function useAuthSession() {
   const {
     useBackend,
+    isOnline,
     embedConfigGeneration,
     authConfig,
     setAuthConfig,
@@ -21,7 +22,7 @@ export function useAuthSession() {
 
   // Auth: cấu hình + phiên khi có backend; Portal embed: __PORTAL_USER__ hoặc postMessage
   useEffect(() => {
-    if (!useBackend) {
+    if (!useBackend || !isOnline) {
       setAuthLoading(false);
       return;
     }
@@ -29,7 +30,10 @@ export function useAuthSession() {
     const auth = useSyncStore.getState();
     let ownerEpoch = auth.workspaceEpoch;
     let cancelled = false;
-    const current = () => !cancelled && useSyncStore.getState().workspaceEpoch === ownerEpoch;
+    const current = () => {
+      const state = useSyncStore.getState();
+      return !cancelled && state.isOnline && state.useBackend && state.workspaceEpoch === ownerEpoch;
+    };
     const portalUser = portal ? auth.authUser ?? (ownerEpoch === 0 ? quantisApi.getPortalUserFromWindow() : null) : null;
     if (portalUser) {
       setAuthUser(portalUser);
@@ -51,6 +55,7 @@ export function useAuthSession() {
           if (u) setAuthUser(u);
         } else if (user !== undefined) {
           setAuthUser(user);
+          useSyncStore.setState({ workspaceSessionVerified: !!config || !!user });
         }
       })
       .finally(() => {
@@ -59,7 +64,7 @@ export function useAuthSession() {
     return () => {
       cancelled = true;
     };
-  }, [useBackend, embedConfigGeneration, setAuthConfig, setAuthUser, setAuthLoading]);
+  }, [useBackend, isOnline, embedConfigGeneration, setAuthConfig, setAuthUser, setAuthLoading]);
 
   // Iframe (AI Portal): xin user và nhận PORTAL_USER
   useEffect(() => {
