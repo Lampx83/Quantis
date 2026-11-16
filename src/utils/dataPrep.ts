@@ -117,7 +117,8 @@ export function coerceColumns(rows: Rows, cols: string[], kind: "numeric" | "tex
 }
 
 // ---------------------------------------------------------------------------------------------
-// Tính biến mới từ công thức: [Điểm 1] + [Điểm 2], mean(a, b, c), ln(x), sqrt(x), (a-b)/b*100, x^2 …
+// Tính biến mới từ công thức: [Điểm 1] + [Điểm 2], mean(a, b, c), ln(x), sqrt(x), (a-b)/b*100, x^2,
+// so sánh (a > 0 → 1/0) và if(a > 0, 1, 0) …
 // ---------------------------------------------------------------------------------------------
 type Node = (row: number[]) => number;
 
@@ -148,6 +149,15 @@ function tokenize(src: string): Tok[] {
       const m = /^[\p{L}_][\p{L}\p{N}_.]*/u.exec(src.slice(i))!;
       out.push({ t: "id", v: m[0] });
       i += m[0].length;
+    } else if (c === ">" || c === "<" || c === "=" || c === "!") {
+      // So sánh: > >= < <= = == != <>  (kết quả 1 nếu đúng, 0 nếu sai)
+      const two = src.slice(i, i + 2);
+      let op = "";
+      if (two === ">=" || two === "<=" || two === "==" || two === "!=" || two === "<>") op = two;
+      else if (c === ">" || c === "<" || c === "=") op = c;
+      if (!op) throw new Error(`Ký tự không hợp lệ «${c}» trong công thức.`);
+      out.push({ t: "op", v: op === "==" ? "=" : op === "<>" ? "!=" : op });
+      i += op.length;
     } else if ("+-*/^".includes(c)) {
       out.push({ t: "op", v: c });
       i++;
@@ -224,6 +234,11 @@ const FUNCS: Record<string, { min: number; max: number; f: (a: number[]) => numb
     f: sampleStdDev,
   },
 };
+// Hàm logic (1 = đúng, 0 = sai); `if` được xử lý riêng trong parsePrimary để nhánh không chọn có thể là NaN.
+FUNCS.and = { min: 1, max: 99, f: (a) => (a.every((x) => x !== 0) ? 1 : 0) };
+FUNCS.or = { min: 1, max: 99, f: (a) => (a.some((x) => x !== 0) ? 1 : 0) };
+FUNCS.not = { min: 1, max: 1, f: (a) => (a[0] === 0 ? 1 : 0) };
+FUNCS.sign = { min: 1, max: 1, f: (a) => Math.sign(a[0]) };
 const MULTI_SKIP_NAN = new Set(["sum", "mean", "min", "max", "median", "sd", "std"]);
 
 /** Biên dịch công thức thành hàm tính theo một dòng. `header` dùng để tra tên cột. */
@@ -243,7 +258,24 @@ export function compileFormula(formula: string, header: string[]): { fn: (cells:
   const peek = () => toks[p];
   const next = () => toks[p++];
 
-  const parseExpr = (): ((cells: number[]) => number) => parseAdd();
+  const parseExpr = (): ((cells: number[]) => number) => parseCompare();
+  const CMP = new Set([">", ">=", "<", "<=", "=", "!="]);
+  const parseCompare = (): Node => {
+    let l = parseAdd();
+    while (peek().t === "op" && CMP.has(peek().v)) {
+      const op = next().v;
+      const r = parseAdd();
+      const a = l;
+      l = (row) => {
+        const x = a(row);
+        const y = r(row);
+        if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
+        const ok = op === ">" ? x > y : op === ">=" ? x >= y : op === "<" ? x < y : op === "<=" ? x <= y : op === "=" ? x === y : x !== y;
+        return ok ? 1 : 0;
+      };
+    }
+    return l;
+  };
   const parseAdd = (): Node => {
     let l = parseMul();
     while (peek().t === "op" && (peek().v === "+" || peek().v === "-")) {
@@ -308,7 +340,7 @@ export function compileFormula(formula: string, header: string[]): { fn: (cells:
       const low = tk.v.toLowerCase();
       if (peek().t === "lp") {
         next();
-        const fn = FUNCS[low];
+        const fn = FUNCS[low] ?? (low === "if" ? { min: 3, max: 3, f: () => NaN } : undefined);
         if (!fn) throw new Error(`Hàm «${tk.v}» không được hỗ trợ.`);
         const args: Node[] = [];
         if (peek().t !== "rp") {
@@ -322,6 +354,14 @@ export function compileFormula(formula: string, header: string[]): { fn: (cells:
           }
         }
         if (next().t !== "rp") throw new Error("Thiếu dấu ) đóng ngoặc.");
+        if (low === "if") {
+          if (args.length !== 3) throw new Error("Hàm if nhận 3 đối số: if(điều_kiện, giá_trị_nếu_đúng, giá_trị_nếu_sai).");
+          const [c, a, b] = args;
+          return (row) => {
+            const v = c(row);
+            return Number.isNaN(v) ? NaN : v !== 0 ? a(row) : b(row);
+          };
+        }
         if (args.length < fn.min || args.length > fn.max) throw new Error(`Hàm ${low} nhận ${fn.min}${fn.max !== fn.min ? "–" + fn.max : ""} đối số.`);
         if (MULTI_SKIP_NAN.has(low)) return (row) => fn.f(args.map((a) => a(row)));
         return (row) => {
