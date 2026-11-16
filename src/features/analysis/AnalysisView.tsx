@@ -47,6 +47,12 @@ export interface AnalysisViewProps {
   showToast: (msg: string) => void;
 }
 
+
+/** Định dạng số; thiếu / vô hạn (hệ số không xác định, vd. cột hằng số) hiển thị «–» thay vì làm sập trang. */
+function fmtNum(v: number | null | undefined, digits: number): string {
+  return typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : "–";
+}
+
 export function AnalysisView({
   tab,
   selectedDataset,
@@ -145,7 +151,7 @@ export function AnalysisView({
                 (row, i) =>
                   `${corr.columnNames[i]}: ${row
                     .slice(0, 4)
-                    .map((v) => v.toFixed(2))
+                    .map((v) => fmtNum(v, 2))
                     .join(", ")}`
               )
               .join("; ")}.`}
@@ -220,7 +226,7 @@ export function AnalysisView({
                   <td className="p-2 font-medium whitespace-nowrap">{corr.columnNames[i]}</td>
                   {row.map((v, j) => (
                     <td key={j} className="p-2 text-right">
-                      {v.toFixed(3)}
+                      {fmtNum(v, 3)}
                     </td>
                   ))}
                 </tr>
@@ -258,15 +264,15 @@ export function AnalysisView({
                     const tVal = (v + 1) / 2;
                     const r = Math.round(255 * (1 - tVal));
                     const b = Math.round(255 * tVal);
-                    const bg = `rgb(${r}, ${200 - Math.abs(v) * 100}, ${b})`;
+                    const bg = Number.isFinite(v) ? `rgb(${r}, ${200 - Math.abs(v) * 100}, ${b})` : "transparent";
                     return (
                       <td
                         key={j}
                         className="p-1.5 text-right border-b border-r border-neutral-200 dark:border-neutral-600"
                         style={{ background: bg }}
-                        title={v.toFixed(3)}
+                        title={fmtNum(v, 3)}
                       >
-                        {v.toFixed(2)}
+                        {fmtNum(v, 2)}
                       </td>
                     );
                   })}
@@ -336,7 +342,7 @@ export function AnalysisView({
                     (row, i) =>
                       `${covarianceResult.columnNames[i]}: [${row
                         .slice(0, 4)
-                        .map((v) => v.toFixed(2))
+                        .map((v) => fmtNum(v, 2))
                         .join(", ")}${row.length > 4 ? "…" : ""}]`
                   )
                   .join("; ")}.`}
@@ -370,7 +376,7 @@ export function AnalysisView({
                       </td>
                       {row.map((v, j) => (
                         <td key={j} className="p-2 text-right">
-                          {v.toFixed(4)}
+                          {fmtNum(v, 4)}
                         </td>
                       ))}
                     </tr>
