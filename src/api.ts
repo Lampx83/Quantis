@@ -427,6 +427,13 @@ export async function analyzeChiSquare(
   }
 }
 
+
+/** JSON không có NaN: backend trả null cho hệ số không xác định → đổi lại NaN để giao diện xử lý an toàn. */
+export function nullToNaNMatrix<T extends { matrix: (number | null)[][] }>(r: T | null | undefined): (Omit<T, "matrix"> & { matrix: number[][] }) | null {
+  if (!r || !Array.isArray(r.matrix)) return (r as never) ?? null;
+  return { ...r, matrix: r.matrix.map((row) => row.map((v) => (typeof v === "number" ? v : NaN))) };
+}
+
 /** Phân tích: ma trận tương quan (Pearson hoặc Spearman). */
 export async function analyzeCorrelation(
   rows: string[][],
@@ -441,7 +448,7 @@ export async function analyzeCorrelation(
     });
     if (!res.ok) return null;
     const json = await res.json();
-    return json?.result ?? null;
+    return nullToNaNMatrix(json?.result) as { matrix: number[][]; columnNames: string[] } | null;
   } catch {
     return null;
   }
@@ -1296,7 +1303,7 @@ export async function analyzeCovariance(
     });
     if (!res.ok) return null;
     const json = await res.json();
-    return json?.result ?? null;
+    return nullToNaNMatrix(json?.result) as { matrix: number[][]; columnNames: string[]; ddof: number } | null;
   } catch {
     return null;
   }
